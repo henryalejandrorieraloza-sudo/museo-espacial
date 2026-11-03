@@ -15,9 +15,16 @@
       </header>
 
       <div class="layout">
-        <div class="stage">
-          <video id="video" playsinline muted></video>
-          <canvas id="overlay"></canvas>
+        <div class="stage-col">
+          <div class="stage">
+            <video id="video" playsinline muted></video>
+            <canvas id="overlay"></canvas>
+          </div>
+          <canvas id="signal" class="signal" width="600" height="160" aria-label="Señal de alternancia de piernas"></canvas>
+          <p class="legend">
+            Señal = y(rodilla izq.) − y(rodilla der.), en % de la altura del cuerpo. Línea amarilla:
+            amplitud mínima. Verde: pico que contó. Gris: pico rechazado. Hueco: rodilla no visible.
+          </p>
         </div>
 
         <aside class="values">
@@ -30,16 +37,40 @@
           </section>
 
           <section>
-            <h2>Hombros</h2>
+            <h2>Encuadre</h2>
             <dl>
-              <dt>Oscilación (% del alto)</dt>
-              <dd data-key="amplitude">—</dd>
+              <dt>Estado (SPEC 2.1)</dt>
+              <dd data-key="framing">—</dd>
+              <dt>Visibilidad de rodillas (izq. / der.)</dt>
+              <dd data-key="kneeVis">—</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h2>Caminar (alternancia de piernas)</h2>
+            <dl>
+              <dt>Estado</dt>
+              <dd data-key="legStatus">—</dd>
+              <dt>Señal izq. − der. (% de la altura del cuerpo)</dt>
+              <dd data-key="legSignal">—</dd>
+              <dt>Amplitud del último pico</dt>
+              <dd data-key="legPeak">—</dd>
+              <dt>Amplitud mínima para contar (1–15 %, por defecto 4 %)</dt>
+              <dd>
+                <input id="swingPct" type="number" min="1" max="15" step="0.5" value="4" />
+              </dd>
               <dt>Pasos</dt>
               <dd data-key="steps">0</dd>
               <dt>Cadencia (pasos/s)</dt>
               <dd data-key="cadence">—</dd>
-              <dt>Estado</dt>
-              <dd data-key="walking">—</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h2>Hombros · solo referencia</h2>
+            <dl>
+              <dt>Altura media de hombros (% del alto). No se usa para caminar.</dt>
+              <dd data-key="shoulderY">—</dd>
             </dl>
           </section>
 
@@ -71,7 +102,8 @@
 
       <p class="legend">
         La imagen es espejo (como verte en un espejo). Puntos cian: cara (ojos resaltados).
-        Naranja: hombros. Verde: mano izquierda del jugador. Rosa: mano derecha del jugador.
+        Morado: rodillas (caminar). Naranja: hombros (solo referencia). Verde: mano izquierda del jugador.
+        Rosa: mano derecha del jugador.
       </p>
     </main>
     <script type="module" src="/src/debug/main.ts"></script>

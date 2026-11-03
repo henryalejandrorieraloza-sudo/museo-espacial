@@ -59,7 +59,7 @@ export class Tracker {
       }),
     );
 
-    onStatus('Cargando modelo de cuerpo (hombros)…');
+    onStatus('Cargando modelo de cuerpo…');
     const poseLandmarker = await createWithFallback((delegate) =>
       PoseLandmarker.createFromOptions(vision, {
         baseOptions: { modelAssetPath: assetUrl('models/pose_landmarker_lite.task'), delegate },

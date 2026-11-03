@@ -154,3 +154,16 @@ a {
   font-size: 13px;
   color: var(--muted);
 }
+
+/* Depuración: columna del vídeo y gráfica de la señal de caminar (SPEC 5.1). */
+.stage-col {
+  min-width: 0;
+}
+
+.signal {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border-radius: 6px;
+}

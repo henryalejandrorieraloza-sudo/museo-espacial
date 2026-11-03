@@ -1,19 +1,31 @@
 import '../styles.css';
 import { Tracker, type TrackingFrame } from '../tracking/tracker';
 import {
-  ShoulderOscillation,
+  LegAlternationCounter,
+  POSE_IDX,
+  SWING_PCT_DEFAULT,
+  clampSwingPct,
   headRollDeg,
+  legSample,
   pinchRatio,
   shoulderCenterY,
   shoulderWidthPx,
   wristDistance,
-  type ShoulderState,
+  type LegState,
 } from '../tracking/metrics';
+import { checkFraming, KNEE_VISIBILITY_MIN, type FramingStatus } from '../tracking/framing';
 import { drawTracking } from '../ui/overlay';
 import { requireEl, setValue } from '../ui/dom';
+import { drawSignal } from './signalPlot';
 
 const fmt = (value: number | null, digits: number, unit = ''): string =>
   value === null || !Number.isFinite(value) ? '—' : `${value.toFixed(digits)}${unit}`;
+
+const FRAMING_LABEL: Record<FramingStatus, string> = {
+  ok: 'correcto',
+  retroceder: 'Retrocede',
+  acercarse: 'Acércate',
+};
 
 async function openWebcam(video: HTMLVideoElement): Promise<void> {
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -24,16 +36,36 @@ async function openWebcam(video: HTMLVideoElement): Promise<void> {
   await video.play();
 }
 
-function showValues(frame: TrackingFrame, shoulders: ShoulderState): void {
+function showValues(frame: TrackingFrame, legs: LegState): void {
   const { width: w, height: h } = frame;
 
   const roll = frame.face ? headRollDeg(frame.face, w, h) : null;
   setValue('roll', fmt(roll, 1, '°'));
 
-  setValue('amplitude', fmt(shoulders.amplitude * 100, 1, ' %'));
-  setValue('steps', String(shoulders.steps));
-  setValue('cadence', fmt(shoulders.cadence, 2));
-  setValue('walking', shoulders.walking ? 'caminando' : 'detenido');
+  // Encuadre (SPEC 2.1): visibilidad de las rodillas y estado resultante.
+  const framing = checkFraming(frame.pose);
+  setValue('framing', FRAMING_LABEL[framing]);
+  const kneeVis = frame.pose
+    ? [POSE_IDX.leftKnee, POSE_IDX.rightKnee]
+        .map((i) => (frame.pose?.[i].visibility ?? 0).toFixed(2))
+        .join(' / ')
+    : '—';
+  setValue('kneeVis', `${kneeVis} (mín. ${KNEE_VISIBILITY_MIN})`);
+
+  // Caminar por alternancia de piernas (SPEC 5.1).
+  setValue(
+    'legStatus',
+    !legs.visible ? 'rodilla no visible' : legs.walking ? 'caminando' : 'detenido',
+  );
+  setValue('legSignal', fmt(legs.signalPct, 1, ' %'));
+  setValue('legPeak', fmt(legs.peakPct, 1, ' %'));
+  setValue('legSwing', fmt(legs.swingPct, 1, ' %'));
+  setValue('steps', String(legs.steps));
+  setValue('cadence', fmt(legs.cadence, 2));
+
+  // Hombros: solo referencia de postura (SPEC 2 y 3).
+  const shoulderY = frame.pose ? shoulderCenterY(frame.pose) : null;
+  setValue('shoulderY', shoulderY === null ? '—' : fmt(shoulderY * 100, 1, ' %'));
 
   const shoulderPx = frame.pose ? shoulderWidthPx(frame.pose, w, h) : null;
   const wrists = wristDistance(frame.hands, shoulderPx, w, h);
@@ -55,9 +87,12 @@ function showValues(frame: TrackingFrame, shoulders: ShoulderState): void {
 async function main(): Promise<void> {
   const video = requireEl<HTMLVideoElement>('video');
   const canvas = requireEl<HTMLCanvasElement>('overlay');
+  const signalCanvas = requireEl<HTMLCanvasElement>('signal');
   const status = requireEl('status');
+  const swingInput = requireEl<HTMLInputElement>('swingPct');
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No se pudo obtener el contexto 2D del canvas');
+  const signalCtx = signalCanvas.getContext('2d');
+  if (!ctx || !signalCtx) throw new Error('No se pudo obtener el contexto 2D de un canvas');
 
   try {
     status.textContent = 'Pidiendo acceso a la webcam…';
@@ -68,11 +103,16 @@ async function main(): Promise<void> {
     });
     status.textContent = 'Seguimiento activo';
 
-    const shoulders = new ShoulderOscillation();
-    let lastRawY: number | null = null;
-    let latest: TrackingFrame | null = null;
-    let shoulderNow: ShoulderState = shoulders.update(0, null);
+    const legs = new LegAlternationCounter(SWING_PCT_DEFAULT);
+    swingInput.value = String(legs.amplitudePct);
 
+    swingInput.addEventListener('change', () => {
+      const pct = clampSwingPct(Number(swingInput.value));
+      legs.setSwingPct(pct);
+      swingInput.value = String(pct);
+    });
+
+    let latest: TrackingFrame | null = null;
     let frames = 0;
     let fpsSince = performance.now();
 
@@ -80,9 +120,10 @@ async function main(): Promise<void> {
       const now = performance.now();
       const frame = tracker.detect(video, now);
 
+      // La señal se alimenta solo con fotogramas nuevos; el tiempo decide "detenido".
       if (frame) {
         latest = frame;
-        lastRawY = frame.pose ? shoulderCenterY(frame.pose) : null;
+        legs.feed(now / 1000, legSample(frame.pose));
 
         if (canvas.width !== frame.width || canvas.height !== frame.height) {
           canvas.width = frame.width;
@@ -92,10 +133,9 @@ async function main(): Promise<void> {
         frames += 1;
       }
 
-      // Hombros: se alimenta solo con fotogramas nuevos; el paso del tiempo decide "detenido".
-      shoulderNow = shoulders.update(now / 1000, frame ? lastRawY : null);
-
-      if (latest) showValues(latest, shoulderNow);
+      const legState = legs.state(now / 1000);
+      drawSignal(signalCtx, legState, now / 1000);
+      if (latest) showValues(latest, legState);
 
       if (now - fpsSince >= 1000) {
         setValue('fps', `${((frames * 1000) / (now - fpsSince)).toFixed(0)}`);

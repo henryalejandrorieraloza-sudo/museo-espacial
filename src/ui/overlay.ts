@@ -5,6 +5,7 @@ const COLORS = {
   face: 'rgba(0, 229, 255, 0.55)',
   faceEye: '#00e5ff',
   shoulder: '#ff9f1c',
+  knee: '#b388ff',
   handLeft: '#7CFC00',
   handRight: '#ff4f9a',
 };
@@ -32,7 +33,7 @@ function line(
   ctx.stroke();
 }
 
-/** Dibuja cara, hombros y manos en un canvas del mismo tamaño que el vídeo. */
+/** Dibuja cara, hombros, rodillas y manos en un canvas del mismo tamaño que el vídeo. */
 export function drawTracking(ctx: CanvasRenderingContext2D, frame: TrackingFrame): void {
   const { width: w, height: h } = frame;
   ctx.clearRect(0, 0, w, h);
@@ -51,6 +52,12 @@ export function drawTracking(ctx: CanvasRenderingContext2D, frame: TrackingFrame
     line(ctx, l.x * w, l.y * h, r.x * w, r.y * h, COLORS.shoulder);
     dot(ctx, l.x * w, l.y * h, 6, COLORS.shoulder);
     dot(ctx, r.x * w, r.y * h, 6, COLORS.shoulder);
+
+    // Rodillas: el indicador de caminar. Se dibujan siempre; el color no cambia con la visibilidad.
+    for (const idx of [POSE_IDX.leftKnee, POSE_IDX.rightKnee]) {
+      const k = frame.pose[idx];
+      dot(ctx, k.x * w, k.y * h, 7, COLORS.knee);
+    }
   }
 
   for (const hand of frame.hands) drawHand(ctx, hand, w, h);

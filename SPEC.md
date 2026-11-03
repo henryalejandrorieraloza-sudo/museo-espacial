@@ -1,4 +1,4 @@
-# ESPECIFICACIÓN v1.1 — Museo Espacial Interactivo (Beta)
+# ESPECIFICACIÓN v1.2 — Museo Espacial Interactivo (Beta)
 
 ## 0. Propósito
 
@@ -29,10 +29,20 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 - La precisión es limitada, así que zonas neutrales, umbrales y sensibilidades son configurables.
 - **Detección:**
   - **Cara:** roll de la cabeza (inclinación lateral). El yaw (girar la cara) no cuenta.
-  - **Hombros:** oscilación vertical para detectar caminar.
+  - **Rodillas:** altura relativa respecto a la cadera, para detectar caminar (sección 5.1).
+  - **Hombros:** solo referencia de postura. No se usan para caminar.
   - **Manos:** landmarks para volante, cursor, pellizco, aplauso y señalar.
 
-**Estado actual:** el código base compila y la escena renderiza. El seguimiento en vivo no está verificado todavía (ver sección 14).
+**Estado actual:** el código base compila y la escena renderiza. El seguimiento de cara, cuerpo y manos está verificado con cámara real. La detección de caminar por rodillas está implementada, pero sus umbrales aún no se han validado (ver sección 14).
+
+### 2.1 Requisito de encuadre
+
+- Al iniciar el juego, y antes de calibrar, las rodillas (landmarks 25 y 26 de pose) deben tener visibilidad mayor a 0.5.
+- Mientras no se cumpla, el juego no avanza ni calibra. En pantalla se muestra la instrucción que corresponde:
+  - **“Retrocede”:** el cuerpo está demasiado cerca. Se detecta cuando una rodilla visible toca el borde inferior del encuadre (y > 0.97), o cuando las rodillas quedan estimadas fuera de la imagen (y > 1).
+  - **“Acércate”:** el cuerpo está demasiado lejos o no se ven las rodillas.
+  - **Correcto:** ambas rodillas visibles y dentro del encuadre. Se avanza.
+- Estados posibles: `ok`, `retroceder`, `acercarse`. Implementado en `src/tracking/framing.ts`.
 
 ## 3. Calibración
 
@@ -40,7 +50,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 - Instrucción en pantalla: “Mira al frente con la cabeza quieta y las manos relajadas.”
 - **Captura:**
   - Roll neutral de la cabeza (0°, mirando al frente).
-  - Altura neutral de hombros.
+  - Altura neutral de hombros (solo referencia de postura; no se usa para caminar).
   - Posición neutral de las manos.
 - Se guarda en el perfil del jugador.
 - Botón “Recalibrar” en el menú de opciones.
@@ -49,12 +59,12 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 
 | Acción | Método |
 | --- | --- |
-| Caminar en el museo | Oscilación de hombros (caminar en el sitio) |
+| Caminar en el museo | Subir las rodillas (caminar en el sitio) |
 | Girar la vista en el museo | Inclinar la cabeza hacia un lado |
 | Señalar vitrina | Apuntar con el dedo índice |
 | Iniciar inmersión | Aplaudir |
 | Conducir LRV | Volante gestual con ambas manos |
-| Avanzar LRV | Oscilación de hombros (caminar en el sitio) |
+| Avanzar LRV | Subir las rodillas (caminar en el sitio) |
 | Avanzar Perseverance | Inclinar una mano hacia arriba |
 | Retroceder Perseverance | Inclinar una mano hacia abajo |
 | Girar Perseverance | Inclinar la cabeza hacia un lado |
@@ -66,13 +76,16 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 
 ## 5. Detección de gestos
 
-### 5.1 Caminar (oscilación de hombros)
+### 5.1 Caminar (alternancia de piernas)
 
-- Se mide la oscilación vertical de los hombros a lo largo del tiempo.
-- Cada ciclo completo cuenta como un paso.
-- La velocidad es proporcional a la cadencia de pasos, con un máximo configurable.
-- Si no hay oscilación durante 0.5 s, el jugador se considera detenido.
-- Oscilaciones menores que el umbral se ignoran (evita falsos positivos al respirar).
+- Señal = `y(rodilla izquierda) − y(rodilla derecha)`, con los landmarks 25 y 26 de Pose. Al restar, se cancela el movimiento de todo el cuerpo al acercarse o alejarse.
+- Suavizado: media móvil corta de 4 muestras.
+- Amplitud = valor absoluto del pico, en % de la altura del cuerpo (extensión vertical de los landmarks visibles). Amplitud mínima por defecto **4 %**, configurable entre **1 % y 15 %** en `/debug/`.
+- Un paso = un pico (máximo o mínimo local de la señal) con amplitud ≥ amplitud mínima y **signo opuesto** al del último paso contado. Así cada paso alterna pierna. Los picos que no cumplen se ignoran.
+- Visibilidad: si alguna rodilla tiene visibilidad < 0.5, el fotograma no cuenta, la señal se corta y el estado muestra **“rodilla no visible”**.
+- No hay calibración neutral.
+- Si no hay pasos durante 0.5 s, el jugador se considera detenido.
+- `/debug/` muestra la señal en vivo, los picos (verde: contaron; gris: rechazados), la línea de amplitud mínima, el contador de pasos y la amplitud del último pico.
 
 ### 5.2 Aplauso
 
@@ -102,7 +115,8 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 | Pérdida de cabeza en Perseverance | El rover desacelera gradualmente en 1–2 s |
 | Pérdida de manos en LRV | El volante queda en el último ángulo y el vehículo desacelera gradualmente |
 | Cara o cuerpo fuera de encuadre | El movimiento se congela. El juego no se pausa |
-| Hombros sin oscilación | El jugador se considera detenido |
+| Rodillas perdidas durante el juego | El movimiento se congela, igual que cara o cuerpo fuera de encuadre. El juego no se pausa |
+| Rodillas sin pasos durante 0.5 s | El jugador se considera detenido |
 
 Al regresar el seguimiento, la acción continúa sin reinicio.
 
@@ -115,7 +129,7 @@ Al regresar el seguimiento, la acción continúa sin reinicio.
 
 ### 7.2 Flujo de un artefacto
 
-1. El jugador camina en el museo (oscilación de hombros).
+1. El jugador camina en el museo (subiendo las rodillas).
 2. Gira la vista inclinando la cabeza.
 3. Señala una vitrina con el índice durante 1.5 s. La vitrina se resalta.
 4. El mentor explica el artefacto (voz y subtítulos, máximo 30 s).
@@ -145,7 +159,7 @@ Al regresar el seguimiento, la acción continúa sin reinicio.
 - Manos centradas = recto.
 - Girar ambas manos izquierda o derecha = giro correspondiente.
 - Zona neutral configurable.
-- Avance: oscilación de hombros (caminar en el sitio).
+- Avance: subir las rodillas (caminar en el sitio).
 - Al dejar de caminar, el vehículo se detiene.
 
 ### 8.3 Recolección
@@ -175,7 +189,7 @@ Al regresar el seguimiento, la acción continúa sin reinicio.
 
 - En el menú aparece en gris con la etiqueta “Próximamente”.
 - Cuando se active en una versión futura:
-  - El avance se hace moviendo los brazos como si caminara: se detecta la oscilación de muñecas y codos y se convierte en avance, con la misma lógica que los hombros.
+  - El avance se hace moviendo los brazos como si caminara: se detecta la oscilación de muñecas y codos y se convierte en avance, con una lógica análoga a la de las rodillas.
   - El LRV avanza hasta quedar cerca de la roca y se detiene solo.
 - Detrás de un flag desactivado en el código.
 - Pendiente: si la dirección sigue con volante o se automatiza.
@@ -256,7 +270,12 @@ No se guardan muestras recogidas como progreso.
 - [x] Compilación (`npm run build`) sin errores.
 - [x] Escena base renderiza.
 - [x] Página `/debug/` carga la webcam y arranca MediaPipe.
-- [ ] Seguimiento en vivo verificado con cámara real. *(Pendiente: la carga del modelo de cuerpo se queda en “Cargando modelo de cuerpo (hombros)…”.)*
+- [x] Seguimiento de cara verificado con cámara real.
+- [x] Seguimiento de cuerpo verificado con cámara real.
+- [x] Seguimiento de manos verificado con cámara real.
+- [x] Módulo de encuadre (`src/tracking/framing.ts`) mostrado en `/debug/`. Todavía no bloquea el inicio del juego, porque el juego aún no existe.
+- [x] Caminar por rodillas implementado (`src/tracking/metrics.ts`) y visible en `/debug/`.
+- [ ] Umbrales de caminar por rodillas validados con cámara real.
 - [ ] Museo y navegación.
 - [ ] Misión lunar.
 - [ ] Misión marciana.
