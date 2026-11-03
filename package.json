@@ -1,0 +1,23 @@
+{
+  "name": "museo-espacial",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Museo Espacial Interactivo (Beta): experiencia web con seguimiento corporal por webcam.",
+  "scripts": {
+    "dev": "vite",
+    "predev": "node scripts/copy-mediapipe-wasm.mjs",
+    "build": "tsc --noEmit && vite build",
+    "prebuild": "node scripts/copy-mediapipe-wasm.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.2",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

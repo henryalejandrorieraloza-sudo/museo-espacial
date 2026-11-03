@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Depuración de seguimiento · Museo Espacial</title>
+  </head>
+  <body>
+    <main class="debug">
+      <header>
+        <h1>Depuración de seguimiento</h1>
+        <p id="status">Iniciando…</p>
+        <a href="../">← Volver al museo</a>
+      </header>
+
+      <div class="layout">
+        <div class="stage">
+          <video id="video" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+        </div>
+
+        <aside class="values">
+          <section>
+            <h2>Cabeza</h2>
+            <dl>
+              <dt>Roll (°) · referencia de giro: 15°</dt>
+              <dd data-key="roll">—</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h2>Hombros</h2>
+            <dl>
+              <dt>Oscilación (% del alto)</dt>
+              <dd data-key="amplitude">—</dd>
+              <dt>Pasos</dt>
+              <dd data-key="steps">0</dd>
+              <dt>Cadencia (pasos/s)</dt>
+              <dd data-key="cadence">—</dd>
+              <dt>Estado</dt>
+              <dd data-key="walking">—</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h2>Manos</h2>
+            <dl>
+              <dt>Distancia entre muñecas (× ancho de hombros)</dt>
+              <dd data-key="wristRatio">—</dd>
+              <dt>Distancia entre muñecas (px)</dt>
+              <dd data-key="wristPx">—</dd>
+              <dt>Pulgar-índice, mano izquierda</dt>
+              <dd data-key="pinchLeft">—</dd>
+              <dt>Pulgar-índice, mano derecha</dt>
+              <dd data-key="pinchRight">—</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h2>Sistema</h2>
+            <dl>
+              <dt>Detectado</dt>
+              <dd data-key="detected">—</dd>
+              <dt>FPS de seguimiento</dt>
+              <dd data-key="fps">—</dd>
+            </dl>
+          </section>
+        </aside>
+      </div>
+
+      <p class="legend">
+        La imagen es espejo (como verte en un espejo). Puntos cian: cara (ojos resaltados).
+        Naranja: hombros. Verde: mano izquierda del jugador. Rosa: mano derecha del jugador.
+      </p>
+    </main>
+    <script type="module" src="/src/debug/main.ts"></script>
+  </body>
+</html>
