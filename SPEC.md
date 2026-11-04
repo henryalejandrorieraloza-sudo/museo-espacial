@@ -137,6 +137,8 @@ Al regresar el seguimiento, la acción continúa sin reinicio.
 
 ## 7. Museo
 
+Parte visual: ver spec-visual-museo.md.
+
 ### 7.1 Escena
 
 - Museo con vitrinas. Cada vitrina contiene un artefacto (LRV, Perseverance y otros).
