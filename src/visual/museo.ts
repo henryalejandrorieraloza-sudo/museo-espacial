@@ -87,8 +87,8 @@ type Constructor = () => THREE.Object3D;
 /** Placeholders generados en código. Las claves son las rutas "placeholder:…" de config.ts. */
 const PLACEHOLDERS: Record<string, Constructor> = {
   'placeholder:sala': crearSala,
-  'placeholder:vitrina_lrv': () => crearVitrina(crearLRV, COLOR.acentoLRV),
-  'placeholder:vitrina_perseverance': () => crearVitrina(crearPerseverance, COLOR.acentoPerseverance),
+  'placeholder:vitrina_lrv': () => crearVitrina(() => crearLRV(COLOR.acentoLRV), COLOR.acentoLRV),
+  'placeholder:vitrina_perseverance': () => crearVitrina(() => crearPerseverance(COLOR.acentoPerseverance), COLOR.acentoPerseverance),
   'placeholder:mentor': crearMentor,
   'placeholder:anillo': crearAnillo,
   'placeholder:escena_luna': crearEscenaLuna,
@@ -399,7 +399,7 @@ function crearRoca(): THREE.Object3D {
  * LRV aproximado, sin medidas oficiales: chasis plano, asiento, antena y cuatro ruedas de cilindro.
  * Origen en el suelo, centrado. Forma simplificada: ver src/visual/MODELS.md.
  */
-function crearLRV(): THREE.Object3D {
+function crearLRV(acento: number = COLOR.acentoLRV): THREE.Object3D {
   const grupo = new THREE.Group();
   grupo.name = 'lrv_placeholder';
   const chasis = caja(1.2, 0.1, 1.8, COLOR.lrv);
@@ -407,8 +407,16 @@ function crearLRV(): THREE.Object3D {
   const asiento = caja(0.5, 0.25, 0.5, COLOR.rueda);
   asiento.position.set(0, 0.85, 0);
   const antena = malla(new THREE.CylinderGeometry(0.02, 0.02, 0.8, 6), COLOR.lrv, [0.4, 1.0, -0.5]);
-  const plato = malla(new THREE.IcosahedronGeometry(0.1, 0), COLOR.lrv, [0.4, 1.42, -0.5]);
-  grupo.add(chasis, asiento, antena, plato);
+  // Antena de alta ganancia: plato de color de acento sobre la antena.
+  const plato = malla(new THREE.ConeGeometry(0.18, 0.08, 8), acento, [0.4, 1.42, -0.5], [Math.PI / 2, 0, 0]);
+  // Paneles de color de acento a los lados del chasis y una caja de electrónica.
+  const panelIzq = caja(0.04, 0.22, 1.2, acento);
+  panelIzq.position.set(-0.62, 0.7, 0);
+  const panelDer = caja(0.04, 0.22, 1.2, acento);
+  panelDer.position.set(0.62, 0.7, 0);
+  const electronica = caja(0.35, 0.2, 0.3, COLOR.rueda);
+  electronica.position.set(-0.3, 0.7, -0.5);
+  grupo.add(chasis, asiento, antena, plato, panelIzq, panelDer, electronica);
   // Ruedas: cilindros girados para que el eje quede a lo ancho.
   for (const [x, z] of [[-0.75, -0.8], [0.75, -0.8], [-0.75, 0.8], [0.75, 0.8]]) {
     grupo.add(malla(new THREE.CylinderGeometry(0.35, 0.35, 0.15, 10), COLOR.rueda, [x, 0.35, z], [0, 0, Math.PI / 2]));
@@ -420,13 +428,17 @@ function crearLRV(): THREE.Object3D {
  * Perseverance aproximado, sin medidas oficiales: cuerpo blanco con capa dorada, seis ruedas,
  * mástil con cámara, generador (RTG) y brazo. Origen en el suelo, centrado. Forma simplificada: ver MODELS.md.
  */
-function crearPerseverance(): THREE.Object3D {
+function crearPerseverance(acento: number = COLOR.acentoPerseverance): THREE.Object3D {
   const grupo = new THREE.Group();
   grupo.name = 'perseverance_placeholder';
   const cuerpo = caja(1.3, 0.5, 1.0, COLOR.blanco);
   cuerpo.position.y = 0.75;
   const capa = caja(1.1, 0.06, 0.9, COLOR.dorado);
   capa.position.y = 1.03;
+  // Franja de acento en el frente del cuerpo, para distinguirlo del LRV.
+  const franja = caja(1.32, 0.08, 0.1, acento);
+  franja.position.set(0, 0.75, 0.5);
+  grupo.add(franja);
   const rtg = malla(new THREE.CylinderGeometry(0.2, 0.2, 0.6, 8), COLOR.dorado, [0, 0.8, 0.75], [Math.PI / 2, 0, 0]);
   const mastil = malla(new THREE.CylinderGeometry(0.04, 0.04, 0.85, 6), COLOR.blanco, [0.35, 1.42, -0.2]);
   const camara = malla(new THREE.IcosahedronGeometry(0.1, 0), COLOR.blanco, [0.35, 1.92, -0.2]);
