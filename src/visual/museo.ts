@@ -195,13 +195,13 @@ function crearSala(): THREE.Object3D {
     grupo.add(malla(new THREE.BoxGeometry(2.4, 1.6, 0.03), COLOR.panelPared, [x, 2.2, dentro]));
   }
 
-  // Planetas en exhibición sobre peanas, contra la pared oeste.
-  const planetas: [number, number, number][] = [
-    [-6.2, -2, 0.55],
-    [-6.2, 2, 0.4],
+  // Planetas en exhibición sobre peanas, contra la pared oeste. El primero tiene anillo.
+  const planetas: [number, number, number, boolean][] = [
+    [-6.2, -2, 0.55, true],
+    [-6.2, 2, 0.4, false],
   ];
-  planetas.forEach(([x, z, radio], i) => {
-    const planeta = crearPlaneta(COLOR.planetas[i % COLOR.planetas.length], radio);
+  planetas.forEach(([x, z, radio, conAnillo], i) => {
+    const planeta = crearPlaneta(COLOR.planetas[i % COLOR.planetas.length], radio, conAnillo);
     planeta.position.set(x, 0, z);
     grupo.add(planeta);
   });
@@ -287,10 +287,14 @@ function crearRocaMuestra(): THREE.Object3D {
 }
 
 /** Planeta facetado de color sólido sobre una peana de 1 m. Origen en el suelo. */
-function crearPlaneta(color: number, radio: number): THREE.Object3D {
+function crearPlaneta(color: number, radio: number, conAnillo = false): THREE.Object3D {
   const grupo = new THREE.Group();
   grupo.add(malla(new THREE.CylinderGeometry(0.45, 0.5, 1.0, 8), COLOR.pedestal, [0, 0.5, 0]));
-  grupo.add(malla(new THREE.IcosahedronGeometry(radio, 1), color, [0, 1.0 + radio, 0]));
+  const centroY = 1.0 + radio;
+  grupo.add(malla(new THREE.IcosahedronGeometry(radio, 1), color, [0, centroY, 0]));
+  if (conAnillo) {
+    grupo.add(malla(new THREE.TorusGeometry(radio * 1.6, radio * 0.12, 4, 24), COLOR.planetas[3], [0, centroY, 0], [Math.PI / 2.6, 0, 0]));
+  }
   return grupo;
 }
 
