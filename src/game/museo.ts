@@ -1,16 +1,15 @@
 // Lógica del museo (SPEC 7). No importa Three.js ni modelos: todo lo visual va por visual.museo.
-// El que maneja esta clase (src/game/juego.ts) le pasa las entradas de cada fotograma y escucha
-// los eventos para mostrar textos, voz y la pantalla de misión.
+// El que maneja esta clase (src/game/juego.ts) le pasa las entradas de cada fotograma, llama a
+// `tick` en cada vuelta del bucle para el fundido, y escucha los eventos para mostrar textos y voz.
 
-import { visual } from '../visual/museo';
+import { visual, type Escena } from '../visual/museo';
 
 /** Segundos que el rayo debe tocar una vitrina para seleccionarla (SPEC 5.3, 7.2). */
 export const SEGUNDOS_SENALAR = 1.5;
-/** Metros que avanza el jugador por cada paso (una alternancia de piernas). Valor provisional. */
-export const METROS_POR_PASO = 0.6;
-
+/** Duración del fundido a negro (s): la mitad oscurece, la mitad aclara. */
+export const DURACION_FUNDIDO_S = 0.6;
 export type VitrinaId = 'vitrina_lrv' | 'vitrina_perseverance';
-export type Mision = 'luna' | 'marte';
+export type Mision = Escena;
 
 const MISION_DE: Record<VitrinaId, Mision> = {
   vitrina_lrv: 'luna',
@@ -25,8 +24,18 @@ export type Pantalla = { tipo: 'museo' } | { tipo: 'mision'; mision: Mision };
 
 export type EventoMuseo =
   | { tipo: 'vitrinaSeleccionada'; id: VitrinaId }
+  | { tipo: 'vitrinaDeseleccionada'; id: VitrinaId }
+  /** El mentor terminó de hablar de esta vitrina: ya se puede aplaudir para entrar. */
+  | { tipo: 'listoParaEntrar'; id: VitrinaId }
   | { tipo: 'misionAbierta'; mision: Mision }
   | { tipo: 'regresoMuseo' };
+
+/**
+ * Fase de la vitrina seleccionada (SPEC 7.2):
+ * - `hablando`: el mentor explica la vitrina; aplaudir o pulsar espacio no hace nada.
+ * - `listo`: el mentor ya terminó; aplaudir o pulsar espacio entra a la escena.
+ */
+type Fase = 'hablando' | 'listo';
 
 /** Entrada de un fotograma de juego, ya traducida a acciones de museo. */
 export interface EntradaMuseo {
@@ -34,9 +43,9 @@ export interface EntradaMuseo {
   ahoraS: number;
   /** Giro de la vista en grados para este fotograma (+ = derecha). */
   giroGrados: number;
-  /** Pasos nuevos desde el fotograma anterior. */
-  pasos: number;
-  /** Vitrina que apunta el rayo ahora mismo, o null. */
+  /** Metros que avanza el jugador en este fotograma (ya calculados por la caminata, game/caminata.ts). */
+  metros: number;
+  /** Vitrina bajo el cursor (o apuntada por el rayo) ahora mismo, o null. */
   apuntando: string | null;
   /** True si hubo un aplauso o se pulsó la barra espaciadora en este fotograma. */
   accion: boolean;
@@ -44,14 +53,25 @@ export interface EntradaMuseo {
 
 type Oyente = (evento: EventoMuseo) => void;
 
+/** Fundido en curso. `cambio` se ejecuta una vez, a mitad del fundido (con la pantalla en negro). */
+interface Transicion {
+  /** Instante de inicio (s); null hasta el primer `tick`. */
+  inicioS: number | null;
+  cambio: () => void;
+  cambiado: boolean;
+}
+
 export class Museo {
   private pantallaActual: Pantalla = { tipo: 'museo' };
   private seleccionada: VitrinaId | null = null;
+  /** Fase de la vitrina seleccionada; null si no hay ninguna seleccionada. */
+  private fase: Fase | null = null;
   private candidata: VitrinaId | null = null;
   private inicioCandidata = 0;
+  private transicion: Transicion | null = null;
   private readonly oyentes: Oyente[] = [];
 
-  /** Pantalla actual: el museo o una misión (que todavía no existe). */
+  /** Pantalla actual: el museo o una escena de misión. */
   get pantalla(): Pantalla {
     return this.pantallaActual;
   }
@@ -65,55 +85,115 @@ export class Museo {
     this.oyentes.push(oyente);
   }
 
+  /**
+   * Avanza el fundido a negro (0.6 s en total). Se llama en cada vuelta del bucle, con o sin
+   * fotograma nuevo, porque el fundido tiene su propio reloj.
+   */
+  tick(ahoraS: number): void {
+    const t = this.transicion;
+    if (!t) return;
+    t.inicioS ??= ahoraS;
+    const progreso = (ahoraS - t.inicioS) / DURACION_FUNDIDO_S;
+    if (progreso >= 1) {
+      visual.museo.fundido(0);
+      this.transicion = null;
+      return;
+    }
+    if (progreso >= 0.5 && !t.cambiado) {
+      t.cambiado = true;
+      t.cambio();
+    }
+    visual.museo.fundido(Math.min(progreso, 1 - progreso) * 2);
+  }
+
   /** Procesa un fotograma. Solo mueve la cámara y señala mientras se está en el museo. */
   actualizar(entrada: EntradaMuseo): void {
+    // Durante un fundido no hay entradas: evita disparos dobles y movimiento a mitad de transición.
+    if (this.transicion) return;
+
     if (this.pantallaActual.tipo === 'mision') {
       if (entrada.accion) this.volver();
       return;
     }
 
-    visual.museo.moverCamara(entrada.giroGrados, entrada.pasos * METROS_POR_PASO);
+    // Con una vitrina seleccionada, el flujo (explicación, aviso y entrada) no lo interrumpe nada (SPEC 7.2):
+    // ni el cursor, ni la cabeza, ni la caminata, ni perder el seguimiento. La selección no cambia hasta entrar.
+    if (this.seleccionada !== null) {
+      // Aplauso o espacio: entra solo cuando el mentor ya terminó. Mientras habla, no hace nada.
+      // No se comprueba dónde está el jugador ni hacia dónde mira.
+      if (entrada.accion && this.fase === 'listo') {
+        const mision = MISION_DE[this.seleccionada];
+        this.iniciarTransicion(() => this.abrirMision(mision));
+        return;
+      }
+      visual.museo.moverCamara(entrada.giroGrados, entrada.metros);
+      return;
+    }
+
+    visual.museo.moverCamara(entrada.giroGrados, entrada.metros);
 
     const apuntada = esVitrina(entrada.apuntando) ? entrada.apuntando : null;
     if (apuntada !== this.candidata) {
       this.candidata = apuntada;
       this.inicioCandidata = entrada.ahoraS;
     }
-    if (
-      this.candidata !== null &&
-      this.candidata !== this.seleccionada &&
-      entrada.ahoraS - this.inicioCandidata >= SEGUNDOS_SENALAR
-    ) {
+    if (this.candidata !== null && entrada.ahoraS - this.inicioCandidata >= SEGUNDOS_SENALAR) {
       this.seleccionar(this.candidata);
-    }
-
-    if (entrada.accion && this.seleccionada !== null) {
-      this.abrirMision(MISION_DE[this.seleccionada]);
     }
   }
 
-  /** Vuelve del juego de misión al museo (botón o aplauso). El mentor aparece junto al jugador. */
+  /** Vuelve del escenario al museo (botón o aplauso). Con fundido; el mentor aparece al terminar. */
   volver(): void {
-    if (this.pantallaActual.tipo !== 'mision') return;
-    this.pantallaActual = { tipo: 'museo' };
-    if (this.seleccionada !== null) visual.museo.resaltarVitrina(this.seleccionada, false);
-    this.seleccionada = null;
-    this.candidata = null;
-    visual.museo.mentorAparece();
-    this.emitir({ tipo: 'regresoMuseo' });
+    if (this.transicion || this.pantallaActual.tipo !== 'mision') return;
+    this.iniciarTransicion(() => this.completarVolver());
+  }
+
+  private iniciarTransicion(cambio: () => void): void {
+    this.transicion = { inicioS: null, cambio, cambiado: false };
+  }
+
+  /**
+   * Fin de voz del mentor para la vitrina `id` (lo llama juego.ts al terminar la explicación).
+   * Si la vitrina sigue seleccionada, se habilita entrar con el aplauso o la barra espaciadora.
+   */
+  terminoVoz(id: VitrinaId): void {
+    if (this.seleccionada !== id || this.fase !== 'hablando') return;
+    this.fase = 'listo';
+    this.emitir({ tipo: 'listoParaEntrar', id });
   }
 
   private seleccionar(id: VitrinaId): void {
-    if (this.seleccionada !== null) visual.museo.resaltarVitrina(this.seleccionada, false);
     this.seleccionada = id;
+    this.fase = 'hablando';
     visual.museo.resaltarVitrina(id, true);
     visual.museo.mentorAparece();
     this.emitir({ tipo: 'vitrinaSeleccionada', id });
   }
 
+  /** Solo se llama al abrir la misión: durante el flujo de una vitrina nunca se deselecciona. */
+  private deseleccionar(): void {
+    if (this.seleccionada === null) return;
+    const id = this.seleccionada;
+    visual.museo.resaltarVitrina(id, false);
+    this.seleccionada = null;
+    this.fase = null;
+    this.emitir({ tipo: 'vitrinaDeseleccionada', id });
+  }
+
   private abrirMision(mision: Mision): void {
+    this.deseleccionar();
+    this.candidata = null;
     this.pantallaActual = { tipo: 'mision', mision };
+    visual.museo.entrarEscena(mision);
     this.emitir({ tipo: 'misionAbierta', mision });
+  }
+
+  private completarVolver(): void {
+    this.pantallaActual = { tipo: 'museo' };
+    this.candidata = null;
+    visual.museo.volverAlMuseo();
+    visual.museo.mentorAparece();
+    this.emitir({ tipo: 'regresoMuseo' });
   }
 
   private emitir(evento: EventoMuseo): void {

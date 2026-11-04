@@ -33,6 +33,23 @@
   z-index: 3;
 }
 
+/* Indicación de entrar (SPEC 7.2): aparece cuando el mentor termina de hablar. Va encima de los subtítulos. */
+.entrar {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 96px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(255, 214, 10, 0.92);
+  color: #111;
+  font: 600 17px/1.4 system-ui, sans-serif;
+  text-align: center;
+  z-index: 3;
+}
+
 .subtitulos {
   position: fixed;
   left: 16px;
@@ -59,25 +76,29 @@
   z-index: 1;
 }
 
+/* Escena de misión: franja superior sobre la escena 3D, que sigue visible debajo. */
 .mision {
   position: fixed;
-  inset: 0;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  max-width: 640px;
+  margin: 0 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 16px;
-  background: rgba(10, 12, 16, 0.92);
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(10, 12, 16, 0.75);
   color: #fff;
   font-family: system-ui, sans-serif;
-  text-align: center;
   z-index: 4;
 }
 
 .mision h1 {
   margin: 0;
-  font-size: clamp(24px, 5vw, 40px);
+  font-size: clamp(18px, 3.5vw, 26px);
   font-weight: 600;
 }
 
@@ -88,6 +109,100 @@
   background: #fff;
   color: #111;
   font: 600 16px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+/* Cursor del dedo índice (SPEC 4): círculo sobre la escena, sin capturar clics. */
+.cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #5cc8ff;
+  background: rgba(92, 200, 255, 0.18);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 5;
+}
+
+.cursor.atenuado {
+  opacity: 0.35;
+}
+
+/* Botón y panel de opciones (SPEC 13). */
+.opciones-boton {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: 500 14px system-ui, sans-serif;
+  cursor: pointer;
+  z-index: 6;
+}
+
+.opciones {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(10, 12, 16, 0.94);
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  z-index: 7;
+  overflow-y: auto;
+}
+
+.opciones h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.opciones-caja {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #171a21;
+}
+
+.opciones-caja label {
+  display: grid;
+  gap: 6px;
+  font: 400 14px/1.35 system-ui, sans-serif;
+}
+
+.opciones-caja input,
+.opciones-caja select {
+  padding: 8px 10px;
+  border: 1px solid #3a404c;
+  border-radius: 6px;
+  background: #0e1014;
+  color: #fff;
+  font: inherit;
+}
+
+.opciones-caja button {
+  justify-self: end;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  color: #111;
+  font: 600 15px system-ui, sans-serif;
   cursor: pointer;
 }
 

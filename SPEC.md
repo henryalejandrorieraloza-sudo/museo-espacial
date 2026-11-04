@@ -61,7 +61,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 | --- | --- |
 | Caminar en el museo | Subir las rodillas (caminar en el sitio) |
 | Girar la vista en el museo | Inclinar la cabeza hacia un lado |
-| Señalar vitrina | Apuntar con el dedo índice |
+| Señalar vitrina | Cursor con el dedo índice (por defecto). El rayo desde el hombro queda como opción |
 | Iniciar inmersión | Aplaudir |
 | Conducir LRV | Volante gestual con ambas manos |
 | Avanzar LRV | Subir las rodillas (caminar en el sitio) |
@@ -72,7 +72,19 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 | Recoger muestra (Apollo 17) | Golpe con una mano + agarre con la otra |
 | Volver al museo | Aplaudir |
 
-**Regla:** la cabeza siempre mira al frente. El giro se detecta como inclinación lateral (roll). Umbral por defecto: 15°, configurable.
+**Regla (giro proporcional):** la cabeza siempre mira al frente. El giro se detecta como inclinación lateral (roll). La velocidad de giro es proporcional a la inclinación:
+
+- Velocidad (°/s) = (|inclinación| − zona muerta) × sensibilidad.
+- Zona muerta por defecto: **3°**. Dentro de ±3° no gira nada.
+- Sensibilidad por defecto: **0.6** (rango 0.2–1.0, en opciones).
+- Velocidad máxima de giro por defecto: **60°/s**. Nunca se supera.
+- Inclinación pequeña = giro lento; inclinación grande = giro más rápido.
+- Aplica a la cámara del museo y, en Perseverance, al rover (sección 9.2; pendiente de implementar).
+
+**Regla (caminata proporcional):** la velocidad de avance es proporcional a la cadencia de pasos (pasos por segundo), no a un valor fijo. Velocidad objetivo = min(velocidad máxima, distancia por paso × cadencia). Un paso lento avanza despacio y caminar más rápido avanza más.
+
+- Velocidad máxima por defecto: **1.2 m/s** (configurable).
+- Aceleración y frenado graduales de **0.5 s**.
 
 ## 5. Detección de gestos
 
@@ -95,8 +107,11 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 
 ### 5.3 Señalar (dedo índice)
 
-- Rayo desde el hombro hasta la punta del índice.
-- Vitrina seleccionada tras 1.5 s de intersección. Mientras tanto se resalta.
+- Método por defecto: **cursor**. Un círculo sigue la punta del índice (landmark 8) de la mano que señala.
+  - Coordenadas con espejo horizontal. Escala: el 60 % central del encuadre cubre la pantalla entera.
+  - Filtro exponencial para suavizar (factor 0.3 por defecto). Si la mano no se ve, el cursor se queda en su última posición, atenuado, y no señala ninguna vitrina.
+- Opción alternativa: **rayo** desde el hombro hasta la punta del índice.
+- Vitrina seleccionada tras 1.5 s de intersección (cursor sobre la vitrina, o rayo). Mientras tanto se resalta.
 
 ### 5.4 Pellizco
 
@@ -132,12 +147,25 @@ Al regresar el seguimiento, la acción continúa sin reinicio.
 1. El jugador camina en el museo (subiendo las rodillas).
 2. Gira la vista inclinando la cabeza.
 3. Señala una vitrina con el índice durante 1.5 s. La vitrina se resalta.
-4. El mentor explica el artefacto (voz y subtítulos, máximo 30 s).
-5. El jugador aplaude para entrar a la inmersión.
-6. Aparece en la escena correspondiente:
+4. El mentor empieza a hablar la explicación de la vitrina. Habla frase a frase, y cada frase aparece como subtítulo mientras suena.
+5. Cuando termina la última frase, aparece el texto “Aplaude para entrar (o pulsa espacio)”.
+6. El jugador aplaude o pulsa espacio. Se entra a la escena con fundido de 0.6 s:
    - Vitrina del LRV → Luna, junto al LRV.
    - Vitrina de Perseverance → Marte, solo con Perseverance visible.
 7. Comienza la misión.
+
+**Reglas del flujo:**
+
+- **La explicación siempre termina.** Ningún evento la interrumpe: moverse, girar la cabeza, caminar, perder la cara o las manos, cambiar el método de señalar, pulsar otra tecla. La voz no se corta; el movimiento solo mueve la cámara.
+- **Durante la explicación, no se acepta ninguna selección nueva ni aplauso.** Si el jugador señala otra vitrina mientras habla, esa selección se ignora hasta que termine la voz.
+- **Explicación por frases.** El texto se divide en frases. Se reproduce una frase y, al terminar (evento `onend`), pasa a la siguiente. Así Chrome no corta frases largas. Las referencias de cada `SpeechSynthesisUtterance` se guardan en un arreglo mientras dura la explicación, para que el navegador no las elimine.
+- **Respaldo sin voz.** Si no hay voces disponibles o la síntesis falla, los subtítulos se muestran igual y cada frase avanza con un temporizador de 15 caracteres por segundo. El flujo nunca se queda trabado. Si una frase con voz no envía su evento de fin, avanza tras su duración de respaldo más 5 s.
+- **Aviso al terminar.** Cuando termina la última frase, aparece el aviso “Aplaude para entrar”. Este aviso no depende de dónde está el jugador ni hacia dónde mira.
+- **Entrada.** Al aplaudir o pulsar espacio después del aviso, se entra a la escena de la vitrina seleccionada. No se comprueba la posición del jugador, la dirección de la cámara ni si la vitrina está en pantalla. Un aplauso durante la explicación no hace nada.
+- **Selección bloqueada hasta entrar.** Desde que se selecciona una vitrina hasta que se entra, la selección no cambia. La vitrina sigue resaltada.
+- La barra espaciadora funciona en todo el flujo como respaldo del aplauso.
+- En la escena, el texto de la sesión anterior (“misión en construcción”) se mantiene.
+- Para volver al museo, aplaude o pulsa espacio (sección 7.3). Después, el jugador puede señalar otra vitrina y empezar una nueva explicación.
 
 ### 7.3 Regreso
 
@@ -259,7 +287,10 @@ No se guardan muestras recogidas como progreso.
 - Sensibilidad de giro de cabeza.
 - Zona neutral de cabeza.
 - Sensibilidad del volante del LRV.
-- Velocidad máxima de caminata.
+- Velocidad máxima de caminata (1.2 m/s por defecto).
+- Distancia por paso (0.4 m por defecto) y tiempo de aceleración hasta la velocidad máxima (0.5 s por defecto).
+- Método de señalar: cursor con el dedo índice (por defecto) o rayo desde el hombro.
+- Mano que señala (derecha por defecto), sensibilidad del cursor (1.0) y suavizado del cursor (0.3).
 - Idioma (español / inglés).
 - Recalibrar.
 - Modo de movilidad limitada (deshabilitado, “Próximamente”).

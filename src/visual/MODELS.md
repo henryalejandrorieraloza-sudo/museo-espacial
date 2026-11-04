@@ -15,3 +15,16 @@ Convención para el modelo final: 1 unidad de Blender = 1 metro, sin escalar en 
 Notas:
 - Las vitrinas no están en `config.ts` porque su posición es de diseño: se fija en `POSICION_VITRINA` de `src/visual/museo.ts`.
 - El origen de cada modelo debe quedar en el suelo y centrado en la vitrina; el punto de apuntado es el centro del cubo (1.0 m).
+
+## Escenas de misión (placeholders)
+
+Se definen en `ESCENAS` de `src/visual/config.ts`. Cada escena es un grupo; se muestra solo una a la vez.
+
+| id | Nombre del nodo | Contenido placeholder | Escala esperada (modelo final) |
+| --- | --- | --- | --- |
+| `escena_luna` | `escena_luna` | Suelo gris claro de 60 × 60 m. Cielo negro (fondo de la escena). Hijos: `lrv_placeholder` (cubo blanco grisáceo de 1.5 m en (0, 0.75, −4)) y `roca_placeholder` (caja gris de 0.8 m en (2.5, 0, −3), con el halo azul celeste `halo_roca`: anillo de 0.6 m de radio a 0.4 m de altura). | 1 |
+| `escena_marte` | `escena_marte` | Suelo rojizo de 60 × 60 m. Cielo claro (fondo de la escena). Hijo: `perseverance_placeholder` (cubo de 1.5 m en (0, 0.75, −4)). | 1 |
+
+Notas:
+- Los hijos tienen posición fija en el placeholder. Al cambiar un hijo por un `.glb`, mantén su nombre.
+- El jugador llega a (0, 1.6, 4) mirando a −Z. Al volver, recupera su posición y giro del museo.

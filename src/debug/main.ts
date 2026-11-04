@@ -44,6 +44,8 @@ import {
   type ZonaVolante,
 } from '../tracking/gestures';
 import type { TrackedHand } from '../tracking/tracker';
+import { VELOCIDAD_MAX_GIRO_GRADOS_S, ZONA_MUERTA_GIRO_GRADOS } from '../game/gestos';
+import { cargarOpciones } from '../game/opciones';
 import { MicAplausoSonoro, SONIDO_INDICADOR_S } from '../audio/aplausoSonoro';
 import { drawTracking } from '../ui/overlay';
 import { requireEl, setValue } from '../ui/dom';
@@ -288,6 +290,10 @@ async function main(): Promise<void> {
   const ctx = canvas.getContext('2d');
   const signalCtx = signalCanvas.getContext('2d');
   if (!ctx || !signalCtx) throw new Error('No se pudo obtener el contexto 2D de un canvas');
+
+  // Giro de cabeza: umbral y zona muerta del código, y el factor guardado en opciones (localStorage).
+  setValue('umbralGiro', `zona muerta ±${ZONA_MUERTA_GIRO_GRADOS}° · máx. ${VELOCIDAD_MAX_GIRO_GRADOS_S}°/s`);
+  setValue('factorGiro', cargarOpciones().sensibilidadGiro.toFixed(2));
 
   try {
     status.textContent = 'Pidiendo acceso a la webcam…';
