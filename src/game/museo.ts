@@ -7,7 +7,7 @@ import { visual, type Escena } from '../visual/museo';
 /** Segundos que el rayo debe tocar una vitrina para seleccionarla (SPEC 5.3, 7.2). */
 export const SEGUNDOS_SENALAR = 1.5;
 /** Duración del fundido a negro (s): la mitad oscurece, la mitad aclara. */
-export const DURACION_FUNDIDO_S = 0.6;
+export const DURACION_FUNDIDO_S = 1.0;
 export type VitrinaId = 'vitrina_lrv' | 'vitrina_perseverance';
 export type Mision = Escena;
 
@@ -76,6 +76,11 @@ export class Museo {
     return this.pantallaActual;
   }
 
+  /** Hay un fundido en curso: no se procesan entradas. */
+  get enTransicion(): boolean {
+    return this.transicion !== null;
+  }
+
   /** Vitrina seleccionada (con halo) o null. */
   get vitrinaSeleccionada(): VitrinaId | null {
     return this.seleccionada;
@@ -86,7 +91,7 @@ export class Museo {
   }
 
   /**
-   * Avanza el fundido a negro (0.6 s en total). Se llama en cada vuelta del bucle, con o sin
+   * Avanza el fundido a negro (1 s en total). Se llama en cada vuelta del bucle, con o sin
    * fotograma nuevo, porque el fundido tiene su propio reloj.
    */
   tick(ahoraS: number): void {

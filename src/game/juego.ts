@@ -3,7 +3,7 @@
 
 import { abrirWebcam } from '../tracking/camara';
 import { checkFraming, type FramingStatus } from '../tracking/framing';
-import { aplauso, aplausoEstadoInicial, pellizco, type AplausoEstado } from '../tracking/gestures';
+import { aplauso, aplausoEstadoInicial, pellizco, volante, type AplausoEstado } from '../tracking/gestures';
 import {
   HAND_IDX,
   LegAlternationCounter,
@@ -14,8 +14,8 @@ import {
 } from '../tracking/metrics';
 import { Tracker, type TrackingFrame } from '../tracking/tracker';
 import { visual } from '../visual/museo';
-import { crearVoz } from '../audio/voz';
-import { t } from '../i18n';
+import { crearVoz, type Voz } from '../audio/voz';
+import { t, type ClaveTexto } from '../i18n';
 import { requireEl } from '../ui/dom';
 import { crearCursor, type CursorUi } from '../ui/cursor';
 import { crearOpcionesUi } from '../ui/opcionesUi';
@@ -26,11 +26,33 @@ import { cargarOpciones, type Opciones } from './opciones';
 import { CursorSuavizado, puntaACursor } from './cursor';
 import { direccionSenalar, giroCabeza } from './gestos';
 import { Museo, type EventoMuseo } from './museo';
+import { descargarCaptura } from '../ui/captura';
+import { MisionLuna, type EntradaLuna, type EstadoLuna } from './luna';
 
 /** Si el último fotograma es más viejo que esto (s), el movimiento se congela (SPEC 6). */
 const FRESCO_S = 0.5;
 /** Tiempo máximo (s) que cuenta un fotograma para el giro y la caminata, para no saltar tras una pausa. */
 const DT_MAX_S = 0.1;
+
+/** Misión lunar activa (SPEC 8). Solo existe mientras la pantalla es la escena de Luna. */
+let mision: MisionLuna | null = null;
+
+/** Último frame procesado, para la captura de depuración (tecla P, solo en desarrollo). */
+let ultimoFrame: TrackingFrame | null = null;
+
+/** Frase de voz de cada estado de la misión. `entrando_museo` se dice al abrir la escena, no aquí. */
+const FRASES_LUNA: Partial<Record<EstadoLuna, ClaveTexto>> = {
+  sentado_en_LRV: 'luna_sentado_en_LRV',
+  cerca_de_roca: 'luna_cerca_de_roca',
+  golpeando: 'luna_golpeando',
+  muestra_recogida: 'luna_muestra_recogida',
+};
+
+/** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. Sin voz, el subtítulo sale igual. */
+function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto): void {
+  voz.cancelar();
+  voz.hablar(t(clave), undefined, (frase) => ui.subtitulos(frase));
+}
 
 export async function iniciarJuego(container: HTMLElement): Promise<void> {
   const voz = crearVoz('es-ES');
@@ -67,10 +89,18 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         voz.cancelar();
         ui.subtitulos(null);
         ui.indicarEntrar(null);
-        ui.mostrarMision(t(evento.mision === 'luna' ? 'escena_luna_construccion' : 'escena_marte_construccion'));
+        if (evento.mision === 'luna') {
+          // Misión lunar (SPEC 8): sin cartel de "en construcción". El primer aplauso dentro sienta al jugador.
+          mision = new MisionLuna();
+          cursorUi.mostrar(false);
+          decirFrase(voz, ui, 'luna_entrando_museo');
+        } else {
+          ui.mostrarMision(t('escena_marte_construccion'));
+        }
         break;
       case 'regresoMuseo':
         // Se quita el texto de la escena y el mentor da su conclusión (voz y subtítulos).
+        mision = null;
         ui.ocultarMision();
         ui.subtitulos(t('regreso_museo'));
         voz.hablar(t('regreso_museo'));
@@ -88,6 +118,13 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     if (!ev.repeat) espacioPendiente = true;
   });
 
+  // Captura de depuración: P descarga el frame actual como JSON. Solo en desarrollo (SPEC no lo incluye en producción).
+  if (import.meta.env.DEV) {
+    window.addEventListener('keydown', (ev) => {
+      if (ev.code === 'KeyP' && !ev.repeat && ultimoFrame) descargarCaptura(ultimoFrame);
+    });
+  }
+
   try {
     ui.aviso(t('arranque'));
     await visual.museo.iniciar(container);
@@ -101,7 +138,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     }
 
     const tracker = await Tracker.create((mensaje) => ui.aviso(mensaje));
-    const sesion = nuevaSesion(museo, ui, cursorUi, opciones, cargarCalibracion());
+    const sesion = nuevaSesion(museo, ui, cursorUi, opciones, cargarCalibracion(), voz);
     ui.aviso(sesion.calibracion === null ? t('encuadre_acercarse') : null);
 
     const bucle = (): void => {
@@ -115,8 +152,21 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         procesarFotograma(sesion, nuevo, ahoraS, espacio);
       } else if (espacio && sesion.calibracion !== null) {
         // Sin fotograma nuevo el movimiento está congelado, pero la barra espaciadora debe funcionar.
-        museo.actualizar({ ahoraS, giroGrados: 0, metros: 0, apuntando: null, accion: true });
+        if (mision !== null) {
+          aplicarLuna(sesion, {
+            ahoraS,
+            dtS: 0,
+            aplauso: true,
+            metros: 0,
+            volanteGrados: null,
+            velocidadGolpeHombrosS: 0,
+            agarreNuevo: false,
+          });
+        } else {
+          museo.actualizar({ ahoraS, giroGrados: 0, metros: 0, apuntando: null, accion: true });
+        }
       }
+      if (ahoraS - sesion.ultimoDatoS > FRESCO_S) visual.museo.ocultarManos();
       if (sesion.calibracion !== null && ahoraS - sesion.ultimoDatoS > FRESCO_S) {
         ui.aviso(t('sin_seguimiento'));
       }
@@ -148,6 +198,11 @@ interface Sesion {
   aplausoEstado: AplausoEstado;
   ultimoFrescoS: number | null;
   ultimoDatoS: number;
+  voz: Voz;
+  /** Última posición (px) y tiempo de cada muñeca, para medir la velocidad de golpe (SPEC 8.3). */
+  munecasPrevias: Partial<Record<'Left' | 'Right', { y: number; ahoraS: number }>>;
+  /** Pellizco cerrado en el fotograma anterior, por mano (agarre de la misión lunar). */
+  pellizcosLuna: Partial<Record<'Left' | 'Right', boolean>>;
 }
 
 function nuevaSesion(
@@ -156,6 +211,7 @@ function nuevaSesion(
   cursorUi: CursorUi,
   opciones: Opciones,
   calibracion: Calibracion | null,
+  voz: Voz,
 ): Sesion {
   return {
     museo,
@@ -163,6 +219,9 @@ function nuevaSesion(
     cursorUi,
     opciones,
     calibracion,
+    voz,
+    munecasPrevias: {},
+    pellizcosLuna: {},
     calibrador: new Calibrador(),
     piernas: new LegAlternationCounter(SWING_PCT_DEFAULT),
     caminata: new Caminata(),
@@ -177,9 +236,19 @@ function nuevaSesion(
 
 /** Procesa un fotograma nuevo: encuadre y calibración, o bien las acciones del museo. */
 function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number, espacio: boolean): void {
+  ultimoFrame = frame;
   const dtS = sesion.ultimoFrescoS === null ? 0 : Math.min(DT_MAX_S, ahoraS - sesion.ultimoFrescoS);
   sesion.ultimoFrescoS = ahoraS;
   sesion.ultimoDatoS = ahoraS;
+  // Las manos del avatar copian las detectadas; si no hay mano, su avatar se oculta (SPEC 5.5).
+  visual.museo.actualizarManos(frame.hands, frame.width, frame.height, sesion.opciones.tamanoMano, {
+    separacion: sesion.opciones.separacionManos,
+    ajuste: sesion.opciones.ajusteManoModelo,
+    limites: sesion.opciones.limitesMano,
+    ahoraS,
+    tiempoOcultarS: sesion.opciones.tiempoOcultarManoS,
+    umbralSaltoM: sesion.opciones.umbralSaltoManoM,
+  });
 
   const framing = checkFraming(frame.pose);
   const roll = frame.face ? headRollDeg(frame.face, frame.width, frame.height) : null;
@@ -209,6 +278,19 @@ function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number,
   // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
   const accion = ap.detectado || espacio;
 
+  // Escena lunar: sus gestos (volante, caminata, golpe, agarre) van a la máquina de estados (SPEC 8).
+  if (mision !== null) {
+    procesarMisionLuna(sesion, frame, {
+      ahoraS,
+      dtS,
+      pasos,
+      roll,
+      aplauso: accion,
+      shoulderPx,
+    });
+    return;
+  }
+
   // Sin cara no hay giro ni pasos: el movimiento se congela (SPEC 6). El aplauso, el espacio y el pellizco sí cuentan.
   if (roll === null) {
     if (accion) {
@@ -224,6 +306,81 @@ function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number,
     apuntando: senal.apuntando,
     accion,
   });
+}
+
+interface DatosMision {
+  ahoraS: number;
+  dtS: number;
+  pasos: number;
+  roll: number | null;
+  aplauso: boolean;
+  shoulderPx: number | null;
+}
+
+/** Arma la entrada de la misión lunar a partir del fotograma y la envía a la máquina de estados. */
+function procesarMisionLuna(sesion: Sesion, frame: TrackingFrame, datos: DatosMision): void {
+  // Sin cara no hay caminata (el movimiento se congela, SPEC 6); el volante sigue con las manos.
+  const metros = datos.roll === null ? 0 : sesion.caminata.avanzar(datos.ahoraS, datos.dtS, datos.pasos, sesion.opciones);
+  aplicarLuna(sesion, {
+    ahoraS: datos.ahoraS,
+    dtS: datos.dtS,
+    aplauso: datos.aplauso,
+    metros,
+    volanteGrados: volante(frame.hands, frame.width, frame.height)?.grados ?? null,
+    velocidadGolpeHombrosS: velocidadGolpe(sesion, frame, datos.ahoraS, datos.shoulderPx),
+    agarreNuevo: agarreNuevo(sesion, frame),
+  });
+}
+
+/** Avanza la misión lunar un fotograma, actualiza la escena y reacciona a los eventos (voz, volver). */
+function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
+  if (mision === null || sesion.museo.enTransicion) return;
+  const eventos = mision.update(entrada);
+  visual.museo.actualizarLuna({
+    x: mision.posicion.x,
+    z: mision.posicion.z,
+    rumboGrados: mision.rumboGrados,
+    sentado: mision.estado !== 'entrando_museo',
+    rocaResaltada: mision.rocaResaltada,
+  });
+  for (const evento of eventos) {
+    if (evento.tipo === 'estado') {
+      const clave = FRASES_LUNA[evento.estado];
+      if (clave) decirFrase(sesion.voz, sesion.ui, clave);
+    } else if (evento.tipo === 'golpeFallido') {
+      decirFrase(sesion.voz, sesion.ui, 'luna_golpe_fallido');
+    } else if (evento.tipo === 'volver') {
+      sesion.museo.volver();
+    }
+  }
+}
+
+/** Velocidad máxima hacia abajo de las muñecas, en hombros/s (SPEC 8.3). Negativa o cero si suben o no hay datos. */
+function velocidadGolpe(sesion: Sesion, frame: TrackingFrame, ahoraS: number, shoulderPx: number | null): number {
+  let mayor = 0;
+  for (const mano of frame.hands) {
+    if (mano.label === 'Unknown') continue;
+    const y = mano.landmarks[HAND_IDX.wrist].y * frame.height;
+    const previa = sesion.munecasPrevias[mano.label];
+    sesion.munecasPrevias[mano.label] = { y, ahoraS };
+    if (!previa || shoulderPx === null || shoulderPx < 1) continue;
+    const dtS = ahoraS - previa.ahoraS;
+    if (dtS <= 0) continue;
+    mayor = Math.max(mayor, (y - previa.y) / shoulderPx / dtS);
+  }
+  return mayor;
+}
+
+/** Cierre nuevo del pellizco en cualquiera de las dos manos: el agarre de la misión lunar (SPEC 8.3). */
+function agarreNuevo(sesion: Sesion, frame: TrackingFrame): boolean {
+  let nuevo = false;
+  for (const lado of ['Left', 'Right'] as const) {
+    const mano = frame.hands.find((m) => m.label === lado);
+    const cerrado = pellizco(mano, frame.width, frame.height)?.cerrado ?? false;
+    if (cerrado && !sesion.pellizcosLuna[lado]) nuevo = true;
+    sesion.pellizcosLuna[lado] = cerrado;
+  }
+  return nuevo;
 }
 
 interface ResultadoSenalar {

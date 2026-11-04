@@ -4,3 +4,5 @@ dist
 public/wasm
 .DS_Store
 *.local
+# Copias de seguridad locales (no se versionan)
+backup-*/

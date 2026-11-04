@@ -15,8 +15,8 @@ export interface ConfigModelo {
 
 export const MODELOS: readonly ConfigModelo[] = [
   { id: 'museo', ruta: 'placeholder:sala', nodo: 'museo', escala: 1 },
-  { id: 'vitrina_lrv', ruta: 'placeholder:vitrina', nodo: 'vitrina_lrv', escala: 1 },
-  { id: 'vitrina_perseverance', ruta: 'placeholder:vitrina', nodo: 'vitrina_perseverance', escala: 1 },
+  { id: 'vitrina_lrv', ruta: 'placeholder:vitrina_lrv', nodo: 'vitrina_lrv', escala: 1 },
+  { id: 'vitrina_perseverance', ruta: 'placeholder:vitrina_perseverance', nodo: 'vitrina_perseverance', escala: 1 },
   { id: 'mentor', ruta: 'placeholder:mentor', nodo: 'mentor', escala: 1 },
   { id: 'halo_senalar', ruta: 'placeholder:anillo', nodo: 'halo_senalar', escala: 1 },
 ];

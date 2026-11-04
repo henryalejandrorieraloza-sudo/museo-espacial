@@ -121,7 +121,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 ### 5.5 Avatar espejo
 
 - Las manos del avatar replican las manos reales con todos sus gestos.
-- Si las manos no se ven en la webcam, el avatar oculta las manos. No congela la última pose.
+- Pérdida momentánea de la mano: la mano se queda en su última posición y pose. Desaparece solo tras `tiempoOcultarManoS` segundos sin detección (1 s por defecto, configurable). Al reaparecer aparece donde la detecta la cámara; solo se desliza si el salto es menor que `umbralSaltoManoM` (0,05 m por defecto).
 
 ## 6. Pérdida de seguimiento
 
@@ -293,6 +293,11 @@ No se guardan muestras recogidas como progreso.
 - Distancia por paso (0.4 m por defecto) y tiempo de aceleración hasta la velocidad máxima (0.5 s por defecto).
 - Método de señalar: cursor con el dedo índice (por defecto) o rayo desde el hombro.
 - Mano que señala (derecha por defecto), sensibilidad del cursor (1.0) y suavizado del cursor (0.3).
+- Tamaño de la mano (1.25 por defecto, rango 0.6–2.0): escala las longitudes; el grosor no cambia.
+- Ajuste de modelo de mano (casilla, apagada por defecto): la pose de la mano sale de ajustar un modelo articulado (24 parámetros, límites anatómicos de HAND_JOINT_LIMITS en `src/visual/manoModelo.ts`) a los landmarks, en vez de reconstruirla frame a frame.
+- Separación entre manos (0 m por defecto, rango 0–0.6 m, paso 0.01 m): separación total entre las dos manos del avatar. Cada mano se desplaza la mitad hacia su lado (solo en x). Se aplica en vivo y se guarda en localStorage.
+- Segundos sin ver la mano antes de que desaparezca (1 s) y salto máximo para deslizarse al reaparecer (0,05 m).
+- Topes de las articulaciones de la mano (grados, mín y máx por parámetro), con botón de restaurar.
 - Idioma (español / inglés).
 - Recalibrar.
 - Modo de movilidad limitada (deshabilitado, “Próximamente”).

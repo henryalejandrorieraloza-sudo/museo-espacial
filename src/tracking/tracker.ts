@@ -7,10 +7,21 @@ import {
 } from '@mediapipe/tasks-vision';
 import { assetUrl } from './assets';
 
+/** Punto 3D en metros, con el origen en el centro de la mano (worldLandmarks de MediaPipe). */
+export interface PuntoMundo {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface TrackedHand {
   /** Lateralidad según MediaPipe: corresponde a la mano real del jugador. */
   label: 'Left' | 'Right' | 'Unknown';
   landmarks: NormalizedLandmark[];
+  /** 21 puntos en metros, con el origen en el centro de la mano. Forma de la mano independiente de la imagen. */
+  worldLandmarks: PuntoMundo[];
+  /** Confianza de la lateralidad (0–1) según MediaPipe. Solo se usa en la captura de depuración (tecla P). */
+  score: number | null;
 }
 
 export interface TrackingFrame {
@@ -102,7 +113,9 @@ export class Tracker {
       hands: hands.landmarks.map((landmarks, i) => {
         const name = hands.handedness[i]?.[0]?.categoryName;
         const label: TrackedHand['label'] = name === 'Left' || name === 'Right' ? name : 'Unknown';
-        return { label, landmarks };
+        const worldLandmarks = hands.worldLandmarks[i] ?? [];
+        const score = hands.handedness[i]?.[0]?.score ?? null;
+        return { label, landmarks, worldLandmarks, score };
       }),
     };
   }
