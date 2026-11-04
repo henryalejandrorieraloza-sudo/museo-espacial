@@ -42,6 +42,10 @@ const COLOR = {
   fondo: 0xdfe4ea,
   suelo: 0xd3d9e0,
   pared: 0xf4f6f8,
+  /** Techo blanco y tiras de luz emisivas (luces planas, sin sombras). Paneles de pared un poco más oscuros. */
+  techo: 0xf2f5f8,
+  luzTecho: 0xf7fbff,
+  panelPared: 0xdde3ea,
   pedestal: 0xeceff3,
   cristal: 0xbfe8f5,
   marcoVitrina: 0x7d8796,
@@ -166,6 +170,29 @@ function crearSala(): THREE.Object3D {
     const pared = new THREE.Mesh(new THREE.BoxGeometry(ancho, ALTURA_PAREDES, fondo), material(COLOR.pared));
     pared.position.set(x, ALTURA_PAREDES / 2, z);
     grupo.add(pared);
+  }
+
+  // Techo liso con tres tiras de luz emisiva que recorren la sala de norte a sur.
+  // Material plano, sin depender de la luz: el techo mira hacia abajo y la luz del cielo lo oscurecería.
+  const techo = new THREE.Mesh(new THREE.PlaneGeometry(LADO_SALA, LADO_SALA), materialBasico(COLOR.techo));
+  techo.rotation.x = Math.PI / 2;
+  techo.position.y = ALTURA_PAREDES;
+  grupo.add(techo);
+  for (const x of [-4, 0, 4]) {
+    grupo.add(mallaBasica(new THREE.BoxGeometry(0.3, 0.03, LADO_SALA - 2), COLOR.luzTecho, [x, ALTURA_PAREDES - 0.02, 0]));
+  }
+
+  // Paneles de pared: placas levemente más oscuras, pegadas a las paredes norte, oeste y sur.
+  const dentro = mitad - GROSOR_PARED / 2 - 0.02;
+  const panelNorte = (x: number): void => {
+    grupo.add(malla(new THREE.BoxGeometry(2.4, 1.6, 0.03), COLOR.panelPared, [x, 2.2, -dentro]));
+  };
+  [-5, 0, 5].forEach(panelNorte);
+  for (const z of [-5, 0, 5]) {
+    grupo.add(malla(new THREE.BoxGeometry(0.03, 1.6, 2.4), COLOR.panelPared, [-dentro, 2.2, z]));
+  }
+  for (const x of [-5, 5]) {
+    grupo.add(malla(new THREE.BoxGeometry(2.4, 1.6, 0.03), COLOR.panelPared, [x, 2.2, dentro]));
   }
 
   // Planetas en exhibición sobre peanas, contra la pared oeste.
