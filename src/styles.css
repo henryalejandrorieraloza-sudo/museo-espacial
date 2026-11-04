@@ -149,6 +149,28 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+/* Depuración: indicador de aplauso y avisos de mano no visible (SPEC 5.2). */
+.indicator {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.indicator.lit {
+  background: var(--accent);
+  color: #0e1014;
+  font-weight: 600;
+}
+
+.aviso {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #ffb84d;
+  min-height: 1em;
+}
+
 .legend {
   margin-top: 16px;
   font-size: 13px;

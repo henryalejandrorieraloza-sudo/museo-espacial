@@ -9,7 +9,14 @@ export const POSE_IDX = {
   leftKnee: 25,
   rightKnee: 26,
 } as const;
-export const HAND_IDX = { wrist: 0, middleMcp: 9, thumbTip: 4, indexTip: 8 } as const;
+export const HAND_IDX = {
+  wrist: 0,
+  thumbTip: 4,
+  indexMcp: 5,
+  middleMcp: 9,
+  pinkyMcp: 17,
+  indexTip: 8,
+} as const;
 
 interface Px {
   x: number;
@@ -47,8 +54,8 @@ export function shoulderWidthPx(pose: NormalizedLandmark[], w: number, h: number
 // ---------------------------------------------------------------------------
 
 /** Amplitud mínima de pico por defecto, en % de la altura del cuerpo. */
-export const SWING_PCT_DEFAULT = 4;
-export const SWING_PCT_MIN = 1;
+export const SWING_PCT_DEFAULT = 1;
+export const SWING_PCT_MIN = 0.5;
 export const SWING_PCT_MAX = 15;
 /** Visibilidad mínima de cada rodilla para usar el fotograma (SPEC 5.1). */
 export const LEG_VISIBILITY_MIN = 0.5;
@@ -63,7 +70,7 @@ const CADENCE_WINDOW_S = 2;
 /** Ventana visible de la gráfica de depuración, en segundos. */
 export const SERIES_WINDOW_S = 10;
 
-/** Limita la amplitud mínima al rango configurable (1 %–15 %). */
+/** Limita la amplitud mínima al rango configurable (0.5 %–15 %). */
 export const clampSwingPct = (pct: number): number =>
   Number.isFinite(pct) ? Math.min(SWING_PCT_MAX, Math.max(SWING_PCT_MIN, pct)) : SWING_PCT_DEFAULT;
 
@@ -255,6 +262,31 @@ export function wristDistance(
     toPx(hands[1].landmarks[HAND_IDX.wrist], w, h),
   );
   return { px, ratio: shoulderPx ? px / shoulderPx : null };
+}
+
+/**
+ * Centro de la palma de una mano en píxeles: promedio de los MCP del índice y del meñique.
+ * Más estable que la muñeca para medir un aplauso.
+ */
+export function palmCenterPx(hand: TrackedHand, w: number, h: number): Px {
+  const lm = hand.landmarks;
+  const a = toPx(lm[HAND_IDX.indexMcp], w, h);
+  const b = toPx(lm[HAND_IDX.pinkyMcp], w, h);
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/**
+ * Distancia entre los centros de las palmas de las dos manos, en unidades de ancho de hombros
+ * (independiente de la distancia a la cámara). Devuelve null si faltan manos o hombros.
+ */
+export function palmDistanceRatio(
+  hands: TrackedHand[],
+  shoulderPx: number | null,
+  w: number,
+  h: number,
+): number | null {
+  if (hands.length < 2 || !shoulderPx) return null;
+  return dist(palmCenterPx(hands[0], w, h), palmCenterPx(hands[1], w, h)) / shoulderPx;
 }
 
 /**

@@ -55,9 +55,9 @@
               <dd data-key="legSignal">—</dd>
               <dt>Amplitud del último pico</dt>
               <dd data-key="legPeak">—</dd>
-              <dt>Amplitud mínima para contar (1–15 %, por defecto 4 %)</dt>
+              <dt>Amplitud mínima para contar (0.5–15 %, por defecto 1 %)</dt>
               <dd>
-                <input id="swingPct" type="number" min="1" max="15" step="0.5" value="4" />
+                <input id="swingPct" type="number" min="0.5" max="15" step="0.5" value="1" />
               </dd>
               <dt>Pasos</dt>
               <dd data-key="steps">0</dd>
@@ -81,10 +81,90 @@
               <dd data-key="wristRatio">—</dd>
               <dt>Distancia entre muñecas (px)</dt>
               <dd data-key="wristPx">—</dd>
+              <dt>Distancia entre centros de palmas (× ancho de hombros). Lo usa el aplauso</dt>
+              <dd data-key="palmRatio">—</dd>
               <dt>Pulgar-índice, mano izquierda</dt>
               <dd data-key="pinchLeft">—</dd>
               <dt>Pulgar-índice, mano derecha</dt>
               <dd data-key="pinchRight">—</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h2>Gestos</h2>
+            <p class="aviso" data-key="gAviso"></p>
+            <dl>
+              <dt>Aplauso: distancia entre centros de palmas (× ancho de hombros)</dt>
+              <dd data-key="apRatio">—</dd>
+              <dt>Aplauso: velocidad de acercamiento (× hombros/s, positiva = se acercan)</dt>
+              <dd data-key="apVel">—</dd>
+              <dt>Aplauso: manos visibles</dt>
+              <dd data-key="apManos">—</dd>
+              <dt>Aplauso: último motivo</dt>
+              <dd data-key="apMotivo">—</dd>
+              <dt>Aplauso: indicador (se enciende 1.5 s al confirmarse)</dt>
+              <dd><span data-key="apIndicator" class="indicator">sin aplauso</span></dd>
+              <dt>Aplauso: velocidad mínima de acercamiento (/s, por defecto 3.0)</dt>
+              <dd>
+                <input id="aplausoVel" type="number" min="0.5" max="20" step="0.5" value="3" />
+              </dd>
+              <dt>Aplauso: distancia de confirmación (por defecto 0.5)</dt>
+              <dd>
+                <input id="aplausoConfirma" type="number" min="0.1" max="0.9" step="0.05" value="0.5" />
+              </dd>
+              <dt>Aplauso: distancia de la otra mano al perderse una (por defecto 0.9)</dt>
+              <dd>
+                <input id="aplausoPerdida" type="number" min="0.1" max="2" step="0.05" value="0.9" />
+              </dd>
+              <dt>Aplauso: ventana de mano perdida, ms (por defecto 200)</dt>
+              <dd>
+                <input id="aplausoVentana" type="number" min="50" max="1000" step="50" value="200" />
+              </dd>
+              <dt>Aplauso sonoro: micrófono</dt>
+              <dd data-key="apSonoroEstado">—</dd>
+              <dt>Aplauso sonoro: nivel sobre el ruido de fondo (dB; un aplauso supera +18 dB)</dt>
+              <dd data-key="apSonoroNivel">—</dd>
+              <dt>Aplauso sonoro: cruces por cero (0–1; un aplauso tiene muchos)</dt>
+              <dd data-key="apSonoroCruces">—</dd>
+              <dt>Aplauso sonoro: último motivo</dt>
+              <dd data-key="apSonoroMotivo">—</dd>
+              <dt>Aplauso visual o sonoro: indicador (se enciende 1.5 s al confirmarse)</dt>
+              <dd><span data-key="apCombinado" class="indicator">sin aplauso</span></dd>
+              <dt>Pellizco izquierdo: distancia · estado (umbral 0.25)</dt>
+              <dd data-key="gPinchL">—</dd>
+              <dt>Pellizco izquierdo: mínimo últimos 5 s</dt>
+              <dd data-key="gPinchMinL">—</dd>
+              <dt>Pellizco derecho: distancia · estado (umbral 0.25)</dt>
+              <dd data-key="gPinchR">—</dd>
+              <dt>Pellizco derecho: mínimo últimos 5 s</dt>
+              <dd data-key="gPinchMinR">—</dd>
+              <dt>Mano que conduce el rover (por defecto derecha)</dt>
+              <dd>
+                <select id="manoConduce">
+                  <option value="Right" selected>Derecha</option>
+                  <option value="Left">Izquierda</option>
+                </select>
+              </dd>
+              <dt>Inclinación: umbral “arriba” (−1…+1, por defecto 0.5)</dt>
+              <dd>
+                <input id="inclArriba" type="number" min="0.1" max="0.95" step="0.05" value="0.5" />
+              </dd>
+              <dt>Inclinación: umbral “abajo” (por defecto −0.5)</dt>
+              <dd>
+                <input id="inclAbajo" type="number" min="-0.95" max="-0.1" step="0.05" value="-0.5" />
+              </dd>
+              <dt>Inclinación: histéresis (por defecto 0.05)</dt>
+              <dd>
+                <input id="inclHist" type="number" min="0" max="0.3" step="0.01" value="0.05" />
+              </dd>
+              <dt>Inclinación mano izquierda: valor (−1…+1) · zona · grados (solo referencia)</dt>
+              <dd data-key="gInclL">—</dd>
+              <dt>Inclinación mano derecha: valor (−1…+1) · zona · grados (solo referencia)</dt>
+              <dd data-key="gInclR">—</dd>
+              <dt>Rover (simulado en /debug/): velocidad (−1 retrocede · +1 avanza) · objetivo</dt>
+              <dd data-key="gRover">—</dd>
+              <dt>Volante: grados · zona (neutral ±10°; derecha = positivo)</dt>
+              <dd data-key="gVolante">—</dd>
             </dl>
           </section>
 
