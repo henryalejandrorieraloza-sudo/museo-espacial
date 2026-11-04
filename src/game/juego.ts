@@ -8,6 +8,7 @@ import {
   HAND_IDX,
   LegAlternationCounter,
   SWING_PCT_DEFAULT,
+  headPitchDeg,
   headRollDeg,
   legSample,
   shoulderWidthPx,
@@ -24,7 +25,7 @@ import { Caminata } from './caminata';
 import { Calibrador, cargarCalibracion, guardarCalibracion, type Calibracion } from './calibracion';
 import { cargarOpciones, type Opciones } from './opciones';
 import { CursorSuavizado, puntaACursor } from './cursor';
-import { direccionSenalar, giroCabeza } from './gestos';
+import { cabeceoCabeza, direccionSenalar, giroCabeza } from './gestos';
 import { Museo, type EventoMuseo } from './museo';
 import { descargarCaptura } from '../ui/captura';
 import { MisionLuna, type EntradaLuna, type EstadoLuna } from './luna';
@@ -163,7 +164,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
             agarreNuevo: false,
           });
         } else {
-          museo.actualizar({ ahoraS, giroGrados: 0, metros: 0, apuntando: null, accion: true });
+          museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, apuntando: null, accion: true });
         }
       }
       if (ahoraS - sesion.ultimoDatoS > FRESCO_S) visual.museo.ocultarManos();
@@ -252,6 +253,7 @@ function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number,
 
   const framing = checkFraming(frame.pose);
   const roll = frame.face ? headRollDeg(frame.face, frame.width, frame.height) : null;
+  const pitch = frame.facePose ? headPitchDeg(frame.facePose) : null;
 
   // Los pasos se cuentan siempre para no acumularlos de golpe al terminar la calibración.
   sesion.piernas.feed(ahoraS, legSample(frame.pose));
@@ -264,7 +266,7 @@ function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number,
   sesion.aplausoEstado = ap.estado;
 
   if (sesion.calibracion === null) {
-    const nueva = sesion.calibrador.alimentar(ahoraS, roll, framing === 'ok');
+    const nueva = sesion.calibrador.alimentar(ahoraS, roll, pitch, framing === 'ok');
     if (nueva) {
       sesion.calibracion = nueva;
       guardarCalibracion(nueva);
@@ -294,7 +296,7 @@ function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number,
   // Sin cara no hay giro ni pasos: el movimiento se congela (SPEC 6). El aplauso, el espacio y el pellizco sí cuentan.
   if (roll === null) {
     if (accion) {
-      sesion.museo.actualizar({ ahoraS, giroGrados: 0, metros: 0, apuntando: null, accion: true });
+      sesion.museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, apuntando: null, accion: true });
     }
     return;
   }
@@ -302,6 +304,10 @@ function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number,
   sesion.museo.actualizar({
     ahoraS,
     giroGrados: giroCabeza(roll, sesion.calibracion.rollNeutralGrados, dtS, sesion.opciones.sensibilidadGiro),
+    cabeceoGrados:
+      pitch === null
+        ? 0
+        : cabeceoCabeza(pitch, sesion.calibracion.pitchNeutralGrados, dtS, sesion.opciones.sensibilidadGiro),
     metros: sesion.caminata.avanzar(ahoraS, dtS, pasos, sesion.opciones),
     apuntando: senal.apuntando,
     accion,

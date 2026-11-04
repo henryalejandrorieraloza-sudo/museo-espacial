@@ -36,6 +36,17 @@ export function giroCabeza(rollGrados: number, neutralGrados: number, dtS: numbe
   return sentido * velocidadGiroGradosS(inclinacion, sensibilidad) * dtS;
 }
 
+/**
+ * Cabeceo de la vista en grados para este fotograma (+ = mirar arriba). Misma regla que giroCabeza, en vertical:
+ * velocidad proporcional a la inclinación, con la misma zona muerta y sensibilidad.
+ * Sentido: si al subir la cabeza la vista baja, invertir `sentido` aquí. Pendiente de validar con cámara real.
+ */
+export function cabeceoCabeza(pitchGrados: number, neutralGrados: number, dtS: number, sensibilidad: number): number {
+  const inclinacion = pitchGrados - neutralGrados;
+  const sentido = inclinacion > 0 ? 1 : -1;
+  return sentido * velocidadGiroGradosS(inclinacion, sensibilidad) * dtS;
+}
+
 /** Mano que señala: la preferida (opciones) si está visible; si no, la otra. */
 export function manoSenaladora(frame: TrackingFrame, preferida: ManoSenaladora): TrackedHand | undefined {
   const otra: ManoSenaladora = preferida === 'Right' ? 'Left' : 'Right';

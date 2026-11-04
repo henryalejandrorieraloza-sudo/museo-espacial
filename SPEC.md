@@ -28,7 +28,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 - Se usa la webcam del computador. Sin hardware adicional.
 - La precisión es limitada, así que zonas neutrales, umbrales y sensibilidades son configurables.
 - **Detección:**
-  - **Cara:** roll de la cabeza (inclinación lateral). El yaw (girar la cara) no cuenta.
+  - **Cara:** roll de la cabeza (inclinación lateral) y cabeceo (subir o bajar la cabeza, desde la matriz de pose de la cara). El yaw (girar la cara) no cuenta.
   - **Rodillas:** altura relativa respecto a la cadera, para detectar caminar (sección 5.1).
   - **Hombros:** solo referencia de postura. No se usan para caminar.
   - **Manos:** landmarks para volante, cursor, pellizco, aplauso y señalar.
@@ -50,6 +50,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 - Instrucción en pantalla: “Mira al frente con la cabeza quieta y las manos relajadas.”
 - **Captura:**
   - Roll neutral de la cabeza (0°, mirando al frente).
+  - Cabeceo neutral de la cabeza (mirando al frente).
   - Altura neutral de hombros (solo referencia de postura; no se usa para caminar).
   - Posición neutral de las manos.
 - Se guarda en el perfil del jugador.
@@ -61,6 +62,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 | --- | --- |
 | Caminar en el museo | Subir las rodillas (caminar en el sitio) |
 | Girar la vista en el museo | Inclinar la cabeza hacia un lado |
+| Mirar arriba o abajo en el museo | Subir o bajar la cabeza (límite ±35°) |
 | Señalar vitrina | Cursor con el dedo índice (por defecto). El rayo desde el hombro queda como opción |
 | Iniciar inmersión | Aplaudir |
 | Conducir LRV | Volante gestual con ambas manos |
@@ -72,7 +74,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 | Recoger muestra (Apollo 17) | Golpe con una mano + agarre con la otra |
 | Volver al museo | Aplaudir |
 
-**Regla (giro proporcional):** la cabeza siempre mira al frente. El giro se detecta como inclinación lateral (roll). La velocidad de giro es proporcional a la inclinación:
+**Regla (giro proporcional):** la cabeza siempre mira al frente. El giro se detecta como inclinación lateral (roll), y el mirar arriba o abajo como cabeceo (pitch), con la misma regla y la misma zona muerta y sensibilidad. La velocidad de giro es proporcional a la inclinación:
 
 - Velocidad (°/s) = (|inclinación| − zona muerta) × sensibilidad.
 - Zona muerta por defecto: **3°**. Dentro de ±3° no gira nada.

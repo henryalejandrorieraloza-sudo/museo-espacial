@@ -36,6 +36,15 @@ export function headRollDeg(face: NormalizedLandmark[], w: number, h: number): n
   return Math.atan2(b.y - a.y, b.x - a.x) * (180 / Math.PI);
 }
 
+/**
+ * Cabeceo de la cabeza en grados (pitch): giro alrededor del eje horizontal, leído de la matriz de pose
+ * de la cara (4×4 por filas). 0° = mirando al frente. Con ZYX (R = Rz·Ry·Rx), el giro en X es atan2(R21, R22),
+ * que no depende del roll. El signo (subir = positivo) se valida con cámara real: ver SENTIDO en game/gestos.ts.
+ */
+export function headPitchDeg(matriz: readonly number[]): number {
+  return Math.atan2(matriz[9], matriz[10]) * (180 / Math.PI);
+}
+
 /** Altura media de los hombros, en coordenadas normalizadas (0 = arriba, 1 = abajo). */
 export function shoulderCenterY(pose: NormalizedLandmark[]): number {
   return (pose[POSE_IDX.leftShoulder].y + pose[POSE_IDX.rightShoulder].y) / 2;

@@ -29,6 +29,8 @@ export interface TrackingFrame {
   width: number;
   height: number;
   face: NormalizedLandmark[] | null;
+  /** Matriz 4×4 de la pose de la cara, por filas (16 valores), o null. Da el cabeceo (ver metrics.ts). */
+  facePose: number[] | null;
   pose: NormalizedLandmark[] | null;
   hands: TrackedHand[];
 }
@@ -67,6 +69,8 @@ export class Tracker {
         baseOptions: { modelAssetPath: assetUrl('models/face_landmarker.task'), delegate },
         runningMode: 'VIDEO',
         numFaces: 1,
+        // Matriz de pose de la cara: de ella sale el cabeceo (subir o bajar la cabeza).
+        outputFacialTransformationMatrixes: true,
       }),
     );
 
@@ -109,6 +113,7 @@ export class Tracker {
       width: video.videoWidth,
       height: video.videoHeight,
       face: face.faceLandmarks[0] ?? null,
+      facePose: face.facialTransformationMatrixes?.[0]?.data ?? null,
       pose: pose.landmarks[0] ?? null,
       hands: hands.landmarks.map((landmarks, i) => {
         const name = hands.handedness[i]?.[0]?.categoryName;

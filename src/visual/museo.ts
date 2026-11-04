@@ -17,6 +17,8 @@ const LADO_SALA = 16;
 const ALTURA_PAREDES = 4;
 const GROSOR_PARED = 0.3;
 const LIMITE_X_Z = LADO_SALA / 2 - 0.6;
+/** Cabeceo máximo de la vista hacia arriba o abajo (rad, 35°). */
+const LIMITE_CABECEO = THREE.MathUtils.degToRad(35);
 
 /** Centro de cada vitrina de artefacto (base sobre el suelo). Separadas 8 m (SPEC: mínimo 4 m). */
 const POSICION_VITRINA: Record<string, { x: number; z: number }> = {
@@ -507,14 +509,16 @@ let halo: THREE.Object3D | null = null;
 /** Vitrina a la que está anclado el halo; null si el halo está oculto. */
 let haloEn: string | null = null;
 let mentor: THREE.Object3D | null = null;
-/** Yaw de la cámara (rad). La cabeza siempre mira al frente: no hay pitch. */
+/** Yaw de la cámara (rad): giro lateral con la inclinación de la cabeza. */
 let yaw = 0;
+/** Cabeceo de la cámara (rad): mirar arriba (+) o abajo (−) con el cabeceo de la cabeza. Limitado a ±LIMITE_CABECEO. */
+let cabeceo = 0;
 let posicion = new THREE.Vector3(INICIO.x, ALTURA_OJOS, INICIO.z);
 /** Escena three.js compartida por el museo y las escenas de misión (se muestra una a la vez). */
 let escenaPrincipal: THREE.Scene | null = null;
 let haloRoca: THREE.Object3D | null = null;
 /** Posición y giro del jugador en el museo, guardados mientras está en una escena. */
-let guardadaMuseo: { posicion: THREE.Vector3; yaw: number } | null = null;
+let guardadaMuseo: { posicion: THREE.Vector3; yaw: number; cabeceo: number } | null = null;
 /** Capa negra de fundido (DOM encima del canvas). */
 let fundidoEl: HTMLDivElement | null = null;
 
@@ -527,7 +531,7 @@ function vitrinaAim(id: string): THREE.Vector3 {
 function actualizarCamara(): void {
   if (!camara) return;
   camara.position.copy(posicion);
-  camara.rotation.set(0, yaw, 0, 'YXZ');
+  camara.rotation.set(cabeceo, yaw, 0, 'YXZ');
 }
 
 /** Vector hacia donde mira el jugador, en el plano horizontal. */
@@ -642,13 +646,14 @@ function mostrarMuseo(visible: boolean): void {
  */
 function entrarEscena(escena: Escena): void {
   if (!escenaPrincipal) return;
-  guardadaMuseo = { posicion: posicion.clone(), yaw };
+  guardadaMuseo = { posicion: posicion.clone(), yaw, cabeceo };
   mostrarMuseo(false);
   const escenaObj = nodos.get(NODO_ESCENA[escena]);
   if (escenaObj) escenaObj.visible = true;
   escenaPrincipal.background = new THREE.Color(FONDO_ESCENA[escena]);
   posicion = new THREE.Vector3(LLEGADA_ESCENA.x, ALTURA_OJOS, LLEGADA_ESCENA.z);
   yaw = 0;
+  cabeceo = 0;
   actualizarCamara();
 }
 
@@ -664,6 +669,7 @@ function volverAlMuseo(): void {
   if (guardadaMuseo) {
     posicion = guardadaMuseo.posicion;
     yaw = guardadaMuseo.yaw;
+    cabeceo = guardadaMuseo.cabeceo;
     guardadaMuseo = null;
   }
   actualizarCamara();
@@ -695,10 +701,12 @@ function resaltarVitrina(id: string, activa: boolean): void {
  * Mueve la cámara.
  * - dx: giro en grados alrededor de la vertical. Positivo = a la derecha del jugador.
  * - dy: avance en metros hacia donde mira el jugador. Negativo = retroceso.
+ * - dCabeceo: cabeceo en grados. Positivo = mirar arriba. El ángulo se limita a ±LIMITE_CABECEO_GRADOS.
  * La posición se limita a la sala.
  */
-function moverCamara(dx: number, dy: number): void {
+function moverCamara(dx: number, dy: number, dCabeceo = 0): void {
   yaw -= THREE.MathUtils.degToRad(dx);
+  cabeceo = THREE.MathUtils.clamp(cabeceo + THREE.MathUtils.degToRad(dCabeceo), -LIMITE_CABECEO, LIMITE_CABECEO);
   if (dy !== 0) {
     posicion.addScaledVector(adelante(), dy);
     posicion.x = THREE.MathUtils.clamp(posicion.x, -LIMITE_X_Z, LIMITE_X_Z);
@@ -726,7 +734,7 @@ function vitrinaEnDireccion(direccion: { x: number; y: number; z: number }): str
   const rayo = new THREE.Vector3(direccion.x, direccion.y, direccion.z);
   if (rayo.lengthSq() === 0) return null;
   rayo.normalize();
-  // La cámara solo gira en yaw, así que basta con aplicar su orientación.
+  // La cámara gira en yaw y en cabeceo: el rayo se expresa en su orientación completa.
   const rayoMundo = rayo.applyQuaternion(camaraOrientacion());
 
   let mejor: string | null = null;
@@ -765,7 +773,7 @@ function vitrinaEnPantalla(xNorm: number, yNorm: number): string | null {
 const raycaster = new THREE.Raycaster();
 
 function camaraOrientacion(): THREE.Quaternion {
-  return new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0, 'YXZ'));
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(cabeceo, yaw, 0, 'YXZ'));
 }
 
 /**

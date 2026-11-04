@@ -1,14 +1,17 @@
-// Calibración de la cabeza (SPEC 3): guarda el roll neutral (mirando al frente).
+// Calibración de la cabeza (SPEC 3): guarda el roll y el cabeceo neutrales (mirando al frente).
 // Se hace una sola vez y se guarda en localStorage. Sin persistencia, se recalibra al recargar.
 
-const CLAVE = 'museo-espacial:calibracion:v1';
+// v2: se añadió el cabeceo neutral. Las calibraciones v1 no sirven y se rehacen una vez.
+const CLAVE = 'museo-espacial:calibracion:v2';
 /** Segundos que la cabeza debe estar quieta para calibrar. */
 export const CALIBRACION_SEGUNDOS = 2;
-/** Si el roll se aparta más de esto (°) de la media, la cabeza no está quieta y se empieza de nuevo. */
+/** Si el roll o el cabeceo se apartan más de esto (°) de la media, la cabeza no está quieta y se empieza de nuevo. */
 const TOLERANCIA_GRADOS = 6;
 
 export interface Calibracion {
   rollNeutralGrados: number;
+  /** Cabeceo neutral (°). Sin matriz de pose al calibrar vale 0 y el cabeceo queda inactivo. */
+  pitchNeutralGrados: number;
 }
 
 export function cargarCalibracion(): Calibracion | null {
@@ -16,8 +19,9 @@ export function cargarCalibracion(): Calibracion | null {
     const raw = localStorage.getItem(CLAVE);
     if (!raw) return null;
     const datos = JSON.parse(raw) as Partial<Calibracion>;
-    return typeof datos.rollNeutralGrados === 'number' && Number.isFinite(datos.rollNeutralGrados)
-      ? { rollNeutralGrados: datos.rollNeutralGrados }
+    const valido = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    return valido(datos.rollNeutralGrados) && valido(datos.pitchNeutralGrados)
+      ? { rollNeutralGrados: datos.rollNeutralGrados, pitchNeutralGrados: datos.pitchNeutralGrados }
       : null;
   } catch {
     return null;
@@ -33,35 +37,49 @@ export function guardarCalibracion(calibracion: Calibracion): void {
 }
 
 /**
- * Reúne el roll durante CALIBRACION_SEGUNDOS con el encuadre correcto y la cabeza quieta.
+ * Reúne el roll y el cabeceo durante CALIBRACION_SEGUNDOS con el encuadre correcto y la cabeza quieta.
  * Si se pierde el encuadre o la cara, o la cabeza se mueve, empieza de nuevo.
  */
 export class Calibrador {
-  private muestras: number[] = [];
+  private muestras: { roll: number; pitch: number }[] = [];
   private inicioS: number | null = null;
   /** Progreso 0–1. */
   progreso = 0;
 
-  /** `roll` es null si no hay cara; `apto` indica encuadre correcto. Devuelve la calibración al terminar. */
-  alimentar(ahoraS: number, roll: number | null, apto: boolean): Calibracion | null {
+  /**
+   * `roll` es null si no hay cara; `pitch` es null si no hay matriz de pose (entonces cuenta como 0);
+   * `apto` indica encuadre correcto. Devuelve la calibración al terminar.
+   */
+  alimentar(ahoraS: number, roll: number | null, pitch: number | null, apto: boolean): Calibracion | null {
     if (!apto || roll === null) {
       this.reiniciar();
       return null;
     }
-    if (this.muestras.length > 0 && Math.abs(roll - this.media()) > TOLERANCIA_GRADOS) {
-      this.reiniciar();
+    const p = pitch ?? 0;
+    if (this.muestras.length > 0) {
+      const media = this.media();
+      if (Math.abs(roll - media.roll) > TOLERANCIA_GRADOS || Math.abs(p - media.pitch) > TOLERANCIA_GRADOS) {
+        this.reiniciar();
+      }
     }
     if (this.inicioS === null) this.inicioS = ahoraS;
-    this.muestras.push(roll);
+    this.muestras.push({ roll, pitch: p });
 
     const transcurrido = ahoraS - this.inicioS;
     this.progreso = Math.min(1, transcurrido / CALIBRACION_SEGUNDOS);
-    if (transcurrido >= CALIBRACION_SEGUNDOS) return { rollNeutralGrados: this.media() };
+    if (transcurrido >= CALIBRACION_SEGUNDOS) {
+      const media = this.media();
+      return { rollNeutralGrados: media.roll, pitchNeutralGrados: media.pitch };
+    }
     return null;
   }
 
-  private media(): number {
-    return this.muestras.reduce((suma, v) => suma + v, 0) / this.muestras.length;
+  private media(): { roll: number; pitch: number } {
+    const n = this.muestras.length;
+    return {
+      roll: this.muestras.reduce((suma, m) => suma + m.roll, 0) / n,
+      pitch: this.muestras.reduce((suma, m) => suma + m.pitch, 0) / n,
+    };
   }
 
   private reiniciar(): void {
