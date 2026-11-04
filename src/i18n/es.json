@@ -1,0 +1,16 @@
+{
+  "vitrina_lrv": "Este es el LRV, el vehículo lunar del Apolo 17. Los astronautas lo usaron en 1972 y se quedó en la Luna. Pronto podrás conocer su misión.",
+  "vitrina_perseverance": "Este es Perseverance, un rover de Marte. Llegó al cráter Jezero en febrero de 2021 y sigue explorando el planeta. Pronto podrás conocer su misión.",
+  "mision_luna": "Misión: Luna (próximamente)",
+  "mision_marte": "Misión: Marte (próximamente)",
+  "volver_museo": "Volver al museo",
+  "ayuda": "Camina subiendo las rodillas · inclina la cabeza para girar · señala una vitrina 1.5 s · aplaude para entrar",
+  "arranque": "Cargando seguimiento…",
+  "camara_error": "No se pudo usar la webcam: {error}",
+  "encuadre_retroceder": "Retrocede",
+  "encuadre_acercarse": "Acércate",
+  "encuadre_ok": "Bien. Mantén la posición.",
+  "calibracion_instruccion": "Mira al frente con la cabeza quieta y las manos relajadas.",
+  "calibracion_progreso": "Calibrando… {porcentaje} %",
+  "sin_seguimiento": "Sin seguimiento: el movimiento se congela."
+}

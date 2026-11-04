@@ -8,10 +8,17 @@
   </head>
   <body>
     <main id="scene" class="scene"></main>
-    <header class="hud">
-      <strong>Museo Espacial</strong> · escena base (paso 1) ·
-      <a href="debug/">página de depuración</a>
-    </header>
+
+    <video id="camara" class="camara" autoplay muted playsinline></video>
+    <div id="aviso" class="aviso" role="status" hidden></div>
+    <div id="subtitulos" class="subtitulos" hidden></div>
+    <p id="ayuda" class="ayuda"></p>
+
+    <section id="mision" class="mision" hidden>
+      <h1 id="misionTitulo"></h1>
+      <button id="volver" type="button"></button>
+    </section>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

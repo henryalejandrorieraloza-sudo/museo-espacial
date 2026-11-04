@@ -25,7 +25,7 @@ Páginas:
 
 | Ruta       | Contenido                                                                 |
 | ---------- | ------------------------------------------------------------------------- |
-| `/`        | Escena base de Three.js (suelo gris y una luz).                           |
+| `/`        | Museo: calibración, caminar, girar, señalar vitrinas y aplaudir para entrar a la misión (placeholders).                           |
 | `/debug/`  | Página de depuración: webcam, puntos de cara/hombros/manos y valores en vivo. |
 
 Para ver la depuración: `npm run dev` y abre **http://localhost:5173/debug/**.
@@ -53,9 +53,11 @@ debug/index.html      Página de depuración (/debug/)
 public/models/        Modelos .task de MediaPipe (cara, pose ligera, manos)
 scripts/              Copia de los WASM de MediaPipe a public/wasm (automático en dev/build)
 src/tracking/         Detección con MediaPipe y cálculo de métricas
-src/scenes/           Escenas de Three.js
+src/visual/          Escena Three.js del museo, modelos placeholder (config.ts, MODELS.md)
+src/game/            Lógica del museo, calibración, gestos y bucle del juego
+src/i18n/            Textos (es.json)
 src/ui/               Overlay de depuración, utilidades de DOM
-src/audio/            (vacío por ahora)
+src/audio/            Voz del mentor (Web Speech API)
 src/state/            (vacío por ahora)
 ```
 

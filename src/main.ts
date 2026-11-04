@@ -1,6 +1,6 @@
 import './styles.css';
-import { createBaseScene } from './scenes/baseScene';
+import './juego.css';
+import { iniciarJuego } from './game/juego';
 import { requireEl } from './ui/dom';
 
-const scene = createBaseScene(requireEl('scene'));
-scene.start();
+void iniciarJuego(requireEl('scene'));
