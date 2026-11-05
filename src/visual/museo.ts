@@ -1,37 +1,36 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { assetUrl } from '../tracking/assets';
+import { EXPOSICION, crearAmbienteMuseo, crearPostproceso, type AmbienteMuseo } from './ambiente';
+import { ALTURA_PEDESTAL, LADO_VITRINA, RADIO_CAMINABLE, RADIO_PROYECTOR, crearRotonda, crearVitrinaArtefacto } from './arquitectura';
 import { ESCENAS, MODELOS, type ConfigModelo } from './config';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
+import { ARQ } from './paleta';
+import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
 
 // Toda la parte visual del museo (Three.js). La lógica de juego solo llama a `visual.museo`.
 // Convención de ejes: X a la derecha, Y arriba (metros), −Z hacia donde mira la cámara al inicio.
-// Estilo: low poly, sombreado plano, ambiente claro y luz plana (spec-visual-museo.md; manda sobre las capturas).
+// Estilo del museo: ver spec-visual-museo.md. La sala y sus objetos están en arquitectura.ts y props.ts, y las luces,
+// la niebla, el fondo y el bloom en ambiente.ts. Las escenas de misión de este archivo conservan su propio aspecto.
 
 /** Altura de los ojos del jugador (m). */
 const ALTURA_OJOS = 1.6;
-/** Posición inicial del jugador: frente a las vitrinas, mirando a −Z. */
-const INICIO = { x: 0, z: 5 };
-/** Sala cuadrada de 16 m; el jugador no puede salir de ella. */
-const LADO_SALA = 16;
-const ALTURA_PAREDES = 4;
-const GROSOR_PARED = 0.3;
-const LIMITE_X_Z = LADO_SALA / 2 - 0.6;
+/** Posición inicial del jugador: frente a las vitrinas, mirando a −Z hacia el centro de la rotonda. */
+const INICIO = { x: 0, z: 11 };
+/** Límite de movimiento en las misiones (m, por eje). En el museo manda RADIO_CAMINABLE. */
+const LIMITE_MISION_X_Z = 7.4;
 /** Cabeceo máximo de la vista hacia arriba o abajo (rad, 35°). */
 const LIMITE_CABECEO = THREE.MathUtils.degToRad(35);
 
-/** Centro de cada vitrina de artefacto (base sobre el suelo). Separadas 8 m (SPEC: mínimo 4 m). */
+/** Centro de cada vitrina de artefacto (base sobre el suelo). A unos 9 m del inicio y a 9 m entre sí. */
 const POSICION_VITRINA: Record<string, { x: number; z: number }> = {
-  vitrina_lrv: { x: -4, z: -4 },
-  vitrina_perseverance: { x: 4, z: -4 },
+  vitrina_lrv: { x: -4.5, z: 3 },
+  vitrina_perseverance: { x: 4.5, z: 3 },
 };
-/** Lado del cubo de cristal de una vitrina de artefacto (m) y altura del pedestal bajo él (m). */
-const LADO_VITRINA = 2.0;
-const ALTURA_PEDESTAL = 0.5;
 /** Punto al que apunta el rayo: el centro del cubo. */
 const ALTURA_PUNTO_VITRINA = ALTURA_PEDESTAL + LADO_VITRINA / 2;
 /** Altura del halo: encima del borde superior del cubo. */
-const ALTURA_HALO = ALTURA_PEDESTAL + LADO_VITRINA + 0.3;
+const ALTURA_HALO = ALTURA_PEDESTAL + LADO_VITRINA + 0.5;
 /** Altura media del robot-mentor (m) y amplitud del flotado (m). */
 const ALTURA_MENTOR = 1.3;
 const AMPLITUD_FLOTADO = 0.06;
@@ -39,19 +38,8 @@ const VELOCIDAD_FLOTADO = 1.6;
 /** Ángulo máximo entre el rayo y la vitrina para considerar que la apunta. */
 const TOLERANCIA_RAD = THREE.MathUtils.degToRad(12);
 
-/** Paleta: ambiente claro (paredes blancas y grises), acentos de color solo en vitrinas, robot y decoración. */
+/** Colores del mentor, el halo y las escenas de misión. La paleta del museo está en paleta.ts. */
 const COLOR = {
-  fondo: 0xdfe4ea,
-  suelo: 0xd3d9e0,
-  pared: 0xf4f6f8,
-  /** Techo blanco y tiras de luz emisivas (luces planas, sin sombras). Paneles de pared un poco más oscuros. */
-  techo: 0xf2f5f8,
-  luzTecho: 0xf7fbff,
-  panelPared: 0xdde3ea,
-  pedestal: 0xeceff3,
-  cristal: 0xbfe8f5,
-  marcoVitrina: 0x7d8796,
-  torre: 0x8c96a3,
   /** Robot-mentor: todo azul, visor oscuro, ojos y sonrisa claros (spec §5). */
   mentor: 0x2f6fd6,
   mentorVisor: 0x14213d,
@@ -59,12 +47,9 @@ const COLOR = {
   halo: 0xffd60a,
   /** Halo azul celeste de las misiones (SPEC 10): color constante, sin iluminación. */
   haloCeleste: 0x87ceeb,
-  /** Acentos de cada vitrina: luz interior y anillo de luz del pedestal. */
+  /** Acentos del LRV y Perseverance en las escenas de misión. */
   acentoLRV: 0x2ee6d6,
   acentoPerseverance: 0xff8a3d,
-  /** Planetas y muestras de la exhibición (colores sólidos). */
-  planetas: [0xf4a261, 0x2a9d8f, 0xe76f51, 0xb388eb] as const,
-  traje: 0xe4e8ee,
   sueloLuna: 0xcfd2d6,
   cieloLuna: 0x000000,
   lrv: 0xc9ccd1,
@@ -88,9 +73,9 @@ type Constructor = () => THREE.Object3D;
 
 /** Placeholders generados en código. Las claves son las rutas "placeholder:…" de config.ts. */
 const PLACEHOLDERS: Record<string, Constructor> = {
-  'placeholder:sala': crearSala,
-  'placeholder:vitrina_lrv': () => crearVitrina(() => crearLRV(COLOR.acentoLRV), COLOR.acentoLRV),
-  'placeholder:vitrina_perseverance': () => crearVitrina(() => crearPerseverance(COLOR.acentoPerseverance), COLOR.acentoPerseverance),
+  'placeholder:sala': crearRotonda,
+  'placeholder:vitrina_lrv': () => crearVitrinaArtefacto(crearLRVExhibicion, ARQ.cian, -2.5),
+  'placeholder:vitrina_perseverance': () => crearVitrinaArtefacto(crearPerseveranceExhibicion, ARQ.ambar, 2.5),
   'placeholder:mentor': crearMentor,
   'placeholder:anillo': crearAnillo,
   'placeholder:escena_luna': crearEscenaLuna,
@@ -105,18 +90,6 @@ function material(color: number, extra: THREE.MeshStandardMaterialParameters = {
 /** Material sin iluminación: para luces emisivas y anillos de color constante. */
 function materialBasico(color: number): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color });
-}
-
-/** Cristal transparente y tenue, con caras planas. No proyecta ni recibe sombras (no hay sombras). */
-function materialCristal(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
-    color: COLOR.cristal,
-    roughness: 0.1,
-    flatShading: true,
-    transparent: true,
-    opacity: 0.22,
-    depthWrite: false,
-  });
 }
 
 function caja(ancho: number, alto: number, fondo: number, color: number): THREE.Mesh {
@@ -147,203 +120,6 @@ function mallaBasica(
   objeto.position.set(...posicion);
   objeto.rotation.set(...giro);
   return objeto;
-}
-
-/**
- * Sala: suelo gris claro, cuatro paredes blancas y la decoración de SPEC 6 (planetas, cápsulas,
- * torre de antenas y muestras de roca). Sin plataformas flotantes.
- */
-function crearSala(): THREE.Object3D {
-  const grupo = new THREE.Group();
-  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(LADO_SALA, LADO_SALA), material(COLOR.suelo));
-  suelo.rotation.x = -Math.PI / 2;
-  grupo.add(suelo);
-
-  const mitad = LADO_SALA / 2;
-  const largo = LADO_SALA + GROSOR_PARED;
-  // [x, z, ancho, fondo] de cada pared (norte, sur, oeste, este).
-  const paredes: [number, number, number, number][] = [
-    [0, -mitad, largo, GROSOR_PARED],
-    [0, mitad, largo, GROSOR_PARED],
-    [-mitad, 0, GROSOR_PARED, largo],
-    [mitad, 0, GROSOR_PARED, largo],
-  ];
-  for (const [x, z, ancho, fondo] of paredes) {
-    const pared = new THREE.Mesh(new THREE.BoxGeometry(ancho, ALTURA_PAREDES, fondo), material(COLOR.pared));
-    pared.position.set(x, ALTURA_PAREDES / 2, z);
-    grupo.add(pared);
-  }
-
-  // Techo liso con tres tiras de luz emisiva que recorren la sala de norte a sur.
-  // Material plano, sin depender de la luz: el techo mira hacia abajo y la luz del cielo lo oscurecería.
-  const techo = new THREE.Mesh(new THREE.PlaneGeometry(LADO_SALA, LADO_SALA), materialBasico(COLOR.techo));
-  techo.rotation.x = Math.PI / 2;
-  techo.position.y = ALTURA_PAREDES;
-  grupo.add(techo);
-  for (const x of [-4, 0, 4]) {
-    grupo.add(mallaBasica(new THREE.BoxGeometry(0.3, 0.03, LADO_SALA - 2), COLOR.luzTecho, [x, ALTURA_PAREDES - 0.02, 0]));
-  }
-
-  // Paneles de pared: placas levemente más oscuras, pegadas a las paredes norte, oeste y sur.
-  const dentro = mitad - GROSOR_PARED / 2 - 0.02;
-  const panelNorte = (x: number): void => {
-    grupo.add(malla(new THREE.BoxGeometry(2.4, 1.6, 0.03), COLOR.panelPared, [x, 2.2, -dentro]));
-  };
-  [-5, 0, 5].forEach(panelNorte);
-  for (const z of [-5, 0, 5]) {
-    grupo.add(malla(new THREE.BoxGeometry(0.03, 1.6, 2.4), COLOR.panelPared, [-dentro, 2.2, z]));
-  }
-  for (const x of [-5, 5]) {
-    grupo.add(malla(new THREE.BoxGeometry(2.4, 1.6, 0.03), COLOR.panelPared, [x, 2.2, dentro]));
-  }
-
-  // Planetas en exhibición sobre peanas, contra la pared oeste. El primero tiene anillo.
-  const planetas: [number, number, number, boolean][] = [
-    [-6.2, -2, 0.55, true],
-    [-6.2, 2, 0.4, false],
-  ];
-  planetas.forEach(([x, z, radio, conAnillo], i) => {
-    const planeta = crearPlaneta(COLOR.planetas[i % COLOR.planetas.length], radio, conAnillo);
-    planeta.position.set(x, 0, z);
-    grupo.add(planeta);
-  });
-
-  // Cápsulas de laboratorio con trajes vacíos, contra la pared este.
-  for (const [z, acento] of [
-    [1.5, COLOR.acentoLRV],
-    [4.5, COLOR.acentoPerseverance],
-  ] as const) {
-    const capsula = crearCapsula(acento);
-    capsula.position.set(5.6, 0, z);
-    grupo.add(capsula);
-  }
-
-  // Torre de comunicaciones en una esquina.
-  const torre = crearTorre();
-  torre.position.set(5.6, 0, -5.6);
-  grupo.add(torre);
-
-  // Muestras de roca en vitrinas pequeñas, delante de la sala. No son artefactos seleccionables.
-  for (const [x, color] of [
-    [-2.2, COLOR.planetas[2]],
-    [2.2, COLOR.planetas[3]],
-  ] as const) {
-    const muestra = crearVitrina(crearRocaMuestra, color, 0.8, 1);
-    muestra.position.set(x, 0, 1.8);
-    grupo.add(muestra);
-  }
-  return grupo;
-}
-
-/**
- * Vitrina con cubo de cristal transparente, marco delgado, pedestal y anillo de luz en el suelo.
- * Dentro va `contenido` (el artefacto completo), a escala `escalaContenido`. La luz interior tiene el
- * color `acento`. Origen en el suelo, centrado.
- */
-function crearVitrina(
-  contenido: () => THREE.Object3D,
-  acento: number,
-  lado: number = LADO_VITRINA,
-  escalaContenido = 0.7,
-): THREE.Object3D {
-  const grupo = new THREE.Group();
-  const radio = lado * 0.65;
-  grupo.add(malla(new THREE.CylinderGeometry(radio, radio * 1.04, ALTURA_PEDESTAL, 8), COLOR.pedestal, [0, ALTURA_PEDESTAL / 2, 0]));
-
-  // Anillo de luz que marca el artefacto, sobre el borde del pedestal.
-  const anillo = mallaBasica(new THREE.TorusGeometry(radio * 0.96, 0.04, 6, 24), acento, [0, ALTURA_PEDESTAL + 0.01, 0], [Math.PI / 2, 0, 0]);
-  grupo.add(anillo);
-
-  const centroY = ALTURA_PEDESTAL + lado / 2;
-  const cristal = new THREE.Mesh(new THREE.BoxGeometry(lado, lado, lado), materialCristal());
-  cristal.position.set(0, centroY, 0);
-  grupo.add(cristal);
-  // Marco delgado del cubo. Las líneas no se pueden señalar: el rayo solo mira el cristal.
-  const marco = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(lado, lado, lado)),
-    new THREE.LineBasicMaterial({ color: COLOR.marcoVitrina }),
-  );
-  marco.position.set(0, centroY, 0);
-  marco.raycast = () => {};
-  grupo.add(marco);
-
-  // Luz interior con color propio: una luz puntual y un núcleo emisivo.
-  const luz = new THREE.PointLight(acento, 1.2, lado * 2.5);
-  luz.position.set(0, ALTURA_PEDESTAL + lado * 0.8, 0);
-  grupo.add(luz);
-  grupo.add(mallaBasica(new THREE.IcosahedronGeometry(lado * 0.06, 0), acento, [0, centroY + lado * 0.3, 0]));
-
-  const figura = contenido();
-  figura.scale.setScalar(escalaContenido);
-  figura.position.set(0, ALTURA_PEDESTAL, 0);
-  figura.rotation.y = Math.PI / 4;
-  grupo.add(figura);
-  return grupo;
-}
-
-/** Muestra de roca facetada para las vitrinas pequeñas. */
-function crearRocaMuestra(): THREE.Object3D {
-  const roca = malla(new THREE.DodecahedronGeometry(0.22, 0), COLOR.roca, [0, 0.22, 0], [0.4, 0.6, 0.2]);
-  roca.scale.y = 0.8;
-  return roca;
-}
-
-/** Planeta facetado de color sólido sobre una peana de 1 m. Origen en el suelo. */
-function crearPlaneta(color: number, radio: number, conAnillo = false): THREE.Object3D {
-  const grupo = new THREE.Group();
-  grupo.add(malla(new THREE.CylinderGeometry(0.45, 0.5, 1.0, 8), COLOR.pedestal, [0, 0.5, 0]));
-  const centroY = 1.0 + radio;
-  grupo.add(malla(new THREE.IcosahedronGeometry(radio, 1), color, [0, centroY, 0]));
-  if (conAnillo) {
-    grupo.add(malla(new THREE.TorusGeometry(radio * 1.6, radio * 0.12, 4, 24), COLOR.planetas[3], [0, centroY, 0], [Math.PI / 2.6, 0, 0]));
-  }
-  return grupo;
-}
-
-/**
- * Cápsula de laboratorio: base, cilindro de cristal y un traje de astronauta vacío dentro
- * (sin persona: torso, casco con visor, brazos y piernas). Origen en el suelo, centrado.
- */
-function crearCapsula(acento: number): THREE.Object3D {
-  const grupo = new THREE.Group();
-  grupo.add(malla(new THREE.CylinderGeometry(0.9, 0.9, 0.15, 12), COLOR.pedestal, [0, 0.075, 0]));
-  const cristal = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 2.6, 12, 1, true), materialCristal());
-  cristal.position.y = 1.45;
-  grupo.add(cristal);
-
-  // Traje vacío: sin cabeza humana, el casco es una cúpula y el visor es oscuro.
-  grupo.add(malla(new THREE.BoxGeometry(0.5, 0.65, 0.3), COLOR.traje, [0, 1.15, 0]));
-  grupo.add(malla(new THREE.BoxGeometry(0.5, 0.05, 0.31), acento, [0, 1.35, 0]));
-  grupo.add(malla(new THREE.IcosahedronGeometry(0.2, 1), COLOR.traje, [0, 1.65, 0]));
-  grupo.add(malla(new THREE.BoxGeometry(0.3, 0.1, 0.05), COLOR.mentorVisor, [0, 1.66, 0.18]));
-  for (const x of [-0.36, 0.36]) {
-    grupo.add(malla(new THREE.CylinderGeometry(0.09, 0.09, 0.6, 6), COLOR.traje, [x, 1.1, 0], [0, 0, x > 0 ? -0.15 : 0.15]));
-  }
-  for (const x of [-0.14, 0.14]) {
-    grupo.add(malla(new THREE.CylinderGeometry(0.11, 0.11, 0.8, 6), COLOR.traje, [x, 0.55, 0]));
-  }
-  return grupo;
-}
-
-/** Torre de comunicaciones: celosía de cuatro patas, travesaños, mástil y plato. Origen en el suelo. */
-function crearTorre(): THREE.Object3D {
-  const grupo = new THREE.Group();
-  const alto = 4;
-  for (const [x, z] of [
-    [-0.4, -0.4],
-    [0.4, -0.4],
-    [-0.4, 0.4],
-    [0.4, 0.4],
-  ]) {
-    grupo.add(malla(new THREE.CylinderGeometry(0.04, 0.06, alto, 6), COLOR.torre, [x, alto / 2, z]));
-  }
-  for (let y = 0.6; y < alto; y += 0.8) {
-    grupo.add(malla(new THREE.BoxGeometry(0.9, 0.05, 0.9), COLOR.torre, [0, y, 0]));
-  }
-  grupo.add(malla(new THREE.CylinderGeometry(0.02, 0.02, 1.0, 5), COLOR.torre, [0, alto + 0.5, 0]));
-  // Plato de comunicaciones: cono invertido (cuenco hacia arriba).
-  grupo.add(malla(new THREE.ConeGeometry(0.5, 0.25, 8), COLOR.acentoPerseverance, [0, 2.9, 0], [Math.PI, 0, 0]));
-  return grupo;
 }
 
 /**
@@ -521,6 +297,12 @@ let haloRoca: THREE.Object3D | null = null;
 let guardadaMuseo: { posicion: THREE.Vector3; yaw: number; cabeceo: number } | null = null;
 /** Capa negra de fundido (DOM encima del canvas). */
 let fundidoEl: HTMLDivElement | null = null;
+/** Renderer y luces de las misiones: se alternan con el ambiente del museo al entrar y salir. */
+let rendererPrincipal: THREE.WebGLRenderer | null = null;
+let lucesMision: THREE.Group | null = null;
+let ambienteMuseo: AmbienteMuseo | null = null;
+/** true mientras el jugador está en el museo; false en una escena de misión. */
+let enMuseo = true;
 
 function vitrinaAim(id: string): THREE.Vector3 {
   const p = POSICION_VITRINA[id];
@@ -549,7 +331,6 @@ function adelante(): THREE.Vector3 {
  */
 async function iniciar(container: HTMLElement): Promise<void> {
   const escenaNueva = new THREE.Scene();
-  escenaNueva.background = new THREE.Color(COLOR.fondo);
   escenaPrincipal = escenaNueva;
 
   const camaraNueva = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
@@ -568,11 +349,27 @@ async function iniciar(container: HTMLElement): Promise<void> {
   fundidoEl.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:100;';
   document.body.appendChild(fundidoEl);
 
-  // Luz hemisférica (cielo/suelo) y una direccional sin sombras: luz plana, sin sombras proyectadas.
-  escenaNueva.add(new THREE.HemisphereLight(0xffffff, 0x8a929c, 1.6));
+  rendererPrincipal = renderer;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = EXPOSICION;
+
+  // Luces de las misiones: las de siempre, con luz plana y sin sombras. Solo se encienden en una escena de misión.
+  const luces = new THREE.Group();
+  luces.add(new THREE.HemisphereLight(0xffffff, 0x8a929c, 1.6));
   const sol = new THREE.DirectionalLight(0xffffff, 1.0);
   sol.position.set(4, 8, 5);
-  escenaNueva.add(sol);
+  luces.add(sol);
+  luces.visible = false;
+  lucesMision = luces;
+  escenaNueva.add(luces);
+
+  // Ambiente del museo: luces, niebla, nebulosa, asteroides y bloom.
+  const ambiente = crearAmbienteMuseo(renderer, camaraNueva);
+  ambienteMuseo = ambiente;
+  escenaNueva.add(ambiente.grupo);
+  escenaNueva.background = ambiente.fondo;
+  escenaNueva.fog = ambiente.niebla;
+  const post = crearPostproceso(renderer, escenaNueva, camaraNueva);
 
   // Museo y escenas de misión se cargan juntos; las escenas empiezan ocultas.
   const todos = [...MODELOS, ...ESCENAS];
@@ -603,6 +400,7 @@ async function iniciar(container: HTMLElement): Promise<void> {
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
     renderer.setSize(width, height, false);
+    post.ajustar(width, height);
     camaraNueva.aspect = width / height;
     camaraNueva.updateProjectionMatrix();
   };
@@ -620,7 +418,13 @@ async function iniciar(container: HTMLElement): Promise<void> {
     // El halo siempre se gira hacia el jugador para que se vea como anillo.
     if (halo?.visible) halo.lookAt(camaraNueva.position);
     if (haloRoca?.visible) haloRoca.lookAt(camaraNueva.position);
-    renderer.render(escenaNueva, camaraNueva);
+    if (enMuseo) {
+      ambiente.actualizar(t);
+      nodos.get('museo')?.userData.actualizar?.(t);
+      post.render();
+    } else {
+      renderer.render(escenaNueva, camaraNueva);
+    }
   });
 }
 
@@ -640,6 +444,18 @@ function mostrarMuseo(visible: boolean): void {
   if (mentor) mentor.visible = false;
 }
 
+/** Alterna entre el ambiente del museo y el aspecto de las misiones: luces, niebla, fondo, tone mapping y bloom. */
+function activarAmbienteMuseo(activo: boolean): void {
+  enMuseo = activo;
+  if (lucesMision) lucesMision.visible = !activo;
+  if (rendererPrincipal) rendererPrincipal.toneMapping = activo ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  if (!ambienteMuseo || !escenaPrincipal) return;
+  ambienteMuseo.grupo.visible = activo;
+  ambienteMuseo.luzManos.visible = activo;
+  escenaPrincipal.fog = activo ? ambienteMuseo.niebla : null;
+  if (activo) escenaPrincipal.background = ambienteMuseo.fondo;
+}
+
 /**
  * Cambia a la escena de misión: oculta el museo, muestra su escena, pone el fondo y lleva al
  * jugador a su punto de llegada. Guarda su posición en el museo para volver a ella.
@@ -648,6 +464,7 @@ function entrarEscena(escena: Escena): void {
   if (!escenaPrincipal) return;
   guardadaMuseo = { posicion: posicion.clone(), yaw, cabeceo };
   mostrarMuseo(false);
+  activarAmbienteMuseo(false);
   const escenaObj = nodos.get(NODO_ESCENA[escena]);
   if (escenaObj) escenaObj.visible = true;
   escenaPrincipal.background = new THREE.Color(FONDO_ESCENA[escena]);
@@ -665,7 +482,7 @@ function volverAlMuseo(): void {
     if (obj) obj.visible = false;
   }
   mostrarMuseo(true);
-  escenaPrincipal.background = new THREE.Color(COLOR.fondo);
+  activarAmbienteMuseo(true);
   if (guardadaMuseo) {
     posicion = guardadaMuseo.posicion;
     yaw = guardadaMuseo.yaw;
@@ -702,15 +519,23 @@ function resaltarVitrina(id: string, activa: boolean): void {
  * - dx: giro en grados alrededor de la vertical. Positivo = a la derecha del jugador.
  * - dy: avance en metros hacia donde mira el jugador. Negativo = retroceso.
  * - dCabeceo: cabeceo en grados. Positivo = mirar arriba. El ángulo se limita a ±LIMITE_CABECEO_GRADOS.
- * La posición se limita a la sala.
+ * La posición se limita a la rotonda en el museo y al área de siempre en las misiones.
  */
 function moverCamara(dx: number, dy: number, dCabeceo = 0): void {
   yaw -= THREE.MathUtils.degToRad(dx);
   cabeceo = THREE.MathUtils.clamp(cabeceo + THREE.MathUtils.degToRad(dCabeceo), -LIMITE_CABECEO, LIMITE_CABECEO);
   if (dy !== 0) {
     posicion.addScaledVector(adelante(), dy);
-    posicion.x = THREE.MathUtils.clamp(posicion.x, -LIMITE_X_Z, LIMITE_X_Z);
-    posicion.z = THREE.MathUtils.clamp(posicion.z, -LIMITE_X_Z, LIMITE_X_Z);
+    if (enMuseo) {
+      // Entre la pared y el proyector central. Al limitar solo el radio, el jugador se desliza por el borde.
+      const radio = Math.hypot(posicion.x, posicion.z) || 1;
+      const limitado = THREE.MathUtils.clamp(radio, RADIO_PROYECTOR, RADIO_CAMINABLE);
+      posicion.x *= limitado / radio;
+      posicion.z *= limitado / radio;
+    } else {
+      posicion.x = THREE.MathUtils.clamp(posicion.x, -LIMITE_MISION_X_Z, LIMITE_MISION_X_Z);
+      posicion.z = THREE.MathUtils.clamp(posicion.z, -LIMITE_MISION_X_Z, LIMITE_MISION_X_Z);
+    }
   }
   actualizarCamara();
 }

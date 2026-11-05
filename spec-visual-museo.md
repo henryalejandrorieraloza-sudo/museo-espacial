@@ -4,30 +4,38 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 
 ## 0. Precedencia
 
-- Las capturas de `referencia/` inspiran formas, objetos y colores de acento. No son una especificación.
-- Ante cualquier conflicto, gana este documento: ambiente claro, luz plana, sin figuras humanas, robot azul flotante con sonrisa fija, sin plataformas flotantes.
+- Las capturas de `referencia/` marcan el estilo: formas, color, luz y densidad de detalle. Son inspiración; no se copian piezas de ellas.
+- Ante cualquier conflicto, gana este documento: sin figuras humanas, robot azul flotante con sonrisa fija, sin plataformas flotantes (la pasarela va sobre columnas), y objetos históricos con su color real.
+- Cambio del 4 de noviembre de 2026: Henry sustituye el ambiente claro con luz plana por el estilo oscuro, vivo y con luces de color de las referencias.
 
 ## 1. Estilo general
-- Low poly con caras facetadas y sombreado plano.
-- Ambiente claro y limpio: paredes gris claro y blanco. Los acentos de color van en vitrinas, pedestales, robot y decoración.
-- Paleta de referencia (morados, rosas, turquesas, naranjas cálidos) solo en detalles y acentos, no en superficies grandes.
-- Iluminación plana: sin sombras proyectadas. Luz ambiental y resaltados de color. Las luces emisivas (anillos, luz interior) sí están permitidas.
-- Mucho detalle en paneles, tubos, botones y pantallas, sin sobrecargar el rendimiento.
+- Low poly con caras facetadas y sombreado plano. Paneles biselados, costuras entre placas, ventilaciones y tuberías. Rugosidad 0.6–0.9 y metalicidad 0.1–0.3 (el cristal va sin iluminar).
+- Arquitectura en púrpuras y violetas, con cobre y rojo ladrillo. Dorado y ámbar en la luz principal. Cian brillante en tiras de luz, hologramas y bordes de vitrina. Nada de grises planos ni materiales por defecto.
+- **Fidelidad histórica:** el cobre y el ladrillo solo van en arquitectura y mobiliario. El LRV, Perseverance, los trajes, los cohetes y los planetas conservan formas y colores cercanos a los reales; la luz puede teñirlos, pero sus materiales no se pintan con la paleta. La paleta y los colores históricos están separados en `src/visual/paleta.ts` (`ARQ` e `HIST`).
+- Iluminación: luz direccional ámbar, relleno hemisférico púrpura y contorno cian. Sin sombras proyectadas. Luces neutras en vitrinas y cápsulas, para que los objetos se vean de su color. Luz neutra de corto alcance en la cámara, para que las manos sigan beige y legibles.
+- Ambiente: niebla púrpura y, por los ventanales, nebulosa púrpura y verde, asteroides, un sol y una gigante gaseosa decorativos.
+- Bloom suave por umbral: solo florecen los materiales emisivos. Nada de esto se aplica en las misiones, que conservan su aspecto propio.
 
 ## 2. Rendimiento
 - Objetivo: 30 FPS fijos en el museo.
 - Si el detalle compite con el seguimiento corporal, reducir detalle antes que bajar FPS.
+- Lo estático se fusiona por material (una llamada de dibujo por tipo) y los asteroides usan `InstancedMesh`. La nebulosa se pinta una vez en un cubemap. Render del museo: resolución limitada a 1.25×, MSAA 2× y bloom a un cuarto de resolución. Estos valores están al inicio de `src/visual/ambiente.ts`.
 
-## 3. Vitrinas de artefactos
-- Forma: cubo de cristal transparente con marco delgado.
-- Pedestal iluminado: anillo de luz en el suelo que marca el artefacto.
-- Luz interior: cada cubo tiene luz desde dentro, con un color propio por artefacto.
-- Vitrina del LRV (Apollo 17) y vitrina de Perseverance van una al lado de la otra, con aspecto vistoso y distinto entre sí.
-- Dentro de cada vitrina: modelo completo del artefacto (ruedas, antenas, paneles).
+## 3. Sala
+- Rotonda de 32 m de diámetro con 24 caras. Pasarela a 5.2 m de altura, sobre columnas y sin acceso para el jugador. Ventanales de 5.7 a 10.5 m.
+- **Planetario visto desde dentro:** el techo es una cúpula facetada con estrellas (decorativas, sin constelaciones reales). De ella cuelga un sistema solar con los ocho planetas en su orden real y color aproximado. Tamaños y órbitas no están a escala.
+- La cúpula es baja a propósito: con cabeceo de ±35° y 60° de campo vertical, la vista llega a 65° sobre el horizonte.
+- El jugador camina hasta 15 m del centro y no puede atravesar el proyector central. Las misiones conservan su límite anterior.
+
+## 4. Vitrinas de artefactos
+- Forma: cubo de cristal de 3.5 m con bordes cian y luz interior neutra, para que el artefacto se vea de su color.
+- Pedestal octogonal con anillo de color propio: cian en el LRV y ámbar en Perseverance.
+- Vitrina del LRV (Apollo 17) y vitrina de Perseverance van una al lado de la otra, a unos 9 m del inicio.
+- Dentro de cada vitrina: modelo del artefacto a tamaño real aproximado. El cursor prueba contra un volumen invisible, no contra cada pieza.
 - Los artefactos son inactivos en su vitrina (el LRV es un artefacto de 1972). Perseverance se presenta como explorador en curso, según SPEC.md sección 0.
 
-## 4. Cápsulas de laboratorio
-- Cápsulas de cristal con trajes de astronauta vacíos dentro (sin persona).
+## 4.1 Cápsulas de laboratorio
+- Cápsulas de cristal con trajes A7LB vacíos dentro (sin persona): blancos, con visor dorado. El del comandante lleva franjas rojas.
 - No hay figuras humanas en ningún lugar del museo.
 - Los trajes de astronauta aparecen solo en vitrinas o cápsulas.
 
@@ -39,9 +47,11 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Tamaño: compacto, similar a la imagen de referencia.
 
 ## 6. Decoración
-- Planetas en exhibición: esferas facetadas de colores sólidos.
-- Rocas en vitrinas pequeñas: muestras de laboratorio facetadas.
-- Antenas y torres de comunicación en una esquina del museo.
+- Saturn V (Apollo 17) y Atlas V 541 (Perseverance) a la misma escala 1:13, sobre peanas con anillo. La torre de cobre de al lado es mobiliario, no una réplica.
+- Globos de la Luna y Marte sobre peanas, con colores aproximados a los reales.
+- Rocas en vitrinas pequeñas: muestras facetadas sin identificar, no piezas de catálogo.
+- Consolas de laboratorio con hologramas y gráficas abstractas, sin datos reales.
+- Una torre de comunicaciones junto a la pared, cajas de equipo y proyector central.
 - No incluir plataformas flotantes.
 
 ## 7. Transición museo a misión
@@ -61,8 +71,6 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 ## 10. Pendientes (no cubiertos en la entrevista)
 - Escenas de Apollo 17 y Perseverance: su detalle visual va en otra entrevista.
 - Halo azul celeste: se mantiene según SPEC.md sección 9.
-- Textura de piso y techo: se define en la implementación, siguiendo las capturas de referencia.
-- Conflicto a confirmar: la paleta de referencia es oscura con neón, mientras que el ambiente elegido es claro. Se aplicó el ambiente claro, con la paleta solo en acentos.
 
 ## 11. Reglas de trabajo para Claude Code
 - Sin dependencias nuevas. Si la librería actual no alcanza para el estilo, avisar antes de cambiar nada.
