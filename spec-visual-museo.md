@@ -12,7 +12,7 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Low poly con caras facetadas y sombreado plano. Paneles biselados, costuras entre placas, ventilaciones y tuberías. Rugosidad 0.6–0.9 y metalicidad 0.1–0.3 (el cristal va sin iluminar).
 - Arquitectura en púrpuras y violetas, con cobre y rojo ladrillo. Dorado y ámbar en la luz principal. Cian brillante en tiras de luz, hologramas y bordes de vitrina. Nada de grises planos ni materiales por defecto.
 - **Fidelidad histórica:** el cobre y el ladrillo solo van en arquitectura y mobiliario. El LRV, Perseverance, los trajes, los cohetes y los planetas conservan formas y colores cercanos a los reales; la luz puede teñirlos, pero sus materiales no se pintan con la paleta. La paleta y los colores históricos están separados en `src/visual/paleta.ts` (`ARQ` e `HIST`).
-- Iluminación: luz direccional ámbar, relleno hemisférico púrpura y contorno cian. Sin sombras proyectadas. Luces neutras en vitrinas y cápsulas, para que los objetos se vean de su color. Luz neutra de corto alcance en la cámara, para que las manos sigan beige y legibles.
+- Iluminación: luz direccional ámbar, relleno hemisférico púrpura y contorno cian. Sin sombras proyectadas. Luces neutras en vitrinas y cápsulas, para que los objetos se vean de su color. Luz neutra de corto alcance en la cámara, para que el guante se vea blanco y legible.
 - Ambiente: niebla púrpura y, por los ventanales, nebulosa púrpura y verde, asteroides, un sol y una gigante gaseosa decorativos.
 - Bloom suave por umbral: solo florecen los materiales emisivos. Nada de esto se aplica en las misiones, que conservan su aspecto propio.
 
@@ -38,6 +38,7 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Cápsulas de cristal con trajes A7LB vacíos dentro (sin persona): blancos, con visor dorado. El del comandante lleva franjas rojas.
 - No hay figuras humanas en ningún lugar del museo.
 - Los trajes de astronauta aparecen solo en vitrinas o cápsulas.
+- **Excepción (aprobada por Henry el 8 de noviembre de 2026):** las manos del jugador en primera persona son guantes de traje (sección 9). No son una figura humana ni un traje completo.
 
 ## 5. Robot-mentor
 - Forma: compacta, como la imagen de referencia (cuerpo redondeado, visor oscuro, brazos cortos, sin piernas).
@@ -63,10 +64,14 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Ubicado cerca del robot.
 
 ## 9. Mano 3D
-- Se dibuja como malla sólida low poly, no como huesos sueltos.
-- Color: beige, como los huesos actuales.
+- Se dibuja como guante de traje espacial low poly: malla sólida, no huesos sueltos. Todo se genera en código (`src/visual/guante.ts`), sin texturas ni modelos externos.
+- Palma presurizada con un pliegue sutil y una costura junto a los nudillos.
+- Cada dedo tiene tres segmentos. En cada articulación (nudillo, PIP y DIP; MCP e IP del pulgar) hay un fuelle de 5 costillas metálicas que sobresalen un poco. Puntas algo más gruesas y redondeadas.
+- Muñeca: manga, dos tiras de color, anillo de cierre grande y anillo metálico. En el dorso de la manga, un parche genérico (cuadrado redondeado con un círculo rojo y otro azul), sin logos de agencias ni de misiones.
+- Color: la constante `GUANTE_ESTILO` elige el estilo. `"blanco"` (por defecto): tela blanco hueso (#e9e6df) y fuelles, costuras y anillo en gris metálico (#9aa0a6). `"plata"`: plateado metálico con puntas negras.
 - Sombreado plano.
-- Los ángulos, topes, offset de reposo y lógica de desaparición ya confirmados no cambian.
+- Rendimiento: las dos manos suman 7.200 triángulos y 10 llamadas de dibujo (presupuesto: 8.000). Las piezas se mueven con transformaciones; la geometría se crea una sola vez.
+- Los fuelles y anillos son solo decoración. Las longitudes de hueso siguen siendo `HAND_BONE_LENGTHS`, y los ángulos, topes, tamaño constante, separación y lógica de desaparición ya confirmados no cambian.
 
 ## 10. Pendientes (no cubiertos en la entrevista)
 - Escenas de Apollo 17 y Perseverance: su detalle visual va en otra entrevista.
