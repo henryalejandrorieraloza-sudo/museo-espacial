@@ -21,8 +21,9 @@ export const MODELOS: readonly ConfigModelo[] = [
   { id: 'halo_senalar', ruta: 'placeholder:anillo', nodo: 'halo_senalar', escala: 1.6 },
 ];
 
-// Escenas de misión (placeholders). Cada escena es un grupo con el nombre `nodo`; sus hijos
-// (lrv_placeholder, roca_placeholder, perseverance_placeholder) se nombran en src/visual/museo.ts.
+// Escenas de misión. Cada escena es un grupo con el nombre `nodo`. La lunar (Apollo 17) se construye en
+// src/visual/lunaEscena.ts, con los hijos `lrv_placeholder`, `roca_placeholder` y `halo_roca`; la marciana, en
+// src/visual/museo.ts, con `perseverance_placeholder`.
 export const ESCENAS: readonly ConfigModelo[] = [
   { id: 'escena_luna', ruta: 'placeholder:escena_luna', nodo: 'escena_luna', escala: 1 },
   { id: 'escena_marte', ruta: 'placeholder:escena_marte', nodo: 'escena_marte', escala: 1 },

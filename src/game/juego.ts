@@ -37,6 +37,7 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   ayuda: 'ayuda_teclado',
   entrar_aplauso: 'entrar_teclado',
   luna_entrando_museo: 'luna_entrando_museo_teclado',
+  luna_lejos_LRV: 'luna_lejos_LRV_teclado',
   luna_sentado_en_LRV: 'luna_sentado_en_LRV_teclado',
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
   luna_golpeando: 'luna_golpeando_teclado',
@@ -208,12 +209,18 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
   const apuntando = senalar(sesion, lectura.senal);
 
   // Escena lunar: volante, caminata, golpe y agarre van a la máquina de estados (SPEC 8).
+  // A pie, el jugador camina y mira como en el museo; sentado, la caminata mueve el LRV y el giro solo la vista.
   if (mision !== null) {
+    const aPie = mision.estado === 'entrando_museo';
+    if (lectura.conMovimiento && !sesion.museo.enTransicion) {
+      visual.museo.moverCamara(lectura.giroGrados, aPie ? lectura.avanceM : 0, lectura.cabeceoGrados, aPie ? lectura.lateralM : 0);
+    }
     aplicarLuna(sesion, {
       ahoraS,
       dtS: lectura.dtS,
       aplauso: lectura.aplauso,
-      metros: lectura.avanceM,
+      metros: aPie ? 0 : lectura.avanceM,
+      jugador: visual.museo.posicionJugador(),
       volanteGrados: lectura.volanteGrados,
       velocidadGolpeHombrosS: lectura.golpeHombrosS,
       agarreNuevo: lectura.agarreNuevo,
@@ -250,7 +257,7 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
     z: mision.posicion.z,
     rumboGrados: mision.rumboGrados,
     sentado: mision.estado !== 'entrando_museo',
-    rocaResaltada: mision.rocaResaltada,
+    haloVisible: mision.haloVisible,
   });
   for (const evento of eventos) {
     if (evento.tipo === 'estado') {
@@ -258,6 +265,8 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
       if (clave) decirFrase(sesion.voz, sesion.ui, clave);
     } else if (evento.tipo === 'golpeFallido') {
       decirFrase(sesion.voz, sesion.ui, 'luna_golpe_fallido');
+    } else if (evento.tipo === 'lejosDelLRV') {
+      decirFrase(sesion.voz, sesion.ui, 'luna_lejos_LRV');
     } else if (evento.tipo === 'volver') {
       sesion.museo.volver();
     }

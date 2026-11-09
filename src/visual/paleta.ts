@@ -50,6 +50,44 @@ export const HIST = {
   negro: 0x171416,
   plateado: 0xc4c4c0,
   salmon: 0xd8965f,
+  /**
+   * Módulo lunar: la etapa de descenso va forrada de mantas de Kapton aluminizado ámbar, ámbar oscuro (rojizo),
+   * negro, plata y amarillo (Wikipedia, "Apollo Lunar Module", a partir de la documentación de Grumman).
+   * La etapa de ascenso es gris claro con zonas negras alrededor del túnel y los propulsores.
+   */
+  kaptonAmbar: 0xc99a3e,
+  kaptonOscuro: 0x8c5a2c,
+  kaptonAmarillo: 0xd8b85a,
+  ascensoGris: 0xb4b3ad,
+  ascensoOscuro: 0x2b2a2c,
+  toberaDescenso: 0x3a3836,
+  /** LRV: guardabarros de fibra de vidrio, claros. // VERIFICAR: tono exacto (en las fotos se ven gris claro). */
+  guardabarros: 0xbdb8aa,
+  /** Consola del LRV: paneles oscuros con instrumentos. */
+  consola: 0x2c2c2e,
+} as const;
+
+/**
+ * Suelo de Taurus-Littrow: regolito del fondo del valle en gris cálido y ocre, más claro en los macizos.
+ * Son tonos aproximados para la escena, no medidas de albedo. El suelo naranja de Shorty (estación 4) era
+ * de vidrio volcánico naranja (muestra 74220) y quedaba enterrado bajo la capa gris: ver sitioApollo17.ts.
+ */
+export const SUELO_LUNA = {
+  gris: 0x8a8781,
+  grisCalido: 0x938e85,
+  grisClaro: 0xa19c93,
+  ocre: 0x9a8f7a,
+  ocreOscuro: 0x857c6c,
+  /** Material fresco expulsado por cráteres jóvenes: algo más claro. */
+  fresco: 0xaeaaa2,
+  /** Macizos de las tierras altas: más claros que el fondo del valle. */
+  macizo: 0xa6a198,
+  macizoSombra: 0x938e85,
+  /** Rocas: basalto gris oscuro y brecha más clara. */
+  basalto: 0x5f5c58,
+  brecha: 0x8a857c,
+  /** Vidrio volcánico naranja de Shorty. // VERIFICAR: tono (ver la foto AS17-137-21009 citada por LROC). */
+  naranja: 0xb8733a,
 } as const;
 
 export type V3 = [number, number, number];
@@ -81,6 +119,11 @@ const crearOpaco = (fog: boolean): THREE.MeshStandardMaterial =>
   new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.75, metalness: 0.2, fog });
 const OPACO = crearOpaco(true);
 const OPACO_SIN_NIEBLA = crearOpaco(false);
+/**
+ * Mate del todo, para el regolito, las rocas y los macizos de la Luna: con algo de metalicidad, el suelo a contraluz
+ * con el Sol rasante brillaría como asfalto mojado, y el polvo lunar no tiene brillo especular.
+ */
+const MATE = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, fog: false });
 /** Sin iluminación y con colores mayores que 1: es lo único que supera el umbral del bloom. */
 const EMISIVO = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
 const ADITIVO = new THREE.MeshBasicMaterial({
@@ -118,7 +161,11 @@ export class Lote {
   private readonly azarCara = azar(7);
   private matriz = new THREE.Matrix4();
 
-  constructor(private readonly niebla = true) {}
+  /** `acabado`: 'museo' (rugosidad 0.75 y metalicidad 0.2, como pide el estilo) o 'mate' (suelo lunar). */
+  constructor(
+    private readonly niebla = true,
+    private readonly acabado: 'museo' | 'mate' = 'museo',
+  ) {}
 
   /** Ejecuta `fn` con un sistema de coordenadas local (posición, giro y escala). */
   en(p: V3, r: V3, fn: () => void, e: V3 = [1, 1, 1]): void {
@@ -172,7 +219,7 @@ export class Lote {
       for (const g of lista) g.dispose();
       lista.length = 0;
     };
-    anadir(this.opacas, this.niebla ? OPACO : OPACO_SIN_NIEBLA);
+    anadir(this.opacas, this.acabado === 'mate' ? MATE : this.niebla ? OPACO : OPACO_SIN_NIEBLA);
     anadir(this.emisivas, EMISIVO);
     anadir(this.vidrios, VIDRIO, 1);
     anadir(this.aditivas, ADITIVO, 2);

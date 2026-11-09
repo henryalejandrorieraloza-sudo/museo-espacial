@@ -184,6 +184,10 @@ Parte visual: ver spec-visual-museo.md.
 - Terreno lunar con el LRV estacionado y una roca marcada con halo.
 - Cámara en primera persona, con las manos del astronauta visibles.
 - Halo azul celeste sobre la roca de Station 1, cerca de Steno Crater.
+- Sitio: valle de Taurus-Littrow, junto al LM Challenger, 1 h después del inicio de la EVA-1 (12 dic. 1972, 00:54 UTC). Sol y Tierra según la tabla del ALSJ (Sol a 15.7° de altura y azimut 96.8°; Tierra a 45.3° y azimut 240.7°, gibosa al 68 %). Estrellas del catálogo Hipparcos en su posición real, muy tenues. Datos y fuentes en `src/visual/sitioApollo17.ts` y `src/visual/cielo.ts`.
+- El jugador llega a pie: camina y mira como en el museo, sin atravesar el LM ni el LRV. Para subir, se acerca al LRV (3.2 m) y aplaude. Lejos del LRV, el aplauso no lo sienta y el mentor le pide acercarse.
+- Sentado en el asiento del comandante (izquierdo, con el mando en T a la derecha), el giro de la cabeza o el ratón mueve solo la vista (hasta ±100° del rumbo).
+- Simplificación de juego: la roca y su cráter de ~20 m están a ~45 m del LRV, no a los ~1.1 km reales de la estación 1. El LRV aparca apuntando a la roca. Los textos de la misión lo dicen.
 
 ### 8.2 Conducción
 
@@ -191,8 +195,9 @@ Parte visual: ver spec-visual-museo.md.
 - Manos centradas = recto.
 - Girar ambas manos izquierda o derecha = giro correspondiente.
 - Zona neutral configurable.
-- Avance: subir las rodillas (caminar en el sitio).
+- Avance: subir las rodillas (caminar en el sitio). El LRV avanza 2.25 veces lo caminado: a la velocidad máxima de caminata (1.2 m/s) va a 2.7 m/s, su velocidad máxima de diseño (6 mph).
 - Al dejar de caminar, el vehículo se detiene.
+- El LRV no atraviesa el LM ni la roca, y no se aleja más de 260 m del LM.
 
 ### 8.3 Recolección
 
@@ -263,7 +268,7 @@ Parte visual: ver spec-visual-museo.md.
 
 - Color y brillo constantes. No pulsa ni cambia de color.
 - Rodea el objetivo sin ocultar su forma ni textura.
-- Visible hasta completar la acción.
+- Visible hasta completar la acción. En la Luna se ve desde la llegada hasta recoger la muestra.
 - No ilumina objetos ajenos a la actividad.
 
 ## 11. Mentor
@@ -323,7 +328,7 @@ No se guardan muestras recogidas como progreso.
 - [ ] Modo cámara después de separar la capa de entrada (`src/input/`): probado solo con la webcam simulada de Chrome (carga MediaPipe y pide encuadre). Falta probar calibración y gestos con cámara real.
 - [ ] Manos como guantes de traje con fuelles (spec-visual-museo.md, sección 9): verificadas con manos sintéticas; falta verlas con cámara real.
 - [ ] Museo y navegación.
-- [ ] Misión lunar.
+- [ ] Misión lunar. Escena de Taurus-Littrow (LM, LRV, terreno, macizos, Sol, Tierra y estrellas), caminar a pie y subir al LRV: probado en Chrome sin interfaz con teclado, de la vitrina a la muestra y de vuelta al museo. Falta verlo en un navegador con ventana y con cámara real.
 - [ ] Misión marciana.
 - [ ] Mentor y voz.
 - [ ] Publicación.

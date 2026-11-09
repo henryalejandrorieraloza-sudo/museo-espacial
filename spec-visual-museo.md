@@ -91,11 +91,20 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 
 - Con teclado, los textos de ayuda y las frases del mentor en la Luna nombran la tecla en vez del gesto.
 
-## 10. Pendientes (no cubiertos en la entrevista)
-- Escenas de Apollo 17 y Perseverance: su detalle visual va en otra entrevista.
+## 10. Escena lunar (Apollo 17)
+- Mismo lenguaje que el museo: low poly, caras facetadas, sombreado plano y los lotes de `paleta.ts`. El suelo, las rocas y los macizos usan un acabado mate (sin brillo especular): el regolito no brilla.
+- Objetos históricos con colores de `HIST` (LM con Kapton ámbar, ámbar oscuro, amarillo, negro y plata; etapa de ascenso gris). La luz los tiñe, pero no se pintan con la paleta del museo.
+- Luz: sol direccional ámbar con sombras duras (las únicas sombras proyectadas del juego), relleno púrpura muy tenue y cian solo en el halo. Bloom solo en el disco solar (umbral más alto que en el museo, para que las piezas al sol no brillen como emisivas). Sin niebla.
+- Cielo negro, Tierra pequeña (1.9°) y fija, Sol bajo en el este y estrellas reales muy tenues. Horizonte cercano por la curvatura (~2.4 km), con crestas, cráteres y los macizos detrás.
+- Suelo en gris cálido y ocre. El suelo naranja de Shorty (estación 4) no se dibuja: está a ~7 km, más allá del horizonte, y estaba enterrado bajo la capa gris (Schmitt lo destapó con una zanja).
+- Sin figuras humanas ni mentor físico.
+- Render en dos pasadas: lo lejano (cielo y macizos) y lo cercano encima, con su propia profundidad.
+
+## 11. Pendientes (no cubiertos en la entrevista)
+- Escena de Perseverance: su detalle visual va en otra entrevista.
 - Halo azul celeste: se mantiene según SPEC.md sección 9.
 
-## 11. Reglas de trabajo para Claude Code
+## 12. Reglas de trabajo para Claude Code
 - Sin dependencias nuevas. Si la librería actual no alcanza para el estilo, avisar antes de cambiar nada.
 - No importar modelos de packs de terceros. Construir la geometría en el código.
 - Sin commit hasta que Henry confirme. Un commit por elemento: paredes y luces, vitrinas, artefactos, cápsulas, robot, decoración, transición, subtítulos, mano en malla.
