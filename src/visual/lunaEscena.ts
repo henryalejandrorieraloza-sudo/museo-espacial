@@ -8,25 +8,38 @@ import { CAPA_LEJOS, DIRECCION_SOL, DIRECCION_TIERRA, crearCielo } from './cielo
 import { BATALLA_LRV, OJOS_COMANDANTE, RUEDAS_LRV, VIA_LRV, crearLRVLuna } from './lrv';
 import { alturaLuna, crearMacizos, crearSuelo } from './lunaTerreno';
 import { crearModuloLunar } from './moduloLunar';
-import { Lote, SUELO_LUNA, geometriaRoca, tinte } from './paleta';
+import { SUELO_LUNA, geometriaRoca, tinte } from './paleta';
+import { crearMaterialRoca } from './regolito';
 import { LM, LRV_ESTACIONADO, ROCA_ESTACION1 } from './sitioApollo17';
 
 // Escena lunar de Apollo 17 en Taurus-Littrow (SPEC 8): LM Challenger, LRV estacionado, roca de la estación 1 con el
-// halo azul celeste, suelo con curvatura, macizos, Sol, Tierra y estrellas. Mismo lenguaje que el museo (low poly,
-// caras facetadas, sombreado plano, lotes de paleta.ts), con la luz de la Luna: sin atmósfera, cielo negro, sin
-// niebla y sombras duras. No hay figuras humanas ni mentor (SPEC 11: en las misiones el mentor es solo voz).
+// halo azul celeste, suelo con curvatura, macizos, Sol, Tierra y estrellas. El LM y el LRV siguen el lenguaje del
+// museo (low poly, caras facetadas, lotes de paleta.ts); el suelo busca parecerse a las fotos de Apollo 17 (relieve
+// suave, regolito con grano y muchas rocas; ver lunaTerreno.ts y regolito.ts). Luz de la Luna: sin atmósfera, cielo
+// negro, sin niebla y sombras duras. No hay figuras humanas ni mentor (SPEC 11: en las misiones el mentor es solo voz).
 //
 // Render en dos pasadas: primero lo lejano (cielo y macizos, capa CAPA_LEJOS) con planos de recorte de decenas de
 // km, y encima lo cercano (suelo, LM, LRV, roca y manos) con su propio búfer de profundidad. Así el suelo de 3 km
 // y los macizos a 10 km conviven sin perder precisión de profundidad cerca de la cámara.
 
-/** Sol: luz direccional ámbar (licencia de estilo: la luz real del Sol es blanca), con sombras duras. */
-const COLOR_SOL = 0xffe6c8;
+/** Sol: luz direccional casi blanca (la luz real del Sol fuera de la atmósfera es blanca), con sombras duras. */
+const COLOR_SOL = 0xfff6ec;
 const INTENSIDAD_SOL = 9;
-/** Relleno púrpura muy suave en las sombras (estilo del museo; en la Luna real las sombras son casi negras). */
-const COLOR_RELLENO_CIELO = 0x6c4a9e;
-const COLOR_RELLENO_SUELO = 0x23152f;
-const INTENSIDAD_RELLENO = 0.32;
+/**
+ * Relleno de las sombras. En la Luna el cielo es negro: la única luz en la sombra es la que rebota en el suelo
+ * iluminado, gris y desde abajo. Por eso las sombras de las fotos son muy oscuras pero no negras del todo.
+ */
+const COLOR_RELLENO_CIELO = 0x2c2c30;
+const COLOR_RELLENO_SUELO = 0x75736e;
+const INTENSIDAD_RELLENO = 0.5;
+/**
+ * Relleno extra solo para el relieve lejano (pasada CAPA_LEJOS): las laderas de los macizos a la sombra reciben la
+ * luz que rebota en el valle y en las laderas al sol, de kilómetros de extensión. Sin él se verían negras, como
+ * agujeros en la montaña.
+ */
+const COLOR_RELLENO_LEJOS_CIELO = 0x8a8884;
+const COLOR_RELLENO_LEJOS_SUELO = 0x9a9893;
+const INTENSIDAD_RELLENO_LEJOS = 1.6;
 /** Exposición del tone mapping en la Luna. */
 export const EXPOSICION_LUNA = 1.0;
 /**
@@ -61,13 +74,14 @@ function enEjesDe(direccion: THREE.Vector3, azimutFrente: number): THREE.Vector3
 function crearRocaConHalo(): THREE.Group {
   const grupo = new THREE.Group();
   grupo.name = 'roca_placeholder';
-  const l = new Lote(false, 'mate');
-  l.pieza(geometriaRoca(31, 1), SUELO_LUNA.brecha, { p: [0, 0.22, 0], e: [0.5, 0.32, 0.42], r: [0.2, 0.7, 0.1], v: 0.25 });
-  const roca = l.construir();
-  roca.traverse((o) => {
-    o.castShadow = true;
-    o.receiveShadow = true;
-  });
+  const material = crearMaterialRoca();
+  material.color.setHex(SUELO_LUNA.brecha);
+  const roca = new THREE.Mesh(geometriaRoca(31, 1), material);
+  roca.position.y = 0.22;
+  roca.scale.set(0.5, 0.32, 0.42);
+  roca.rotation.set(0.2, 0.7, 0.1);
+  roca.castShadow = true;
+  roca.receiveShadow = true;
   const halo = new THREE.Mesh(
     new THREE.RingGeometry(RADIO_HALO, RADIO_HALO + 0.05, 48),
     new THREE.MeshBasicMaterial({ color: tinte(COLOR_HALO, BRILLO_HALO), side: THREE.DoubleSide }),
@@ -123,7 +137,10 @@ export function crearEscenaLuna(): THREE.Group {
   sol.shadow.normalBias = 0.04;
   const relleno = new THREE.HemisphereLight(COLOR_RELLENO_CIELO, COLOR_RELLENO_SUELO, INTENSIDAD_RELLENO);
   for (const luz of [sol, relleno]) luz.layers.enable(CAPA_LEJOS);
-  grupo.add(sol, sol.target, relleno);
+  // Las luces se filtran por las capas de la cámara: esta solo existe en la pasada de lo lejano.
+  const rellenoLejos = new THREE.HemisphereLight(COLOR_RELLENO_LEJOS_CIELO, COLOR_RELLENO_LEJOS_SUELO, INTENSIDAD_RELLENO_LEJOS);
+  rellenoLejos.layers.set(CAPA_LEJOS);
+  grupo.add(sol, sol.target, relleno, rellenoLejos);
 
   const lm = crearModuloLunar(enEjesDe(DIRECCION_TIERRA, LM.azimutFrente));
   lm.position.set(LM.x, alturaLuna(LM.x, LM.z), LM.z);

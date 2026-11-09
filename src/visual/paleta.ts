@@ -68,24 +68,26 @@ export const HIST = {
 } as const;
 
 /**
- * Suelo de Taurus-Littrow: regolito del fondo del valle en gris cálido y ocre, más claro en los macizos.
- * Son tonos aproximados para la escena, no medidas de albedo. El suelo naranja de Shorty (estación 4) era
- * de vidrio volcánico naranja (muestra 74220) y quedaba enterrado bajo la capa gris: ver sitioApollo17.ts.
+ * Suelo de Taurus-Littrow: regolito del fondo del valle en gris casi neutro (en las fotos de Apollo 17 se ve gris,
+ * apenas pardo), más claro en el material fresco y en los macizos. Son tonos aproximados para la escena, no medidas
+ * de albedo. El suelo naranja de Shorty (estación 4) era de vidrio volcánico naranja (muestra 74220) y quedaba
+ * enterrado bajo la capa gris: ver sitioApollo17.ts.
  */
 export const SUELO_LUNA = {
-  gris: 0x8a8781,
-  grisCalido: 0x938e85,
-  grisClaro: 0xa19c93,
-  ocre: 0x9a8f7a,
-  ocreOscuro: 0x857c6c,
+  gris: 0x84837f,
+  grisCalido: 0x8a8781,
+  grisClaro: 0x96948f,
+  /** Manto oscuro del fondo del valle: manchas algo más oscuras y pardas. */
+  mantoOscuro: 0x77746e,
   /** Material fresco expulsado por cráteres jóvenes: algo más claro. */
-  fresco: 0xaeaaa2,
+  fresco: 0xa3a19c,
   /** Macizos de las tierras altas: más claros que el fondo del valle. */
-  macizo: 0xa6a198,
-  macizoSombra: 0x938e85,
-  /** Rocas: basalto gris oscuro y brecha más clara. */
-  basalto: 0x5f5c58,
-  brecha: 0x8a857c,
+  macizo: 0xa3a29d,
+  macizoSombra: 0x908f8a,
+  /** Rocas: basalto gris oscuro, brecha más clara y caras frescas aún más claras. */
+  basalto: 0x625f5b,
+  brecha: 0x86837d,
+  rocaClara: 0x9e9b95,
   /** Vidrio volcánico naranja de Shorty. // VERIFICAR: tono (ver la foto AS17-137-21009 citada por LROC). */
   naranja: 0xb8733a,
 } as const;
@@ -356,8 +358,8 @@ export function tuboEntre(a: V3, b: V3, radio: number, lados = 6): THREE.BufferG
 }
 
 /** Roca irregular: icosaedro con los vértices desplazados de forma coherente. */
-export function geometriaRoca(semilla: number, detalle = 1): THREE.BufferGeometry {
-  const geo = new THREE.IcosahedronGeometry(1, detalle);
+export function geometriaRoca(semilla: number, detalle = 1, base: 'icosaedro' | 'octaedro' = 'icosaedro'): THREE.BufferGeometry {
+  const geo = base === 'octaedro' ? new THREE.OctahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, detalle);
   const rnd = azar(semilla);
   const desplazamientos = new Map<string, number>();
   const pos = geo.getAttribute('position');

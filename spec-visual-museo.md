@@ -92,11 +92,12 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Con teclado, los textos de ayuda y las frases del mentor en la Luna nombran la tecla en vez del gesto.
 
 ## 10. Escena lunar (Apollo 17)
-- Mismo lenguaje que el museo: low poly, caras facetadas, sombreado plano y los lotes de `paleta.ts`. El suelo, las rocas y los macizos usan un acabado mate (sin brillo especular): el regolito no brilla.
+- El LM y el LRV siguen el lenguaje del museo: low poly, caras facetadas, sombreado plano y los lotes de `paleta.ts`.
+- El suelo busca parecerse a las fotos de superficie de Apollo 17: lomas y cráteres con normales suaves (sin facetas), regolito con grano, hoyitos y motas por píxel (`regolito.ts`), y decenas de miles de rocas instanciadas con tamaños en ley de potencia, medio enterradas y facetadas. Más allá del suelo, un solo relieve lejano facetado (low poly) rodea el valle: colinas bajas en todo el horizonte que unen el suelo con los macizos, y los macizos con faldas, contrafuertes, cumbres, collados y barrancos. Las crestas son estilizadas (los macizos reales son más redondeados); las alturas de `sitioApollo17.ts` son el máximo. Suelo, rocas y macizos son mates y reflejan con la ley de Lommel-Seeliger en vez de Lambert: el suelo lejano no se oscurece hacia el horizonte y el contraste lo ponen las sombras.
 - Objetos históricos con colores de `HIST` (LM con Kapton ámbar, ámbar oscuro, amarillo, negro y plata; etapa de ascenso gris). La luz los tiñe, pero no se pintan con la paleta del museo.
-- Luz: sol direccional ámbar con sombras duras (las únicas sombras proyectadas del juego), relleno púrpura muy tenue y cian solo en el halo. Bloom solo en el disco solar (umbral más alto que en el museo, para que las piezas al sol no brillen como emisivas). Sin niebla.
+- Luz: sol direccional casi blanco con sombras duras (las únicas sombras proyectadas del juego), relleno gris desde abajo (la luz que rebota en el suelo; el cielo es negro) y cian solo en el halo. Bloom solo en el disco solar (umbral más alto que en el museo, para que las piezas al sol no brillen como emisivas). Sin niebla.
 - Cielo negro, Tierra pequeña (1.9°) y fija, Sol bajo en el este y estrellas reales muy tenues. Horizonte cercano por la curvatura (~2.4 km), con crestas, cráteres y los macizos detrás.
-- Suelo en gris cálido y ocre. El suelo naranja de Shorty (estación 4) no se dibuja: está a ~7 km, más allá del horizonte, y estaba enterrado bajo la capa gris (Schmitt lo destapó con una zanja).
+- Suelo en gris casi neutro, con manchas algo más oscuras y material más claro alrededor de los cráteres frescos. El suelo naranja de Shorty (estación 4) no se dibuja: está a ~7 km, más allá del horizonte, y estaba enterrado bajo la capa gris (Schmitt lo destapó con una zanja).
 - Sin figuras humanas ni mentor físico.
 - Render en dos pasadas: lo lejano (cielo y macizos) y lo cercano encima, con su propia profundidad.
 

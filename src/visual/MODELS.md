@@ -34,7 +34,7 @@ Se definen en `ESCENAS` de `src/visual/config.ts`. Cada escena es un grupo; se m
 
 | id | Nombre del nodo | Contenido placeholder | Escala esperada (modelo final) |
 | --- | --- | --- | --- |
-| `escena_luna` | `escena_luna` | Taurus-Littrow (Apollo 17), en `lunaEscena.ts`: suelo facetado de 3.2 km de radio con la curvatura lunar, cráteres, rocas, macizos, Sol, Tierra y estrellas reales, y el LM Challenger (`moduloLunar.ts`). Hijos: `lrv_placeholder` (LRV de `lrv.ts`, 3.05 m de largo) y `roca_placeholder` (roca de ~0.9 m con el halo azul celeste `halo_roca`: anillo de 0.75 m de radio a 0.3 m de altura). Posiciones en `sitioApollo17.ts`. | 1 |
+| `escena_luna` | `escena_luna` | Taurus-Littrow (Apollo 17), en `lunaEscena.ts`: suelo de 3.2 km de radio con la curvatura lunar, cráteres, rocas instanciadas y regolito procedural (`lunaTerreno.ts`, `regolito.ts`), macizos, Sol, Tierra y estrellas reales, y el LM Challenger (`moduloLunar.ts`). Hijos: `lrv_placeholder` (LRV de `lrv.ts`, 3.05 m de largo) y `roca_placeholder` (roca de ~0.9 m con el halo azul celeste `halo_roca`: anillo de 0.75 m de radio a 0.3 m de altura). Posiciones en `sitioApollo17.ts`. | 1 |
 | `escena_marte` | `escena_marte` | Suelo rojizo de 60 × 60 m. Cielo claro (fondo de la escena). Hijo: `perseverance_placeholder` (Perseverance aproximado, unos 1.8 m de ancho, en (0, 0, −4)). | 1 |
 
 Notas:
@@ -43,5 +43,5 @@ Notas:
 - **Escena lunar:** el LM y el LRV usan las medidas publicadas (Wikipedia, a partir de la NASA, Grumman y Boeing). Lo que no tiene medida verificada lleva `// VERIFICAR` en el código: vía y altura libre del LRV, color de las cubiertas de las baterías y de los guardabarros, reparto de piezas de la etapa de ascenso, guiñada del LM, posición del LRV y de Steno, y altura y distancia de los macizos salvo el Macizo Sur (~2.3 km) y Family Mountain (~1 km). La roca con halo y su cráter están a ~45 m del LRV en vez de los ~1.1 km reales de la estación 1: es una simplificación de juego y los textos lo dicen.
 - Colores añadidos a la paleta inicial: ruedas y asiento del LRV en gris muy oscuro (`rueda`) y cabeza del mentor en tono piel (`piel`).
 - La escena de Marte mantiene su estilo provisional: caras planas (`flatShading`), pocos segmentos, sin texturas, luz hemisférica y una direccional, sin sombras, niebla ni bloom. Allí el jugador llega a (0, 1.6, 4) mirando a −Z.
-- La escena lunar usa el lenguaje del museo (lotes de `paleta.ts`, caras facetadas) con sol ámbar, sombras duras, relleno púrpura tenue, bloom solo en lo emisivo y sin niebla. El jugador llega a pie junto al LM y al LRV (`LLEGADA` en `sitioApollo17.ts`).
+- En la escena lunar, el LM y el LRV usan el lenguaje del museo (lotes de `paleta.ts`, caras facetadas); el suelo, las rocas y los macizos buscan el aspecto de las fotos de Apollo 17 (ver `spec-visual-museo.md` §10). Sol casi blanco, sombras duras, relleno gris desde el suelo, bloom solo en lo emisivo y sin niebla. El jugador llega a pie junto al LM y al LRV (`LLEGADA` en `sitioApollo17.ts`).
 - Al volver al museo, el jugador recupera su posición y giro.
