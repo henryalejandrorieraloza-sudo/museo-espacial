@@ -7,3 +7,10 @@ export async function abrirWebcam(video: HTMLVideoElement): Promise<void> {
   video.srcObject = stream;
   await video.play();
 }
+
+/** Detiene la webcam (por ejemplo, si MediaPipe no carga y se pasa al modo teclado). */
+export function cerrarWebcam(video: HTMLVideoElement): void {
+  const stream = video.srcObject;
+  if (stream instanceof MediaStream) for (const pista of stream.getTracks()) pista.stop();
+  video.srcObject = null;
+}

@@ -1,4 +1,11 @@
-import { guardarOpciones, RANGOS, normalizarOpciones, tablaLimitesPorDefecto, type Opciones } from '../game/opciones';
+import {
+  guardarOpciones,
+  RANGOS,
+  normalizarOpciones,
+  tablaLimitesPorDefecto,
+  type ModoControl,
+  type Opciones,
+} from '../game/opciones';
 import type { TablaLimites } from '../visual/manoModelo';
 import { t, type ClaveTexto } from '../i18n';
 import { requireEl } from './dom';
@@ -43,11 +50,25 @@ function crear<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+/** Control actual y qué hacer al pulsar "Cambiar control". */
+export interface ControlOpciones {
+  modo: ModoControl;
+  onCambiar: () => void;
+}
+
+export interface OpcionesUi {
+  abrir(): void;
+  cerrar(): void;
+  abierto(): boolean;
+  /** Avisa cada vez que el panel se abre o se cierra (por ejemplo, para pausar el teclado). */
+  onVisibilidad(oyente: (abierto: boolean) => void): void;
+}
+
 /**
  * Panel de opciones (SPEC 13). Los cambios se aplican al momento y se guardan.
  * `onCambio` recibe siempre valores ya ajustados a su rango.
  */
-export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones) => void): void {
+export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones) => void, control: ControlOpciones): OpcionesUi {
   const boton = requireEl<HTMLButtonElement>('opcionesBoton');
   const panel = requireEl('opciones');
   boton.textContent = t('opciones_boton');
@@ -64,7 +85,13 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
   const inputs = new Map<Numerico, HTMLInputElement>();
   const valores = new Map<Numerico, HTMLSpanElement>();
 
+  // Control (cámara o teclado): se cambia en la pantalla de inicio.
+  const nombreControl = t(control.modo === 'teclado' ? 'inicio_control_teclado' : 'inicio_control_camara');
+  const cambiarControl = crear('button', { type: 'button', class: 'opciones-control' }, [t('opc_cambiar_control')]);
+  cambiarControl.addEventListener('click', control.onCambiar);
+
   const campos: Node[] = [
+    crear('div', { class: 'opciones-fila' }, [crear('span', {}, [t('opc_control', { modo: nombreControl })]), cambiarControl]),
     crear('label', {}, [t('opc_metodo'), selectMetodo]),
     crear('label', {}, [t('opc_mano'), selectMano]),
   ];
@@ -177,12 +204,22 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
     input.addEventListener(DESLIZADORES.has(clave) ? 'input' : 'change', aplicar);
   }
 
-  boton.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-  });
-  cerrar.addEventListener('click', () => {
-    panel.hidden = true;
-  });
+  const oyentes: ((abierto: boolean) => void)[] = [];
+  const estaAbierto = (): boolean => !panel.hidden;
+  const ponerVisible = (visible: boolean): void => {
+    if (estaAbierto() === visible) return;
+    panel.hidden = !visible;
+    for (const oyente of oyentes) oyente(visible);
+  };
+  boton.addEventListener('click', () => ponerVisible(!estaAbierto()));
+  cerrar.addEventListener('click', () => ponerVisible(false));
 
   mostrar(actuales);
+
+  return {
+    abrir: () => ponerVisible(true),
+    cerrar: () => ponerVisible(false),
+    abierto: estaAbierto,
+    onVisibilidad: (oyente) => oyentes.push(oyente),
+  };
 }

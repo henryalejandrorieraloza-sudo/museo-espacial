@@ -300,6 +300,7 @@ No se guardan muestras recogidas como progreso.
 - Separación entre manos (0 m por defecto, rango 0–0.6 m, paso 0.01 m): separación total entre las dos manos del avatar. Cada mano se desplaza la mitad hacia su lado (solo en x). Se aplica en vivo y se guarda en localStorage.
 - Segundos sin ver la mano antes de que desaparezca (1 s) y salto máximo para deslizarse al reaparecer (0,05 m).
 - Topes de las articulaciones de la mano (grados, mín y máx por parámetro), con botón de restaurar.
+- Control: cámara (gestos) o teclado y ratón. Se elige en la pantalla de inicio y se guarda en localStorage (`museo-espacial:control:v1`). El botón “Cambiar control” vuelve a la pantalla de inicio. El mapeo de teclas está en spec-visual-museo.md, sección 9.1.
 - Idioma (español / inglés).
 - Recalibrar.
 - Modo de movilidad limitada (deshabilitado, “Próximamente”).
@@ -316,6 +317,11 @@ No se guardan muestras recogidas como progreso.
 - [x] Módulo de encuadre (`src/tracking/framing.ts`) mostrado en `/debug/`. Todavía no bloquea el inicio del juego, porque el juego aún no existe.
 - [x] Caminar por rodillas implementado (`src/tracking/metrics.ts`) y visible en `/debug/`.
 - [ ] Umbrales de caminar por rodillas validados con cámara real.
+- [x] Pantalla de inicio con elección de control; la elección persiste al recargar. Si la cámara falla, se ofrece el modo teclado (verificado en Chrome sin webcam).
+- [x] Modo teclado y ratón: W A S D, espacio, E o clic izquierdo, F o clic derecho y Esc. Verificado en Chrome sin interfaz: seleccionar la vitrina del LRV, entrar, sentarse, conducir hasta la roca, golpe, agarre y volver al museo. En modo teclado no se pide la cámara.
+- [ ] Mirar con el ratón con pointer lock real en un navegador con ventana (la lógica se probó simulando la captura del ratón).
+- [ ] Modo cámara después de separar la capa de entrada (`src/input/`): probado solo con la webcam simulada de Chrome (carga MediaPipe y pide encuadre). Falta probar calibración y gestos con cámara real.
+- [ ] Manos como guantes de traje con fuelles (spec-visual-museo.md, sección 9): verificadas con manos sintéticas; falta verlas con cámara real.
 - [ ] Museo y navegación.
 - [ ] Misión lunar.
 - [ ] Misión marciana.

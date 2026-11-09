@@ -321,6 +321,11 @@ function adelante(): THREE.Vector3 {
   return new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
 }
 
+/** Vector a la derecha del jugador, en el plano horizontal. */
+function derecha(): THREE.Vector3 {
+  return new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+}
+
 // ---------------------------------------------------------------------------
 // API pública: visual.museo
 // ---------------------------------------------------------------------------
@@ -519,13 +524,15 @@ function resaltarVitrina(id: string, activa: boolean): void {
  * - dx: giro en grados alrededor de la vertical. Positivo = a la derecha del jugador.
  * - dy: avance en metros hacia donde mira el jugador. Negativo = retroceso.
  * - dCabeceo: cabeceo en grados. Positivo = mirar arriba. El ángulo se limita a ±LIMITE_CABECEO_GRADOS.
+ * - dLateral: paso lateral en metros. Positivo = a la derecha del jugador (solo con teclado).
  * La posición se limita a la rotonda en el museo y al área de siempre en las misiones.
  */
-function moverCamara(dx: number, dy: number, dCabeceo = 0): void {
+function moverCamara(dx: number, dy: number, dCabeceo = 0, dLateral = 0): void {
   yaw -= THREE.MathUtils.degToRad(dx);
   cabeceo = THREE.MathUtils.clamp(cabeceo + THREE.MathUtils.degToRad(dCabeceo), -LIMITE_CABECEO, LIMITE_CABECEO);
-  if (dy !== 0) {
+  if (dy !== 0 || dLateral !== 0) {
     posicion.addScaledVector(adelante(), dy);
+    posicion.addScaledVector(derecha(), dLateral);
     if (enMuseo) {
       // Entre la pared y el proyector central. Al limitar solo el radio, el jugador se desliza por el borde.
       const radio = Math.hypot(posicion.x, posicion.z) || 1;
@@ -543,8 +550,7 @@ function moverCamara(dx: number, dy: number, dCabeceo = 0): void {
 /** Hace aparecer al mentor junto al jugador, a su derecha y un poco delante. El flotado lo anima el bucle. */
 function mentorAparece(): void {
   if (!mentor) return;
-  const derecha = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-  const pos = posicion.clone().addScaledVector(derecha, 1.0).addScaledVector(adelante(), 1.2);
+  const pos = posicion.clone().addScaledVector(derecha(), 1.0).addScaledVector(adelante(), 1.2);
   mentor.position.set(pos.x, ALTURA_MENTOR, pos.z);
   mentor.lookAt(posicion.x, ALTURA_MENTOR, posicion.z);
   mentor.visible = true;

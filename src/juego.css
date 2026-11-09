@@ -218,3 +218,123 @@
     right: 8px;
   }
 }
+
+/* Pantalla de inicio: título, elección de control y botón "Empezar". Tapa la escena mientras carga. */
+.inicio {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(circle at 50% 30%, #2a1450 0%, #0b0716 70%);
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  z-index: 20;
+  overflow-y: auto;
+}
+
+.inicio-caja {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.inicio h1 {
+  margin: 0;
+  font-size: clamp(26px, 6vw, 38px);
+  font-weight: 700;
+  text-align: center;
+}
+
+.inicio fieldset {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.inicio legend {
+  margin-bottom: 10px;
+  font: 400 16px/1.4 system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.inicio-opcion {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 2px solid #3a2c5c;
+  border-radius: 12px;
+  background: rgba(23, 18, 40, 0.85);
+  cursor: pointer;
+}
+
+.inicio-opcion:has(input:checked) {
+  border-color: #5cc8ff;
+}
+
+.inicio-opcion input {
+  margin-top: 3px;
+  accent-color: #5cc8ff;
+}
+
+.inicio-opcion span {
+  display: grid;
+  gap: 4px;
+}
+
+.inicio-opcion strong {
+  font-size: 17px;
+}
+
+.inicio-opcion small {
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.inicio-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(200, 70, 60, 0.25);
+  border: 1px solid rgba(255, 120, 110, 0.6);
+  font: 500 15px/1.4 system-ui, sans-serif;
+}
+
+.inicio-empezar {
+  justify-self: center;
+  padding: 14px 40px;
+  border: 0;
+  border-radius: 10px;
+  background: #5cc8ff;
+  color: #0b0716;
+  font: 700 18px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.inicio-empezar:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+/* Fila de Opciones con el control actual y el botón "Cambiar control". */
+.opciones-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font: 400 14px/1.35 system-ui, sans-serif;
+}
+
+.opciones-caja .opciones-fila button {
+  justify-self: auto;
+  padding: 8px 14px;
+  font-size: 14px;
+}

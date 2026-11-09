@@ -45,8 +45,10 @@ export interface EntradaMuseo {
   giroGrados: number;
   /** Cabeceo de la vista en grados para este fotograma (+ = arriba). */
   cabeceoGrados: number;
-  /** Metros que avanza el jugador en este fotograma (ya calculados por la caminata, game/caminata.ts). */
+  /** Metros que avanza el jugador en este fotograma (ya calculados por la fuente de entrada). Negativo = atrás. */
   metros: number;
+  /** Metros de paso lateral en este fotograma (+ = derecha). Solo con teclado; con la cámara es 0. */
+  lateralMetros: number;
   /** Vitrina bajo el cursor (o apuntada por el rayo) ahora mismo, o null. */
   apuntando: string | null;
   /** True si hubo un aplauso o se pulsó la barra espaciadora en este fotograma. */
@@ -133,11 +135,11 @@ export class Museo {
         this.iniciarTransicion(() => this.abrirMision(mision));
         return;
       }
-      visual.museo.moverCamara(entrada.giroGrados, entrada.metros, entrada.cabeceoGrados);
+      visual.museo.moverCamara(entrada.giroGrados, entrada.metros, entrada.cabeceoGrados, entrada.lateralMetros);
       return;
     }
 
-    visual.museo.moverCamara(entrada.giroGrados, entrada.metros, entrada.cabeceoGrados);
+    visual.museo.moverCamara(entrada.giroGrados, entrada.metros, entrada.cabeceoGrados, entrada.lateralMetros);
 
     const apuntada = esVitrina(entrada.apuntando) ? entrada.apuntando : null;
     if (apuntada !== this.candidata) {

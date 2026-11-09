@@ -155,3 +155,29 @@ export function guardarOpciones(opciones: Opciones): void {
     // Sin localStorage: las opciones valen solo para esta carga de la página.
   }
 }
+
+// ---------------------------------------------------------------------------
+// Control elegido en la pantalla de inicio: cámara (gestos) o teclado y ratón. Clave propia, versionada.
+// ---------------------------------------------------------------------------
+
+const CLAVE_CONTROL = 'museo-espacial:control:v1';
+
+export type ModoControl = 'camara' | 'teclado';
+
+/** Control guardado, o null si el jugador aún no eligió (o no hay almacenamiento). */
+export function cargarControl(): ModoControl | null {
+  try {
+    const valor = localStorage.getItem(CLAVE_CONTROL);
+    return valor === 'camara' || valor === 'teclado' ? valor : null;
+  } catch {
+    return null;
+  }
+}
+
+export function guardarControl(modo: ModoControl): void {
+  try {
+    localStorage.setItem(CLAVE_CONTROL, modo);
+  } catch {
+    // Sin localStorage: la elección vale solo para esta carga de la página.
+  }
+}

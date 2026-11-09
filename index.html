@@ -9,7 +9,7 @@
   <body>
     <main id="scene" class="scene"></main>
 
-    <video id="camara" class="camara" autoplay muted playsinline></video>
+    <video id="camara" class="camara" autoplay muted playsinline hidden></video>
     <div id="aviso" class="aviso" role="status" hidden></div>
     <div id="subtitulos" class="subtitulos" hidden></div>
     <div id="entrar" class="entrar" role="status" hidden></div>
@@ -17,6 +17,9 @@
     <div id="cursor" class="cursor" hidden></div>
     <button id="opcionesBoton" class="opciones-boton" type="button"></button>
     <section id="opciones" class="opciones" hidden></section>
+
+    <!-- Pantalla de inicio: elección de control (cámara o teclado y ratón). La rellena src/ui/inicioUi.ts. -->
+    <section id="inicio" class="inicio"></section>
 
     <section id="mision" class="mision" hidden>
       <h1 id="misionTitulo"></h1>

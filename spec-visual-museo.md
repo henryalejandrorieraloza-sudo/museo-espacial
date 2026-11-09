@@ -73,6 +73,24 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Rendimiento: las dos manos suman 7.200 triángulos y 10 llamadas de dibujo (presupuesto: 8.000). Las piezas se mueven con transformaciones; la geometría se crea una sola vez.
 - Los fuelles y anillos son solo decoración. Las longitudes de hueso siguen siendo `HAND_BONE_LENGTHS`, y los ángulos, topes, tamaño constante, separación y lógica de desaparición ya confirmados no cambian.
 
+## 9.1 Control de entrada
+- Al abrir el juego, una pantalla de inicio muestra el título, las dos formas de control y el botón "Empezar". La elección se guarda en `localStorage` (`museo-espacial:control:v1`) y se puede cambiar en Opciones con "Cambiar control", que vuelve a la pantalla de inicio.
+- **Cámara (gestos):** la de siempre (SPEC.md secciones 4 y 5). Si la webcam o MediaPipe fallan, la pantalla de inicio vuelve con un mensaje y el modo teclado marcado.
+- **Teclado y ratón:** no se pide la cámara ni se carga MediaPipe, y las manos 3D no se muestran. Una mira fija en el centro de la pantalla hace de cursor.
+- Las dos fuentes producen la misma lectura (`src/input/fuente.ts`): aplauso, señalar, giro y cabeceo, caminata, pellizco, golpe y volante. `game/museo.ts` y las misiones no saben de qué fuente viene cada acción.
+
+| Tecla | Acción | Equivale a |
+| --- | --- | --- |
+| W / S | Caminar hacia delante / atrás. Misma velocidad máxima y aceleración que en Opciones | Subir las rodillas |
+| A / D | Paso lateral en el museo. En el LRV, volante a la izquierda / derecha | Volante gestual (en el LRV) |
+| Ratón | Mirar (pointer lock: clic en la escena para capturarlo) | Inclinar y cabecear la cabeza |
+| Espacio | Aplaudir: entrar a la misión o volver al museo | Aplauso |
+| E o clic izquierdo (mantener) | Señalar la vitrina del centro de la pantalla; 1.5 s la selecciona. En la Luna, golpe | Dedo índice; golpe con la mano |
+| F o clic derecho | Pellizco y agarre | Pellizco |
+| Esc | Abrir o cerrar Opciones. Soltar el ratón también abre Opciones | — |
+
+- Con teclado, los textos de ayuda y las frases del mentor en la Luna nombran la tecla en vez del gesto.
+
 ## 10. Pendientes (no cubiertos en la entrevista)
 - Escenas de Apollo 17 y Perseverance: su detalle visual va en otra entrevista.
 - Halo azul celeste: se mantiene según SPEC.md sección 9.

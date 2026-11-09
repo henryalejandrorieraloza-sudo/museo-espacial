@@ -1,45 +1,28 @@
-// Bucle principal del juego: encuadre → calibración → museo (SPEC 2.1, 3, 7).
-// Une el seguimiento (tracking/), la lógica del museo (game/museo.ts) y la interfaz (ui/).
+// Bucle principal del juego: pantalla de inicio (elección de control) → encuadre y calibración (solo con cámara)
+// → museo y misiones (SPEC 2.1, 3, 7 y 8). Une la capa de entrada (input/), la lógica del museo (game/museo.ts),
+// la misión lunar (game/luna.ts) y la interfaz (ui/). No sabe si las acciones vienen de la cámara o del teclado:
+// en cada vuelta lee una LecturaEntrada y la reparte.
 
-import { abrirWebcam } from '../tracking/camara';
-import { checkFraming, type FramingStatus } from '../tracking/framing';
-import { aplauso, aplausoEstadoInicial, pellizco, volante, type AplausoEstado } from '../tracking/gestures';
-import {
-  HAND_IDX,
-  LegAlternationCounter,
-  SWING_PCT_DEFAULT,
-  headPitchDeg,
-  headRollDeg,
-  legSample,
-  shoulderWidthPx,
-} from '../tracking/metrics';
-import { Tracker, type TrackingFrame } from '../tracking/tracker';
 import { visual } from '../visual/museo';
 import { crearVoz, type Voz } from '../audio/voz';
 import { t, type ClaveTexto } from '../i18n';
 import { requireEl } from '../ui/dom';
 import { crearCursor, type CursorUi } from '../ui/cursor';
+import { crearInicioUi } from '../ui/inicioUi';
 import { crearOpcionesUi } from '../ui/opcionesUi';
 import { crearUi, type JuegoUi } from '../ui/juegoUi';
-import { Caminata } from './caminata';
-import { Calibrador, cargarCalibracion, guardarCalibracion, type Calibracion } from './calibracion';
-import { cargarOpciones, type Opciones } from './opciones';
-import { CursorSuavizado, puntaACursor } from './cursor';
-import { cabeceoCabeza, direccionSenalar, giroCabeza } from './gestos';
+import { FuenteCamara } from '../input/camaraFuente';
+import { FuenteTeclado } from '../input/tecladoFuente';
+import type { FuenteEntrada, LecturaEntrada, Senal } from '../input/fuente';
+import { cargarControl, cargarOpciones, guardarControl, type ModoControl, type Opciones } from './opciones';
 import { Museo, type EventoMuseo } from './museo';
-import { descargarCaptura } from '../ui/captura';
 import { MisionLuna, type EntradaLuna, type EstadoLuna } from './luna';
-
-/** Si el último fotograma es más viejo que esto (s), el movimiento se congela (SPEC 6). */
-const FRESCO_S = 0.5;
-/** Tiempo máximo (s) que cuenta un fotograma para el giro y la caminata, para no saltar tras una pausa. */
-const DT_MAX_S = 0.1;
 
 /** Misión lunar activa (SPEC 8). Solo existe mientras la pantalla es la escena de Luna. */
 let mision: MisionLuna | null = null;
 
-/** Último frame procesado, para la captura de depuración (tecla P, solo en desarrollo). */
-let ultimoFrame: TrackingFrame | null = null;
+/** Control con el que se juega. Decide qué textos de ayuda se muestran (gesto o tecla). */
+let modoControl: ModoControl = 'camara';
 
 /** Frase de voz de cada estado de la misión. `entrando_museo` se dice al abrir la escena, no aquí. */
 const FRASES_LUNA: Partial<Record<EstadoLuna, ClaveTexto>> = {
@@ -49,21 +32,39 @@ const FRASES_LUNA: Partial<Record<EstadoLuna, ClaveTexto>> = {
   muestra_recogida: 'luna_muestra_recogida',
 };
 
+/** Con teclado, estos textos nombran la tecla en vez del gesto. */
+const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
+  ayuda: 'ayuda_teclado',
+  entrar_aplauso: 'entrar_teclado',
+  luna_entrando_museo: 'luna_entrando_museo_teclado',
+  luna_sentado_en_LRV: 'luna_sentado_en_LRV_teclado',
+  luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
+  luna_golpeando: 'luna_golpeando_teclado',
+  luna_muestra_recogida: 'luna_muestra_recogida_teclado',
+};
+
+/** Texto según el control: con teclado usa la variante que nombra la tecla, si existe. */
+function texto(clave: ClaveTexto): string {
+  return t(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave);
+}
+
 /** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. Sin voz, el subtítulo sale igual. */
 function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto): void {
   voz.cancelar();
-  voz.hablar(t(clave), undefined, (frase) => ui.subtitulos(frase));
+  voz.hablar(texto(clave), undefined, (frase) => ui.subtitulos(frase));
 }
+
+const mensajeDe = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 export async function iniciarJuego(container: HTMLElement): Promise<void> {
   const voz = crearVoz('es-ES');
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
   const cursorUi = crearCursor();
-
+  const inicio = crearInicioUi();
+  const video = requireEl<HTMLVideoElement>('camara');
   // Opciones (SPEC 13): el panel modifica este mismo objeto al cambiar un valor.
   const opciones = cargarOpciones();
-  crearOpcionesUi(opciones, (nuevas) => Object.assign(opciones, nuevas));
 
   museo.onEvento((evento: EventoMuseo) => {
     switch (evento.tipo) {
@@ -78,7 +79,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         );
         break;
       case 'listoParaEntrar':
-        ui.indicarEntrar(t('entrar_aplauso'));
+        ui.indicarEntrar(texto('entrar_aplauso'));
         break;
       case 'vitrinaDeseleccionada':
         // Sin vitrina seleccionada no hay explicación ni entrada: se corta la voz y los textos.
@@ -109,76 +110,68 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     }
   });
 
-  requireEl('ayuda').textContent = t('ayuda');
-
-  // Barra espaciadora: respaldo del aplauso (SPEC 4). Se consume en el siguiente fotograma o bucle.
-  let espacioPendiente = false;
-  window.addEventListener('keydown', (ev) => {
-    if (ev.code !== 'Space') return;
-    ev.preventDefault();
-    if (!ev.repeat) espacioPendiente = true;
+  // El museo carga mientras el jugador elige el control.
+  const escenaLista = visual.museo.iniciar(container);
+  escenaLista.catch(() => {
+    // El error se muestra al esperar la escena, más abajo.
   });
 
-  // Captura de depuración: P descarga el frame actual como JSON. Solo en desarrollo (SPEC no lo incluye en producción).
-  if (import.meta.env.DEV) {
-    window.addEventListener('keydown', (ev) => {
-      if (ev.code === 'KeyP' && !ev.repeat && ultimoFrame) descargarCaptura(ultimoFrame);
-    });
-  }
-
+  let modo = await inicio.elegir(cargarControl() ?? 'camara');
   try {
-    ui.aviso(t('arranque'));
-    await visual.museo.iniciar(container);
-
-    const video = requireEl<HTMLVideoElement>('camara');
-    try {
-      await abrirWebcam(video);
-    } catch (err) {
-      ui.aviso(t('camara_error', { error: err instanceof Error ? err.message : String(err) }));
-      return;
-    }
-
-    const tracker = await Tracker.create((mensaje) => ui.aviso(mensaje));
-    const sesion = nuevaSesion(museo, ui, cursorUi, opciones, cargarCalibracion(), voz);
-    ui.aviso(sesion.calibracion === null ? t('encuadre_acercarse') : null);
-
-    const bucle = (): void => {
-      const ahoraS = performance.now() / 1000;
-      sesion.museo.tick(ahoraS);
-      const nuevo = tracker.detect(video, ahoraS * 1000);
-      const espacio = espacioPendiente;
-      espacioPendiente = false;
-
-      if (nuevo) {
-        procesarFotograma(sesion, nuevo, ahoraS, espacio);
-      } else if (espacio && sesion.calibracion !== null) {
-        // Sin fotograma nuevo el movimiento está congelado, pero la barra espaciadora debe funcionar.
-        if (mision !== null) {
-          aplicarLuna(sesion, {
-            ahoraS,
-            dtS: 0,
-            aplauso: true,
-            metros: 0,
-            volanteGrados: null,
-            velocidadGolpeHombrosS: 0,
-            agarreNuevo: false,
-          });
-        } else {
-          museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, apuntando: null, accion: true });
-        }
-      }
-      if (ahoraS - sesion.ultimoDatoS > FRESCO_S) visual.museo.ocultarManos();
-      if (sesion.calibracion !== null && ahoraS - sesion.ultimoDatoS > FRESCO_S) {
-        ui.aviso(t('sin_seguimiento'));
-      }
-
-      requestAnimationFrame(bucle);
-    };
-    requestAnimationFrame(bucle);
+    ui.aviso(t('cargando_museo'));
+    await escenaLista;
   } catch (err) {
-    ui.aviso(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    ui.aviso(`Error: ${mensajeDe(err)}`);
     console.error(err);
+    return;
   }
+
+  // Con cámara: webcam y MediaPipe. Si fallan, se vuelve a la pantalla de inicio con el modo teclado marcado.
+  let camara: FuenteCamara | null = null;
+  while (modo === 'camara' && camara === null) {
+    try {
+      video.hidden = false;
+      ui.aviso(t('arranque'));
+      camara = await FuenteCamara.crear(video, opciones, (mensaje) => ui.aviso(mensaje));
+    } catch (err) {
+      console.error(err);
+      video.hidden = true;
+      ui.aviso(null);
+      modo = await inicio.elegir('teclado', t('inicio_camara_fallo', { error: mensajeDe(err) }));
+    }
+  }
+  modoControl = modo;
+  guardarControl(modo);
+
+  const opcionesUi = crearOpcionesUi(opciones, (nuevas) => Object.assign(opciones, nuevas), {
+    modo,
+    // Cambiar control: se guarda el otro modo y se vuelve a la pantalla de inicio con él marcado.
+    onCambiar: () => {
+      guardarControl(modo === 'teclado' ? 'camara' : 'teclado');
+      location.reload();
+    },
+  });
+  // En modo teclado no se pide la cámara ni se carga MediaPipe, y las manos 3D no se muestran.
+  const fuente: FuenteEntrada = camara ?? new FuenteTeclado(container, opciones, opcionesUi);
+  video.hidden = fuente.modo !== 'camara';
+  opcionesUi.onVisibilidad((abierto) => fuente.pausar(abierto));
+  requireEl('ayuda').textContent = texto('ayuda');
+
+  const sesion: Sesion = { museo, ui, cursorUi, opciones, voz };
+  let avisoActual: string | null | undefined;
+  const bucle = (): void => {
+    const ahoraS = performance.now() / 1000;
+    museo.tick(ahoraS);
+    const lectura = fuente.leer(ahoraS);
+    if (lectura.aviso !== avisoActual) {
+      avisoActual = lectura.aviso;
+      ui.aviso(lectura.aviso);
+    }
+    dibujarManos(sesion, lectura);
+    if (lectura.listo && lectura.hayDatos) aplicarLectura(sesion, lectura);
+    requestAnimationFrame(bucle);
+  };
+  requestAnimationFrame(bucle);
 }
 
 /** Estado que persiste entre fotogramas. */
@@ -188,153 +181,63 @@ interface Sesion {
   cursorUi: CursorUi;
   /** Opciones vivas: el panel las modifica en el mismo objeto. */
   opciones: Opciones;
-  calibracion: Calibracion | null;
-  calibrador: Calibrador;
-  piernas: LegAlternationCounter;
-  caminata: Caminata;
-  cursorSuavizado: CursorSuavizado;
-  /** Si el pellizco de la mano que señala estaba cerrado en el fotograma anterior. */
-  pellizcoCerrado: boolean;
-  pasosVistos: number;
-  aplausoEstado: AplausoEstado;
-  ultimoFrescoS: number | null;
-  ultimoDatoS: number;
   voz: Voz;
-  /** Última posición (px) y tiempo de cada muñeca, para medir la velocidad de golpe (SPEC 8.3). */
-  munecasPrevias: Partial<Record<'Left' | 'Right', { y: number; ahoraS: number }>>;
-  /** Pellizco cerrado en el fotograma anterior, por mano (agarre de la misión lunar). */
-  pellizcosLuna: Partial<Record<'Left' | 'Right', boolean>>;
 }
 
-function nuevaSesion(
-  museo: Museo,
-  ui: JuegoUi,
-  cursorUi: CursorUi,
-  opciones: Opciones,
-  calibracion: Calibracion | null,
-  voz: Voz,
-): Sesion {
-  return {
-    museo,
-    ui,
-    cursorUi,
-    opciones,
-    calibracion,
-    voz,
-    munecasPrevias: {},
-    pellizcosLuna: {},
-    calibrador: new Calibrador(),
-    piernas: new LegAlternationCounter(SWING_PCT_DEFAULT),
-    caminata: new Caminata(),
-    cursorSuavizado: new CursorSuavizado(),
-    pellizcoCerrado: false,
-    pasosVistos: 0,
-    aplausoEstado: aplausoEstadoInicial,
-    ultimoFrescoS: null,
-    ultimoDatoS: Number.NEGATIVE_INFINITY,
-  };
-}
-
-/** Procesa un fotograma nuevo: encuadre y calibración, o bien las acciones del museo. */
-function procesarFotograma(sesion: Sesion, frame: TrackingFrame, ahoraS: number, espacio: boolean): void {
-  ultimoFrame = frame;
-  const dtS = sesion.ultimoFrescoS === null ? 0 : Math.min(DT_MAX_S, ahoraS - sesion.ultimoFrescoS);
-  sesion.ultimoFrescoS = ahoraS;
-  sesion.ultimoDatoS = ahoraS;
-  // Las manos del avatar copian las detectadas; si no hay mano, su avatar se oculta (SPEC 5.5).
-  visual.museo.actualizarManos(frame.hands, frame.width, frame.height, sesion.opciones.tamanoMano, {
-    separacion: sesion.opciones.separacionManos,
-    ajuste: sesion.opciones.ajusteManoModelo,
-    limites: sesion.opciones.limitesMano,
-    ahoraS,
-    tiempoOcultarS: sesion.opciones.tiempoOcultarManoS,
-    umbralSaltoM: sesion.opciones.umbralSaltoManoM,
-  });
-
-  const framing = checkFraming(frame.pose);
-  const roll = frame.face ? headRollDeg(frame.face, frame.width, frame.height) : null;
-  const pitch = frame.facePose ? headPitchDeg(frame.facePose) : null;
-
-  // Los pasos se cuentan siempre para no acumularlos de golpe al terminar la calibración.
-  sesion.piernas.feed(ahoraS, legSample(frame.pose));
-  const pasosTotales = sesion.piernas.state(ahoraS).steps;
-  const pasos = pasosTotales - sesion.pasosVistos;
-  sesion.pasosVistos = pasosTotales;
-
-  const shoulderPx = frame.pose ? shoulderWidthPx(frame.pose, frame.width, frame.height) : null;
-  const ap = aplauso(frame.hands, shoulderPx, frame.width, frame.height, sesion.aplausoEstado, ahoraS);
-  sesion.aplausoEstado = ap.estado;
-
-  if (sesion.calibracion === null) {
-    const nueva = sesion.calibrador.alimentar(ahoraS, roll, pitch, framing === 'ok');
-    if (nueva) {
-      sesion.calibracion = nueva;
-      guardarCalibracion(nueva);
-    }
-    sesion.ui.aviso(avisoCalibracion(framing, sesion.calibrador.progreso, sesion.calibracion !== null));
+/** Las manos del avatar copian las detectadas por la cámara (SPEC 5.5). Con teclado no hay manos. */
+function dibujarManos(sesion: Sesion, lectura: LecturaEntrada): void {
+  if (lectura.manos === 'ocultar') {
+    visual.museo.ocultarManos();
     return;
   }
+  if (!lectura.manos) return;
+  const { opciones } = sesion;
+  visual.museo.actualizarManos(lectura.manos.manos, lectura.manos.ancho, lectura.manos.alto, opciones.tamanoMano, {
+    separacion: opciones.separacionManos,
+    ajuste: opciones.ajusteManoModelo,
+    limites: opciones.limitesMano,
+    ahoraS: lectura.ahoraS,
+    tiempoOcultarS: opciones.tiempoOcultarManoS,
+    umbralSaltoM: opciones.umbralSaltoManoM,
+  });
+}
 
-  // Señalar y pellizco dependen solo de la mano que señala, así que siguen funcionando sin cara.
-  const senal = senalar(sesion, frame);
-  // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
-  const accion = ap.detectado || espacio;
+/** Reparte una lectura con datos: a la misión lunar si está activa, o al museo. */
+function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
+  const { ahoraS } = lectura;
+  const apuntando = senalar(sesion, lectura.senal);
 
-  // Escena lunar: sus gestos (volante, caminata, golpe, agarre) van a la máquina de estados (SPEC 8).
+  // Escena lunar: volante, caminata, golpe y agarre van a la máquina de estados (SPEC 8).
   if (mision !== null) {
-    procesarMisionLuna(sesion, frame, {
+    aplicarLuna(sesion, {
       ahoraS,
-      dtS,
-      pasos,
-      roll,
-      aplauso: accion,
-      shoulderPx,
+      dtS: lectura.dtS,
+      aplauso: lectura.aplauso,
+      metros: lectura.avanceM,
+      volanteGrados: lectura.volanteGrados,
+      velocidadGolpeHombrosS: lectura.golpeHombrosS,
+      agarreNuevo: lectura.agarreNuevo,
     });
     return;
   }
 
-  // Sin cara no hay giro ni pasos: el movimiento se congela (SPEC 6). El aplauso, el espacio y el pellizco sí cuentan.
-  if (roll === null) {
-    if (accion) {
-      sesion.museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, apuntando: null, accion: true });
+  // Sin datos de movimiento (p. ej. sin cara), el movimiento se congela (SPEC 6). El aplauso sí cuenta.
+  if (!lectura.conMovimiento) {
+    if (lectura.aplauso) {
+      sesion.museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, lateralMetros: 0, apuntando: null, accion: true });
     }
     return;
   }
 
   sesion.museo.actualizar({
     ahoraS,
-    giroGrados: giroCabeza(roll, sesion.calibracion.rollNeutralGrados, dtS, sesion.opciones.sensibilidadGiro),
-    cabeceoGrados:
-      pitch === null
-        ? 0
-        : cabeceoCabeza(pitch, sesion.calibracion.pitchNeutralGrados, dtS, sesion.opciones.sensibilidadGiro),
-    metros: sesion.caminata.avanzar(ahoraS, dtS, pasos, sesion.opciones),
-    apuntando: senal.apuntando,
-    accion,
-  });
-}
-
-interface DatosMision {
-  ahoraS: number;
-  dtS: number;
-  pasos: number;
-  roll: number | null;
-  aplauso: boolean;
-  shoulderPx: number | null;
-}
-
-/** Arma la entrada de la misión lunar a partir del fotograma y la envía a la máquina de estados. */
-function procesarMisionLuna(sesion: Sesion, frame: TrackingFrame, datos: DatosMision): void {
-  // Sin cara no hay caminata (el movimiento se congela, SPEC 6); el volante sigue con las manos.
-  const metros = datos.roll === null ? 0 : sesion.caminata.avanzar(datos.ahoraS, datos.dtS, datos.pasos, sesion.opciones);
-  aplicarLuna(sesion, {
-    ahoraS: datos.ahoraS,
-    dtS: datos.dtS,
-    aplauso: datos.aplauso,
-    metros,
-    volanteGrados: volante(frame.hands, frame.width, frame.height)?.grados ?? null,
-    velocidadGolpeHombrosS: velocidadGolpe(sesion, frame, datos.ahoraS, datos.shoulderPx),
-    agarreNuevo: agarreNuevo(sesion, frame),
+    giroGrados: lectura.giroGrados,
+    cabeceoGrados: lectura.cabeceoGrados,
+    metros: lectura.avanceM,
+    lateralMetros: lectura.lateralM,
+    apuntando,
+    // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
+    accion: lectura.aplauso,
   });
 }
 
@@ -361,88 +264,22 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
   }
 }
 
-/** Velocidad máxima hacia abajo de las muñecas, en hombros/s (SPEC 8.3). Negativa o cero si suben o no hay datos. */
-function velocidadGolpe(sesion: Sesion, frame: TrackingFrame, ahoraS: number, shoulderPx: number | null): number {
-  let mayor = 0;
-  for (const mano of frame.hands) {
-    if (mano.label === 'Unknown') continue;
-    const y = mano.landmarks[HAND_IDX.wrist].y * frame.height;
-    const previa = sesion.munecasPrevias[mano.label];
-    sesion.munecasPrevias[mano.label] = { y, ahoraS };
-    if (!previa || shoulderPx === null || shoulderPx < 1) continue;
-    const dtS = ahoraS - previa.ahoraS;
-    if (dtS <= 0) continue;
-    mayor = Math.max(mayor, (y - previa.y) / shoulderPx / dtS);
-  }
-  return mayor;
-}
-
-/** Cierre nuevo del pellizco en cualquiera de las dos manos: el agarre de la misión lunar (SPEC 8.3). */
-function agarreNuevo(sesion: Sesion, frame: TrackingFrame): boolean {
-  let nuevo = false;
-  for (const lado of ['Left', 'Right'] as const) {
-    const mano = frame.hands.find((m) => m.label === lado);
-    const cerrado = pellizco(mano, frame.width, frame.height)?.cerrado ?? false;
-    if (cerrado && !sesion.pellizcosLuna[lado]) nuevo = true;
-    sesion.pellizcosLuna[lado] = cerrado;
-  }
-  return nuevo;
-}
-
-interface ResultadoSenalar {
-  /** Vitrina bajo el cursor o apuntada por el rayo; null si ninguna. */
-  apuntando: string | null;
-  /** True solo en el fotograma en que el pellizco de la mano que señala se cierra. */
-  pellizcoNuevo: boolean;
-}
-
 /**
- * Cursor (o rayo, según opciones) y pellizco de la mano que señala. El cursor se dibuja y se
- * mueve siempre que haya mano; si la mano no se ve, queda en su última posición, atenuado y sin vitrina.
+ * Dibuja el cursor (o nada, con el rayo) y devuelve la vitrina señalada, o null.
+ * Fuera del museo no hay vitrinas que señalar: el cursor se oculta.
  */
-function senalar(sesion: Sesion, frame: TrackingFrame): ResultadoSenalar {
-  const { opciones, cursorUi } = sesion;
-  const mano = frame.hands.find((m) => m.label === opciones.manoSenaladora);
-
-  const pinch = pellizco(mano, frame.width, frame.height);
-  const cerrado = pinch?.cerrado ?? false;
-  const pellizcoNuevo = cerrado && !sesion.pellizcoCerrado;
-  sesion.pellizcoCerrado = cerrado;
-
-  // En una escena no hay vitrinas que señalar: se oculta el cursor.
-  if (sesion.museo.pantalla.tipo !== 'museo') {
+function senalar(sesion: Sesion, senal: Senal | null): string | null {
+  const { cursorUi } = sesion;
+  if (sesion.museo.pantalla.tipo !== 'museo' || senal === null) {
     cursorUi.mostrar(false);
-    return { apuntando: null, pellizcoNuevo: false };
+    return null;
   }
-
-  if (opciones.metodoSenalar === 'rayo') {
+  if (senal.tipo === 'rayo') {
     cursorUi.mostrar(false);
-    const dir = direccionSenalar(frame, opciones.manoSenaladora);
-    return { apuntando: dir ? visual.museo.vitrinaEnDireccion(dir) : null, pellizcoNuevo };
+    return senal.direccion ? visual.museo.vitrinaEnDireccion(senal.direccion) : null;
   }
-
-  if (mano) {
-    const punta = mano.landmarks[HAND_IDX.indexTip];
-    const pos = sesion.cursorSuavizado.actualizar(
-      puntaACursor(punta, opciones.sensibilidadCursor),
-      opciones.suavizadoCursor,
-    );
-    cursorUi.mostrar(true);
-    cursorUi.mover(pos.x, pos.y, false);
-    return { apuntando: visual.museo.vitrinaEnPantalla(pos.x, pos.y), pellizcoNuevo };
-  }
-
-  const ultima = sesion.cursorSuavizado.ultima();
-  cursorUi.mostrar(ultima !== null);
-  if (ultima) cursorUi.mover(ultima.x, ultima.y, true);
-  return { apuntando: null, pellizcoNuevo };
-}
-
-/** Aviso durante la calibración: encuadre primero, luego instrucción y progreso (SPEC 2.1 y 3). */
-function avisoCalibracion(framing: FramingStatus, progreso: number, terminada: boolean): string | null {
-  if (terminada) return null;
-  if (framing === 'retroceder') return t('encuadre_retroceder');
-  if (framing === 'acercarse') return t('encuadre_acercarse');
-  const porcentaje = String(Math.round(progreso * 100));
-  return `${t('calibracion_instruccion')} ${t('calibracion_progreso', { porcentaje })}`;
+  // Cursor: sigue la punta del índice (cámara) o es la mira del centro (teclado). Atenuado, no señala.
+  cursorUi.mostrar(true);
+  cursorUi.mover(senal.x, senal.y, !senal.activo);
+  return senal.activo ? visual.museo.vitrinaEnPantalla(senal.x, senal.y) : null;
 }
