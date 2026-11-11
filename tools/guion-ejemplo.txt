@@ -1,0 +1,4 @@
+# Guion de ejemplo del mentor con las seis marcas. Cada marca se pega a la palabra que la precede.
+# Las marcas no se ven ni se dicen: los subtítulos y la voz usan el texto limpio.
+# Una marca por frase como máximo, y frases lo bastante largas para que cada gesto termine antes del siguiente.
+Hoy quiero contarte algo realmente importante {heroico} para ti y para todos los que visitan este museo. Son cuatro pasos {exacto} y los vamos a ver con calma, uno por uno. Mira hacia la vitrina {directo} que tienes justo delante de ti. Esto no admite discusión {poderoso} porque lo hemos comprobado varias veces. Te lo digo con franqueza {honesto}: no todo salió a la primera. Gracias por venir {cercano} y por quedarte hasta el final.

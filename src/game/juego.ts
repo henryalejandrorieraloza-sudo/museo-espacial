@@ -5,7 +5,10 @@
 
 import { visual } from '../visual/museo';
 import { crearVoz, type Voz } from '../audio/voz';
-import { t, type ClaveTexto } from '../i18n';
+import { cargarCatalogoVoz, type CatalogoVoz } from '../audio/lineaGrabada';
+import { crearOyenteMentor } from './mentorVoz';
+import { assetUrl } from '../tracking/assets';
+import { t, tGuion, type ClaveTexto } from '../i18n';
 import { requireEl } from '../ui/dom';
 import { crearCursor, type CursorUi } from '../ui/cursor';
 import { crearInicioUi } from '../ui/inicioUi';
@@ -49,16 +52,26 @@ function texto(clave: ClaveTexto): string {
   return t(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave);
 }
 
+/** Igual que `texto`, pero con las marcas de gesto del mentor: solo para pasarlo a la voz. */
+function textoGuion(clave: ClaveTexto): string {
+  return tGuion(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave);
+}
+
 /** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. Sin voz, el subtítulo sale igual. */
 function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto): void {
   voz.cancelar();
-  voz.hablar(texto(clave), undefined, (frase) => ui.subtitulos(frase));
+  voz.hablar(textoGuion(clave), undefined, (frase) => ui.subtitulos(frase));
 }
 
 const mensajeDe = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 export async function iniciarJuego(container: HTMLElement): Promise<void> {
-  const voz = crearVoz('es-ES');
+  // Audio grabado opcional (public/voz/, ver tools/README.md). Sin catálogo o si tarda, se usa la síntesis de voz.
+  // Se carga en segundo plano: no retrasa el arranque, y las líneas que lleguen tarde se hablan con síntesis.
+  const catalogoVoz: CatalogoVoz = new Map();
+  void cargarCatalogoVoz(assetUrl('voz/')).then((c) => c.forEach((linea, clave) => catalogoVoz.set(clave, linea)));
+  const voz = crearVoz('es-ES', catalogoVoz);
+  voz.escuchar(crearOyenteMentor());
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
   const cursorUi = crearCursor();
@@ -74,7 +87,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         // Al terminar la última (no antes) se habilita entrar (SPEC 7.2).
         ui.indicarEntrar(null);
         voz.hablar(
-          t(evento.id),
+          tGuion(evento.id),
           () => museo.terminoVoz(evento.id),
           (frase) => ui.subtitulos(frase),
         );
@@ -106,7 +119,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         mision = null;
         ui.ocultarMision();
         ui.subtitulos(t('regreso_museo'));
-        voz.hablar(t('regreso_museo'));
+        voz.hablar(tGuion('regreso_museo'));
         break;
     }
   });

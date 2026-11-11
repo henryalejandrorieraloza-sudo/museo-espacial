@@ -1,0 +1,15 @@
+{
+  "provider": "elevenlabs",
+  "voice": "ID_DE_LA_VOZ",
+  "model": "eleven_multilingual_v2",
+  "language": "es",
+  "apiKeyEnv": "TTS_API_KEY",
+  "outputDir": "public/voz",
+  "claves": [
+    "vitrina_lrv",
+    "vitrina_perseverance",
+    "regreso_museo",
+    "luna_entrando_museo",
+    "luna_entrando_museo_teclado"
+  ]
+}

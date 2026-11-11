@@ -1,9 +1,9 @@
 {
-  "vitrina_lrv": "Este es el LRV, el vehículo lunar del Apolo 17. Los astronautas lo usaron en 1972 y se quedó en la Luna. Pronto podrás conocer su misión.",
-  "vitrina_perseverance": "Este es Perseverance, un rover de Marte. Llegó al cráter Jezero en febrero de 2021 y sigue explorando el planeta. Pronto podrás conocer su misión.",
+  "vitrina_lrv": "Este es el LRV {directo}, el vehículo lunar del Apolo 17. Los astronautas lo usaron en 1972 {exacto} y se quedó en la Luna. Pronto podrás conocer su misión {cercano}.",
+  "vitrina_perseverance": "Este es Perseverance {directo}, un rover de Marte. Llegó al cráter Jezero en febrero de 2021 {exacto} y sigue explorando el planeta. Pronto podrás conocer su misión {cercano}.",
   "escena_luna_construccion": "Luna — misión en construcción",
   "escena_marte_construccion": "Marte — misión en construcción",
-  "regreso_museo": "Buen recorrido. Cuando la misión esté lista, podrás vivirla completa.",
+  "regreso_museo": "Buen recorrido {cercano}. Cuando la misión esté lista, podrás vivirla completa.",
   "volver_museo": "Volver al museo",
   "entrar_aplauso": "Aplaude para entrar (o pulsa espacio)",
   "ayuda": "Camina subiendo las rodillas · inclina la cabeza para girar · señala una vitrina 1.5 s · aplaude para entrar",
