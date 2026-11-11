@@ -5,6 +5,7 @@ import { EXPOSICION, crearAmbienteMuseo, crearPostproceso, type AmbienteMuseo } 
 import { ALTURA_PEDESTAL, LADO_VITRINA, RADIO_CAMINABLE, RADIO_PROYECTOR, crearRotonda, crearVitrinaArtefacto } from './arquitectura';
 import { ESCENAS, MODELOS, type ConfigModelo } from './config';
 import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, colocarLRV, crearEscenaLuna, crearPostprocesoLuna, ojosEnLRV } from './lunaEscena';
+import { crearMentor, type EstadoMentor, type GestoMentor } from './mentor';
 import { alturaLuna } from './lunaTerreno';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
 import { ARQ } from './paleta';
@@ -48,10 +49,6 @@ const TOLERANCIA_RAD = THREE.MathUtils.degToRad(12);
 
 /** Colores del mentor, el halo y las escenas de misión. La paleta del museo está en paleta.ts. */
 const COLOR = {
-  /** Robot-mentor: todo azul, visor oscuro, ojos y sonrisa claros (spec §5). */
-  mentor: 0x2f6fd6,
-  mentorVisor: 0x14213d,
-  mentorOjos: 0xcfefff,
   halo: 0xffd60a,
   /** Acento de Perseverance en la escena de Marte. */
   acentoPerseverance: 0xff8a3d,
@@ -89,11 +86,6 @@ function material(color: number, extra: THREE.MeshStandardMaterialParameters = {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true, ...extra });
 }
 
-/** Material sin iluminación: para luces emisivas y anillos de color constante. */
-function materialBasico(color: number): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ color });
-}
-
 function caja(ancho: number, alto: number, fondo: number, color: number): THREE.Mesh {
   return new THREE.Mesh(new THREE.BoxGeometry(ancho, alto, fondo), material(color));
 }
@@ -109,41 +101,6 @@ function malla(
   objeto.position.set(...posicion);
   objeto.rotation.set(...giro);
   return objeto;
-}
-
-/** Figura de color sólido, sin iluminación (anillos de luz, luces interiores). */
-function mallaBasica(
-  geometria: THREE.BufferGeometry,
-  color: number,
-  posicion: [number, number, number] = [0, 0, 0],
-  giro: [number, number, number] = [0, 0, 0],
-): THREE.Mesh {
-  const objeto = new THREE.Mesh(geometria, materialBasico(color));
-  objeto.position.set(...posicion);
-  objeto.rotation.set(...giro);
-  return objeto;
-}
-
-/**
- * Robot-mentor compacto: cuerpo facetado azul, visor oscuro con ojos y sonrisa fijos, brazos cortos y sin piernas.
- * El origen es el centro del cuerpo. Mira hacia +Z (el visor); `actualizarMentor` lo gira hacia el jugador.
- */
-function crearMentor(): THREE.Object3D {
-  const grupo = new THREE.Group();
-  const cuerpo = malla(new THREE.IcosahedronGeometry(0.3, 1), COLOR.mentor);
-  cuerpo.scale.set(1, 1.15, 1);
-  grupo.add(cuerpo);
-  // Visor oscuro sobre la cara, con ojos y sonrisa claros.
-  grupo.add(malla(new THREE.BoxGeometry(0.42, 0.24, 0.06), COLOR.mentorVisor, [0, 0.04, 0.28]));
-  for (const x of [-0.1, 0.1]) {
-    grupo.add(mallaBasica(new THREE.SphereGeometry(0.035, 6, 4), COLOR.mentorOjos, [x, 0.07, 0.33]));
-  }
-  grupo.add(mallaBasica(new THREE.TorusGeometry(0.07, 0.012, 4, 10, Math.PI), COLOR.mentorOjos, [0, -0.03, 0.33], [0, 0, Math.PI]));
-  // Brazos cortos a los lados.
-  for (const x of [-0.36, 0.36]) {
-    grupo.add(malla(new THREE.CylinderGeometry(0.07, 0.07, 0.3, 6), COLOR.mentor, [x, -0.05, 0], [0, 0, Math.PI / 2]));
-  }
-  return grupo;
 }
 
 /** Anillo amarillo delgado de 0.6 m de radio, en el plano XY (su normal apunta a +Z). */
@@ -380,6 +337,7 @@ async function iniciar(container: HTMLElement): Promise<void> {
     if (mentor?.visible) {
       mentor.position.y = ALTURA_MENTOR + Math.sin(t * VELOCIDAD_FLOTADO) * AMPLITUD_FLOTADO;
       mentor.lookAt(posicion.x, mentor.position.y, posicion.z);
+      mentor.userData.actualizar?.(t);
     }
     // El halo siempre se gira hacia el jugador para que se vea como anillo.
     if (halo?.visible) halo.lookAt(camaraNueva.position);
@@ -578,6 +536,21 @@ function posicionJugador(): { x: number; z: number } {
   return { x: posicion.x, z: posicion.z };
 }
 
+/** Cambia el estado visual del mentor (LED y brazos). Hoy nadie lo llama: queda listo para enlazarlo con la voz. */
+function mentorEstado(estado: EstadoMentor): void {
+  mentor?.userData.setState?.(estado);
+}
+
+/** Pide un gesto al mentor (cue del guion, inicio de frase…). Lo usa la sincronía con la voz. */
+function mentorGesto(gesto: GestoMentor): void {
+  mentor?.userData.gesto?.(gesto);
+}
+
+/** Amplitud real (0..1) del audio del mentor para los LED; `null` = pulso propio. */
+function mentorAmplitud(amplitud: number | null): void {
+  mentor?.userData.setAmplitud?.(amplitud);
+}
+
 /** Hace aparecer al mentor junto al jugador, a su derecha y un poco delante. El flotado lo anima el bucle. */
 function mentorAparece(): void {
   if (!mentor) return;
@@ -696,6 +669,9 @@ export const visual = {
     moverCamara,
     posicionJugador,
     mentorAparece,
+    mentorEstado,
+    mentorGesto,
+    mentorAmplitud,
     vitrinaEnDireccion,
     vitrinaEnPantalla,
     entrarEscena,
