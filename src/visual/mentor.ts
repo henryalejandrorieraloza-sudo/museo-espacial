@@ -118,6 +118,33 @@ function geometriaAspa(): THREE.BufferGeometry {
   return g;
 }
 
+// Resortes amortiguados de las articulaciones: ζ = 0,72 da un sobreimpulso de exp(−πζ/√(1−ζ²)) ≈ 3,8 % y un
+// asentamiento al 2 % de 4/(ζ·ω) ≈ 0,75 s en la raíz (ω = 7,4 rad/s) y ≈ 0,84 s en la punta (ω = 6,6 rad/s).
+const OMEGA_RAIZ = 7.4;
+const OMEGA_PUNTA = 6.6;
+const ZETA = 0.72;
+/** Cada segmento sigue al anterior con este retraso (s): el brazo se dobla como un cable flexible. */
+const RETRASO_JUNTA_S = 0.05;
+
+/** Valor pseudoaleatorio estable en [−1, 1] para (semilla, entero). */
+function azarEntero(semilla: number, i: number): number {
+  let h = (Math.imul(i, 374761393) + Math.imul(semilla, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 2147483648 - 1;
+}
+
+/** Ruido suave 1D en [−1, 1] (dos octavas), distinto para cada semilla. No es periódico: no se repite en ningún bucle. */
+function ruido(semilla: number, x: number): number {
+  const una = (sem: number, v: number): number => {
+    const i = Math.floor(v);
+    const f = v - i;
+    const u = f * f * (3 - 2 * f);
+    return azarEntero(sem, i) * (1 - u) + azarEntero(sem, i + 1) * u;
+  };
+  return (una(semilla, x) + 0.5 * una(semilla + 101, x * 2.3)) / 1.5;
+}
+
 interface Brazo {
   raiz: THREE.Group;
   juntas: THREE.Group[];
@@ -180,6 +207,9 @@ export function crearMentor(): THREE.Object3D {
   const blanco = material(COLOR.blanco, 0.4);
   const negro = material(COLOR.negro, 0.35);
   const goma = material(COLOR.goma, 0.95);
+  // Cristal del visor: negro sin brillo especular. Con el negro brillante, la luz ámbar del museo dibujaba un rectángulo
+  // grisáceo en la faceta central; el visor debe verse como cristal negro limpio con solo las barras LED.
+  const vidrio = new THREE.MeshPhysicalMaterial({ color: 0x040508, roughness: 1, metalness: 0, specularIntensity: 0, flatShading: true });
   const gris = material(COLOR.gris, 0.5);
 
   // Cabeza (pivote en su base).
@@ -189,7 +219,7 @@ export function crearMentor(): THREE.Object3D {
   domo.name = 'domo';
   cabeza.add(domo);
   // Visor: óvalo negro grande de esquinas redondeadas, centrado y por debajo del centro; asoma por la frente plana.
-  const visor = malla(geometriaVisor(), negro, [0, V.y, V.z]);
+  const visor = malla(geometriaVisor(), vidrio, [0, V.y, V.z]);
   visor.name = 'visor';
   cabeza.add(visor);
 
@@ -258,20 +288,27 @@ export function crearMentor(): THREE.Object3D {
   // curva lateral total). Ángulos en grados; cabeceo + = arriba, giro − = hacia delante, flexión + = la cadena se curva
   // hacia arriba, lateral − = la cadena se curva hacia dentro (hacia el cuerpo). Se definen para el brazo con la cadena
   // hacia +X (el izquierdo está espejado), así que ambos usan las mismas reglas. En los gestos de un solo brazo, el que
-  // gesticula es el segundo de la pareja (se alterna con `invertir`) y el otro se queda en la pose neutra.
+  // gesticula es el segundo de la pareja (se alterna con `inv`) y el otro se queda en reposo.
   const GRAD = Math.PI / 180;
-  const NEUTRA = [-5, -15, -35, 0.5, 0.5, 0];
+  /** Reposo con la caída por peso: los brazos cuelgan con el codo algo doblado, nunca rectos. */
+  const REPOSO = [-35, -6, -50, 0.3, 0.5, -4];
+  /** Cada gesto llega solo al 85 % de su extensión respecto al reposo (cabeceo, giro, flexión y curva lateral). */
+  const ESCALA_GESTO = 0.85;
+  /** Asimetría fija del reposo: los dos brazos nunca son imagen en espejo (cabeceo, giro, flexión en grados). */
+  const ASIMETRIA = [
+    [2, -3, 4],
+    [0, 0, 0],
+  ];
   const POSES = {
-    // Reposo: brazos colgando, algo separados del collar.
-    N: [NEUTRA, NEUTRA],
+    N: [REPOSO, REPOSO],
     // heroico: un brazo muy alto sobre el hombro, garra cerrada e inclinada un poco hacia delante.
-    heroico: [NEUTRA, [6, -15, 90, 0.1, 0.15, 0]],
+    heroico: [REPOSO, [6, -15, 90, 0.1, 0.15, 0]],
     // exacto: la garra casi en el collar (el brazo se pliega hacia dentro). El pulso corto se añade aparte.
-    exacto: [NEUTRA, [-15, -80, 20, 0.1, 0.4, -150]],
+    exacto: [REPOSO, [-15, -80, 20, 0.1, 0.4, -150]],
     // directo: un brazo al frente y algo hacia fuera, garra abierta.
-    directo: [NEUTRA, [5, -50, 0, 0.2, 1, 0]],
+    directo: [REPOSO, [5, -50, 0, 0.2, 1, 0]],
     // poderoso: un brazo doblado con la garra cerrada cerca del pecho (el cuerpo se inclina aparte).
-    poderoso: [NEUTRA, [-20, -60, 50, 0.1, 0.15, -120]],
+    poderoso: [REPOSO, [-20, -60, 50, 0.1, 0.15, -120]],
     // honesto: los dos brazos bajan y se abren un poco hacia fuera, garras abiertas.
     honesto: [[-20, 10, -30, 0.6, 1, 0], [-20, 10, -30, 0.6, 1, 0]],
     // cercano: los dos brazos se pliegan despacio hacia el cuerpo.
@@ -280,7 +317,7 @@ export function crearMentor(): THREE.Object3D {
   type PoseId = keyof typeof POSES;
   interface DefGesto {
     pose: PoseId;
-    /** Segundos de entrada, de mantenida y de salida hacia la pose neutra (todos con smoothstep). */
+    /** Segundos hasta que el gesto está formado, de mantenida y de salida hacia el reposo. */
     entrada: number;
     sosten: number;
     salida: number;
@@ -291,63 +328,144 @@ export function crearMentor(): THREE.Object3D {
     /** Pulso corto del brazo (≈0,3 s) al llegar a la pose. */
     pulso: boolean;
   }
+  // `entrada` cuenta la subida de los resortes y el retraso a lo largo de la cadena (≈0,6 s entre hombro y punta).
   const GESTOS: Record<CueNombre, DefGesto> = {
-    heroico: { pose: 'heroico', entrada: 1, sosten: 1.5, salida: 1, ambos: false, inclina: 0, pulso: false },
-    exacto: { pose: 'exacto', entrada: 1, sosten: 0.9, salida: 1, ambos: false, inclina: 0, pulso: true },
-    directo: { pose: 'directo', entrada: 1, sosten: 1.2, salida: 1, ambos: false, inclina: 0, pulso: false },
-    poderoso: { pose: 'poderoso', entrada: 1, sosten: 1.2, salida: 1, ambos: false, inclina: 4 * GRAD, pulso: false },
-    honesto: { pose: 'honesto', entrada: 1, sosten: 1.5, salida: 1, ambos: true, inclina: 0, pulso: false },
-    cercano: { pose: 'cercano', entrada: 1, sosten: 1.5, salida: 1, ambos: true, inclina: 0, pulso: false },
+    heroico: { pose: 'heroico', entrada: 1.3, sosten: 1.5, salida: 1, ambos: false, inclina: 0, pulso: false },
+    exacto: { pose: 'exacto', entrada: 1.3, sosten: 0.9, salida: 1, ambos: false, inclina: 0, pulso: true },
+    directo: { pose: 'directo', entrada: 1.3, sosten: 1.2, salida: 1, ambos: false, inclina: 0, pulso: false },
+    poderoso: { pose: 'poderoso', entrada: 1.3, sosten: 1.2, salida: 1, ambos: false, inclina: 4 * GRAD, pulso: false },
+    honesto: { pose: 'honesto', entrada: 1.3, sosten: 1.5, salida: 1, ambos: true, inclina: 0, pulso: false },
+    cercano: { pose: 'cercano', entrada: 1.3, sosten: 1.5, salida: 1, ambos: true, inclina: 0, pulso: false },
   };
-  const PITCH_MIN = -20 * GRAD;
+  /** Anticipación: antes del gesto, el brazo va un poco al lado contrario durante este tiempo (s). */
+  const ANTICIPACION_S = 0.18;
+  const PITCH_MIN = -55 * GRAD;
   const PITCH_MAX = 75 * GRAD;
   const YAW_MIN = -90 * GRAD;
   const YAW_MAX = 10 * GRAD;
-  const MAX_FLEXION = 90 * GRAD;
   const limitar = (v: number, a: number, b: number): number => Math.min(Math.max(v, a), b);
   // Reparto de la flexión y de la curva lateral: más hacia la punta, para que el antebrazo se curve más que la parte alta.
   const sumaPesos = Array.from({ length: SEGMENTOS_BRAZO }, (_, i) => 0.5 + i / (SEGMENTOS_BRAZO - 1)).reduce((x, y) => x + y, 0);
   const pesoFlexion = Array.from({ length: SEGMENTOS_BRAZO }, (_, i) => (0.5 + i / (SEGMENTOS_BRAZO - 1)) / sumaPesos);
-  const pesoOnda = Array.from({ length: SEGMENTOS_BRAZO }, (_, i) => (i / (SEGMENTOS_BRAZO - 1)) ** 1.5);
+  // Amplitud del micromovimiento por articulación: crece hacia la punta (cerca del hombro se acumularía en la cabeza).
+  const pesoRuido = Array.from({ length: SEGMENTOS_BRAZO }, (_, i) => 0.5 + 0.5 * (i / (SEGMENTOS_BRAZO - 1)) ** 1.5);
+  const RUIDO_Z = 2 * GRAD;
+  const RUIDO_Y = 1.5 * GRAD;
+  const FREC_RUIDO = 0.35;
 
-  // Mezclador de poses: 6 valores por brazo (2 brazos), sin crear objetos por fotograma.
+  // Objetivos de pose: 6 valores por brazo (2 brazos). Los resortes siguen estos objetivos; no hay interpolación directa.
   const N_VAL = 6;
-  const desde = new Float32Array(2 * N_VAL);
-  const hasta = new Float32Array(2 * N_VAL);
-  const actual = new Float32Array(2 * N_VAL);
-  function cargar(destino: Float32Array, id: PoseId, invertir: boolean): void {
+  const objPose = new Float32Array(2 * N_VAL);
+  const objPrevio = new Float32Array(2 * N_VAL);
+  const anticOff = new Float32Array(2 * N_VAL);
+  const objEnvio = new Float32Array(2 * N_VAL);
+  const restoRad = (j: number): number => (j === 3 || j === 4 ? REPOSO[j] : REPOSO[j] * GRAD);
+  /** Rellena `destino` con la pose `id`: 85 % de extensión, asimetría fija, y en gestos de un brazo un 10 % de simpatía del otro. */
+  function cargarObjetivo(destino: Float32Array, id: PoseId, inv: boolean, ambos: boolean, lider: number): void {
     for (let k = 0; k < 2; k++) {
-      const src = POSES[id][invertir ? 1 - k : k];
-      for (let j = 0; j < N_VAL; j++) destino[k * N_VAL + j] = j === 3 || j === 4 ? src[j] : src[j] * GRAD;
+      const src = POSES[id][inv ? 1 - k : k];
+      for (let j = 0; j < N_VAL; j++) {
+        if (j === 3 || j === 4) {
+          destino[k * N_VAL + j] = src[j];
+        } else {
+          destino[k * N_VAL + j] = (REPOSO[j] + ESCALA_GESTO * (src[j] - REPOSO[j])) * GRAD;
+        }
+      }
+      for (let j = 0; j < 3; j++) destino[k * N_VAL + j] += ASIMETRIA[k][j] * GRAD;
+    }
+    const otro = 1 - lider;
+    for (const j of [0, 1, 2, 5]) {
+      if (ambos) {
+        // El que sigue llega a ≈92 % de la amplitud del que lidera.
+        const r = restoRad(j);
+        destino[otro * N_VAL + j] = r + 0.92 * (destino[otro * N_VAL + j] - r);
+      } else {
+        destino[otro * N_VAL + j] += 0.1 * (destino[lider * N_VAL + j] - destino[otro * N_VAL + j]);
+      }
     }
   }
-  let estado: EstadoMentor = 'idle';
-  let moviendo = false;
-  let reloj = 0;
-  let duracion = 1;
-  cargar(actual, 'N', false);
-  desde.set(actual);
-  hasta.set(actual);
+  cargarObjetivo(objPose, 'N', false, false, 1);
+  objPrevio.set(objPose);
 
-  /** Empieza a mover hacia la pose `id` (smoothstep, `dur` s) desde donde esté ahora: nunca salta. */
-  function irAPose(id: PoseId, inv: boolean, dur: number): void {
-    desde.set(actual);
-    cargar(hasta, id, inv);
-    moviendo = true;
-    reloj = 0;
-    duracion = dur;
+  // Historial de objetivos para el retraso a lo largo de la cadena: la articulación i sigue al objetivo con i·50 ms de retraso.
+  const HN = 256;
+  const histT = Float32Array.from({ length: HN }, (_, i) => -1e6 + i);
+  const histV = new Float32Array(HN * 2 * N_VAL);
+  for (let i = 0; i < HN; i++) histV.set(objPose, i * 2 * N_VAL);
+  let histIdx = 0;
+  /** Retraso extra de cada brazo (s): el que sigue llega después del que lidera. */
+  const retrasoBrazo = new Float32Array(2);
+
+  // Estado de los resortes (ángulo y velocidad) de cada articulación, de la raíz del hombro y de la apertura de garra.
+  const zPos = new Float32Array(2 * SEGMENTOS_BRAZO);
+  const zVel = new Float32Array(2 * SEGMENTOS_BRAZO);
+  const yPos = new Float32Array(2 * SEGMENTOS_BRAZO);
+  const yVel = new Float32Array(2 * SEGMENTOS_BRAZO);
+  const rPos = new Float32Array(4); // [cabeceo izq, cabeceo der, giro izq, giro der]
+  const rVel = new Float32Array(4);
+  const garra = new Float32Array(2);
+  for (let k = 0; k < 2; k++) {
+    const o = k * N_VAL;
+    rPos[k] = objPose[o];
+    rPos[2 + k] = objPose[o + 1];
+    garra[k] = objPose[o + 4];
+    for (let i = 0; i < SEGMENTOS_BRAZO; i++) {
+      zPos[k * SEGMENTOS_BRAZO + i] = pesoFlexion[i] * objPose[o + 2] + objPose[o + 3] * curvaBase[i];
+      yPos[k * SEGMENTOS_BRAZO + i] = pesoFlexion[i] * objPose[o + 5];
+    }
   }
 
-  // Gestos de orador. Solo uno a la vez: mientras uno está activo (entrada + mantenida + salida) los demás se descartan,
-  // porque cada gesto empieza en su palabra y no podría empezar a media palabra más tarde. Máximo uno por frase.
+  // Deriva del reposo: cada 4–7 s un brazo cambia a otro ángulo de reposo cercano (5–12° de diferencia, cabeceo y flexión),
+  // suavizado durante 1,5–2,5 s; el otro brazo lo sigue 0,7–1,4 s después, así que nunca van a la vez.
+  const DERIVA_MAX = 14 * GRAD;
+  const derivaDe = new Float32Array(4); // [cabeceo izq, cabeceo der, flexión izq, flexión der] al empezar el tramo
+  const derivaA = new Float32Array(4);
+  const derivaT0 = new Float32Array(2);
+  const derivaDur = new Float32Array(2).fill(2);
+  const derivaProx = new Float32Array([2.5, 4.5]);
+  const derivaSigue = [false, false];
+  const pesoGesto = new Float32Array(2);
+  let semillaDeriva = 12345;
+  const azar = (): number => {
+    semillaDeriva = (semillaDeriva + 0x6d2b79f5) | 0;
+    let x = Math.imul(semillaDeriva ^ (semillaDeriva >>> 15), 1 | semillaDeriva);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+  const suave = (u: number): number => {
+    const c = Math.min(Math.max(u, 0), 1);
+    return c * c * (3 - 2 * c);
+  };
+  const derivaActual = (k: number, j: number, t: number): number =>
+    derivaDe[2 * j + k] + (derivaA[2 * j + k] - derivaDe[2 * j + k]) * suave((t - derivaT0[k]) / derivaDur[k]);
+  /** Nuevo ángulo de reposo del brazo k: 5–12° de diferencia, hacia el lado con más margen. */
+  function nuevaDeriva(k: number, t: number): void {
+    for (let j = 0; j < 2; j++) {
+      const actual = derivaActual(k, j, t);
+      derivaDe[2 * j + k] = actual;
+      const delta = (5 + 7 * azar()) * GRAD * (j === 1 ? 0.8 : 1);
+      const signo = actual > 0.4 * DERIVA_MAX ? -1 : actual < -0.4 * DERIVA_MAX ? 1 : azar() < 0.5 ? -1 : 1;
+      derivaA[2 * j + k] = limitar(actual + signo * delta, -DERIVA_MAX, DERIVA_MAX);
+    }
+    derivaT0[k] = t;
+    derivaDur[k] = 1.5 + azar();
+  }
+
+  let estado: EstadoMentor = 'idle';
+
+  // Gestos de orador. Solo uno a la vez: mientras uno está activo (anticipación + entrada + mantenida + salida) los demás se
+  // descartan, porque cada gesto empieza en su palabra y no podría empezar a media palabra más tarde. Máximo uno por frase.
   let activo: DefGesto | null = null;
+  /** Tiempo del gesto: negativo durante la anticipación. */
   let tGesto = 0;
   let saliendo = false;
   let pulsoHecho = false;
   let gestoEnFrase = false;
   let alternar = false;
+  let alternarAmbos = false;
   let brazoGesto = 1;
   let inclinacion = 0;
+  let giroCabeza = 0;
   const golpeAmp = new Float32Array(2);
   const golpeDur = new Float32Array(2);
   const golpeT = new Float32Array(2).fill(-1);
@@ -358,21 +476,24 @@ export function crearMentor(): THREE.Object3D {
     golpeDur[brazo] = dur;
     golpeT[brazo] = 0;
   }
+  function irAReposo(): void {
+    retrasoBrazo.fill(0);
+    cargarObjetivo(objPose, 'N', false, false, 1);
+  }
 
   // Estado y animación (los llama `museo.ts`; no hay lógica de voz aquí).
   let habla = 0;
   let ultimo = 0;
-  let faseOnda = 0;
   grupo.userData.setState = (nuevo: EstadoMentor): void => {
     if (nuevo === estado) return;
     estado = nuevo;
     if (nuevo === 'idle') {
-      // Pausa o fin: el gesto en curso se abandona y los brazos vuelven a neutro en 1 s, sin saltar.
+      // Pausa o fin: el gesto en curso se abandona y los resortes llevan los brazos al reposo, sin saltar.
       activo = null;
       saliendo = false;
       gestoEnFrase = false;
       golpeT.fill(-1);
-      irAPose('N', false, 1);
+      irAReposo();
     }
   };
   /**
@@ -385,18 +506,35 @@ export function crearMentor(): THREE.Object3D {
       return;
     }
     if (estado !== 'speaking' || gestoEnFrase) return;
-    // Con otro gesto en curso se descarta, salvo que ya haya vuelto a neutro en más de un 60 % de su salida.
+    // Con otro gesto en curso se descarta, salvo que ya haya vuelto al reposo en más de un 60 % de su salida.
     if (activo !== null && !(saliendo && tGesto >= activo.entrada + activo.sosten + activo.salida * 0.6)) return;
     const def = GESTOS[g];
     activo = def;
-    tGesto = 0;
     saliendo = false;
     pulsoHecho = false;
     gestoEnFrase = true;
-    const inv = !def.ambos && alternar;
-    if (!def.ambos) alternar = !alternar;
-    brazoGesto = inv ? 0 : 1;
-    irAPose(def.pose, inv, def.entrada);
+    let inv = false;
+    if (def.ambos) {
+      alternarAmbos = !alternarAmbos;
+      brazoGesto = alternarAmbos ? 1 : 0;
+    } else {
+      inv = alternar;
+      alternar = !alternar;
+      brazoGesto = inv ? 0 : 1;
+    }
+    objPrevio.set(objPose);
+    cargarObjetivo(objPose, def.pose, inv, def.ambos, brazoGesto);
+    // Retraso del brazo que sigue (en gestos de un brazo, el otro acompaña apenas y más tarde).
+    retrasoBrazo[brazoGesto] = 0;
+    retrasoBrazo[1 - brazoGesto] = def.ambos ? 0.22 : 0.3;
+    // Anticipación: contra el sentido del cambio, un 25 % de este (máx. 14° de flexión y 6° de cabeceo).
+    anticOff.fill(0);
+    for (let k = 0; k < 2; k++) {
+      const o = k * N_VAL;
+      anticOff[o] = -limitar(0.25 * (objPose[o] - objPrevio[o]), -6 * GRAD, 6 * GRAD);
+      anticOff[o + 2] = -limitar(0.25 * (objPose[o + 2] - objPrevio[o + 2]), -14 * GRAD, 14 * GRAD);
+    }
+    tGesto = -ANTICIPACION_S;
   };
   /** Amplitud real (0..1) del audio que suena; `null` devuelve los LED a su pulso propio. */
   grupo.userData.setAmplitud = (a: number | null): void => {
@@ -407,31 +545,51 @@ export function crearMentor(): THREE.Object3D {
     ultimo = t;
     habla += ((estado === 'speaking' ? 1 : 0) - habla) * (1 - Math.exp(-6 * dt));
 
-    // Mezclador: lleva los ángulos de la pose anterior a la nueva con smoothstep.
-    if (moviendo) {
-      reloj += dt;
-      const u = Math.min(reloj / duracion, 1);
-      const suave = u * u * (3 - 2 * u);
-      for (let i = 0; i < 2 * N_VAL; i++) actual[i] = desde[i] + (hasta[i] - desde[i]) * suave;
-      if (u >= 1) moviendo = false;
-    }
-    // Línea de tiempo del gesto activo: entrada, mantenida (con el pulso de "exacto") y vuelta a neutro.
+    // Línea de tiempo del gesto activo: anticipación, formación, mantenida (con el pulso de "exacto") y vuelta al reposo.
     if (activo) {
       tGesto += dt;
       if (activo.pulso && !pulsoHecho && tGesto >= activo.entrada) {
         pulsoHecho = true;
-        golpe(brazoGesto, 15, 0.3);
+        golpe(brazoGesto, 18, 0.3);
       }
       if (!saliendo && tGesto >= activo.entrada + activo.sosten) {
         saliendo = true;
-        irAPose('N', false, activo.salida);
+        irAReposo();
       }
       if (saliendo && tGesto >= activo.entrada + activo.sosten + activo.salida) activo = null;
     }
-    // Inclinación del cuerpo hacia delante (poderoso), suavizada.
-    const objetivoInclina = activo && !saliendo ? activo.inclina : 0;
-    inclinacion += (objetivoInclina - inclinacion) * (1 - Math.exp(-4 * dt));
+    const anticipando = activo !== null && tGesto < 0;
+    for (let i = 0; i < 2 * N_VAL; i++) objEnvio[i] = anticipando ? objPrevio[i] + anticOff[i] : objPose[i];
+    // Deriva del reposo: se programa siempre (hable o no) y solo se aplica a los brazos que no están en un gesto.
+    for (let k = 0; k < 2; k++) {
+      if (t >= derivaProx[k]) {
+        nuevaDeriva(k, t);
+        if (derivaSigue[k]) {
+          derivaSigue[k] = false;
+          derivaProx[k] = t + 4 + 3 * azar();
+        } else {
+          derivaProx[k] = t + 4 + 3 * azar();
+          derivaSigue[1 - k] = true;
+          derivaProx[1 - k] = Math.min(derivaProx[1 - k], t + 0.7 + 0.7 * azar());
+        }
+      }
+      const enGesto = activo !== null && !saliendo && (activo.ambos || k === brazoGesto) ? 1 : 0;
+      pesoGesto[k] += (enGesto - pesoGesto[k]) * (1 - Math.exp(-3 * dt));
+      objEnvio[k * N_VAL] += (1 - pesoGesto[k]) * derivaActual(k, 0, t);
+      objEnvio[k * N_VAL + 2] += (1 - pesoGesto[k]) * derivaActual(k, 1, t);
+    }
+    histT[histIdx] = t;
+    histV.set(objEnvio, histIdx * 2 * N_VAL);
+    const nuevoIdx = histIdx;
+    histIdx = (histIdx + 1) % HN;
+
+    // Inclinación del cuerpo hacia delante (poderoso) y giro de la cabeza ≈5° hacia el lado del brazo que gesticula.
+    const gesticulando = activo !== null && !saliendo;
+    inclinacion += ((gesticulando ? activo!.inclina : 0) - inclinacion) * (1 - Math.exp(-4 * dt));
     modelo.rotation.x = inclinacion;
+    const lado = activo !== null && !activo.ambos && gesticulando ? (brazoGesto === 1 ? 1 : -1) : 0;
+    giroCabeza += (lado * 5 * GRAD - giroCabeza) * (1 - Math.exp(-3.5 * dt));
+    cabeza.rotation.y = giroCabeza + 1 * GRAD * ruido(41, t * 0.2);
 
     if (amplitud !== null) amplitudSuave += (amplitud - amplitudSuave) * (1 - Math.exp(-(amplitud > amplitudSuave ? 30 : 10) * dt));
     // LED: reposo lento con parpadeo; al hablar, pulsos. Con audio real, el nivel sigue la amplitud medida.
@@ -449,43 +607,84 @@ export function crearMentor(): THREE.Object3D {
       });
     });
 
-    // Cuerpo: balanceo lento y suave desde la base (el flotado vertical lo hace museo.ts).
-    modelo.rotation.z = Math.sin(t * 0.45) * 0.02;
-    cabeza.rotation.z = Math.sin(t * 0.5 + 1) * 0.02;
+    // Cuerpo: respiración lenta (≈1 cm de subida y bajada en un ciclo de 4 s) y un balanceo muy suave.
+    modelo.position.y = -0.49 + 0.005 * Math.sin((2 * Math.PI * t) / 4);
+    modelo.rotation.z = 0.014 * ruido(7, t * 0.12);
+    cabeza.rotation.z = 0.02 * ruido(13, t * 0.15);
 
-    // Brazos: la pose manda; encima, solo una respiración de ≈1° con otra fase en cada articulación.
-    faseOnda += dt * 0.5;
-    const ondaRad = 1 * GRAD;
+    // Brazos: cada articulación es un resorte amortiguado hacia el objetivo de pose (con retraso creciente por segmento),
+    // más un micromovimiento de ruido suave con semilla propia por articulación.
+    const pasos = Math.max(1, Math.ceil(dt / (1 / 90)));
+    const h = dt / pasos;
     brazos.forEach((b, k) => {
       const o = k * N_VAL;
-      // El brazo izquierdo está espejado (scale.x = −1) antes de aplicar la rotación de la raíz: se invierten cabeceo y giro.
-      const signo = k === 0 ? -1 : 1;
-      b.raiz.rotation.y = signo * limitar(actual[o + 1], YAW_MIN, YAW_MAX);
-      b.raiz.rotation.z = signo * limitar(actual[o], PITCH_MIN, PITCH_MAX);
-      // Pulso (exacto): el brazo sube un poco y vuelve en ≈0,3 s.
-      let extra = 0;
+      const base = k * SEGMENTOS_BRAZO;
+      const signo = k === 0 ? -1 : 1; // el brazo izquierdo está espejado (scale.x = −1): se invierten cabeceo y giro
+      // Muestreo del historial hacia atrás: el retraso crece con i, así que un solo recorrido sirve para todas.
+      let p = nuevoIdx;
+      for (let i = 0; i < SEGMENTOS_BRAZO; i++) {
+        const tq = t - retrasoBrazo[k] - i * RETRASO_JUNTA_S;
+        for (let n = 0; n < HN && histT[p] > tq; n++) p = (p + HN - 1) % HN;
+        const sig = (p + 1) % HN;
+        const dtH = histT[sig] - histT[p];
+        const f = histT[p] > tq || dtH <= 0 ? 0 : Math.min(Math.max((tq - histT[p]) / dtH, 0), 1);
+        const vv = (j: number): number => histV[p * 2 * N_VAL + o + j] * (1 - f) + histV[sig * 2 * N_VAL + o + j] * f;
+        const objZ = pesoFlexion[i] * vv(2) + vv(3) * curvaBase[i];
+        const objY = pesoFlexion[i] * vv(5);
+        const w = OMEGA_RAIZ + (OMEGA_PUNTA - OMEGA_RAIZ) * (i / (SEGMENTOS_BRAZO - 1));
+        const kk = w * w;
+        const cc = 2 * ZETA * w;
+        const idx = base + i;
+        for (let s = 0; s < pasos; s++) {
+          zVel[idx] += (kk * (objZ - zPos[idx]) - cc * zVel[idx]) * h;
+          zPos[idx] += zVel[idx] * h;
+          yVel[idx] += (kk * (objY - yPos[idx]) - cc * yVel[idx]) * h;
+          yPos[idx] += yVel[idx] * h;
+        }
+        const j = b.juntas[i];
+        const semilla = 17 * k + 3 * i + 5;
+        j.rotation.z = zPos[idx] + RUIDO_Z * pesoRuido[i] * ruido(semilla, t * FREC_RUIDO);
+        j.rotation.y = yPos[idx] + RUIDO_Y * pesoRuido[i] * ruido(semilla + 1000, t * FREC_RUIDO * 0.8);
+      }
+      // Raíz del hombro (cabeceo y giro) con su resorte, sin retraso de cadena (solo el del brazo).
+      {
+        let q = nuevoIdx;
+        const tq = t - retrasoBrazo[k];
+        for (let n = 0; n < HN && histT[q] > tq; n++) q = (q + HN - 1) % HN;
+        const sig = (q + 1) % HN;
+        const dtH = histT[sig] - histT[q];
+        const f = histT[q] > tq || dtH <= 0 ? 0 : Math.min(Math.max((tq - histT[q]) / dtH, 0), 1);
+        const vv = (j: number): number => histV[q * 2 * N_VAL + o + j] * (1 - f) + histV[sig * 2 * N_VAL + o + j] * f;
+        const kk = OMEGA_RAIZ * OMEGA_RAIZ;
+        const cc = 2 * ZETA * OMEGA_RAIZ;
+        for (let s = 0; s < pasos; s++) {
+          rVel[k] += (kk * (vv(0) - rPos[k]) - cc * rVel[k]) * h;
+          rPos[k] += rVel[k] * h;
+          rVel[2 + k] += (kk * (vv(1) - rPos[2 + k]) - cc * rVel[2 + k]) * h;
+          rPos[2 + k] += rVel[2 + k] * h;
+        }
+        garra[k] += (vv(4) - garra[k]) * (1 - Math.exp(-4 * dt));
+      }
+      b.raiz.rotation.y = signo * limitar(rPos[2 + k] + 0.8 * GRAD * ruido(70 + k, t * FREC_RUIDO), YAW_MIN, YAW_MAX);
+      b.raiz.rotation.z = signo * limitar(rPos[k] + 0.8 * GRAD * ruido(80 + k, t * FREC_RUIDO), PITCH_MIN, PITCH_MAX);
+      // Pulso (exacto): la mano sube y vuelve en ≈0,3 s, sumado a la salida de los resortes para que se note.
       if (golpeT[k] >= 0) {
         golpeT[k] += dt;
         const u = golpeT[k] / golpeDur[k];
-        if (u >= 1) golpeT[k] = -1;
-        else extra = golpeAmp[k] * Math.sin(Math.PI * u);
+        if (u >= 1) {
+          golpeT[k] = -1;
+        } else {
+          const extra = golpeAmp[k] * Math.sin(Math.PI * u);
+          for (let i = 0; i < SEGMENTOS_BRAZO; i++) b.juntas[i].rotation.z += pesoFlexion[i] * extra;
+        }
       }
-      const flexion = Math.min(actual[o + 2] + extra, Math.max(actual[o + 2], MAX_FLEXION));
-      const curvaS = actual[o + 3];
-      const lateral = actual[o + 5];
-      for (let i = 0; i < SEGMENTOS_BRAZO; i++) {
-        const j = b.juntas[i];
-        // La respiración crece hacia la punta: cerca del hombro quedaría acumulada y metería el brazo en la cabeza.
-        const onda = ondaRad * pesoOnda[i];
-        j.rotation.z = pesoFlexion[i] * flexion + curvaS * curvaBase[i] + onda * Math.sin(faseOnda + i * 0.55 + b.fase);
-        j.rotation.y = pesoFlexion[i] * lateral + 0.5 * onda * Math.sin(faseOnda * 0.8 + i * 0.45 + b.fase + 1.7);
-      }
-      // Mano: gira muy despacio sobre la muñeca; la apertura de las aspas la fija la pose.
-      b.giroMano += dt * 0.12;
-      b.mano.rotation.z = b.giroMano;
-      const cierre = 0.9 - actual[o + 4] * 0.78;
-      b.pivotesAspa.forEach((p, n) => {
-        p.rotation.x = cierre + 0.03 * Math.sin(t * 0.6 + b.fase + n * 2.1);
+      // Mano: sin giro continuo; solo un balanceo mínimo de la muñeca. La apertura de las aspas la fija la pose.
+      // Muñeca: el buje gira despacio a un lado y a otro (≈±20°, periodo de 8–10 s) y las aspas abren y cierran muy poco.
+      b.mano.rotation.z = 0.05 * ruido(90 + k, t * 0.3);
+      b.mano.rotation.x = 0.35 * Math.sin((2 * Math.PI * t) / (k === 0 ? 8.3 : 9.7) + 1.7 * k) + 0.06 * ruido(95 + k, t * 0.3);
+      const cierre = 0.9 - garra[k] * 0.78;
+      b.pivotesAspa.forEach((pv, n) => {
+        pv.rotation.x = cierre + 0.07 * Math.sin((2 * Math.PI * t) / (5.5 + 0.7 * k) + 2.1 * n + k) + 0.02 * ruido(100 + 3 * k + n, t * 0.4);
       });
     });
   };
