@@ -1,10 +1,25 @@
 {
   "provider": "elevenlabs",
   "voice": "ID_DE_LA_VOZ",
-  "model": "eleven_multilingual_v2",
+  "model": "eleven_v3",
   "language": "es",
   "apiKeyEnv": "TTS_API_KEY",
   "outputDir": "public/voz",
+  "voiceSettings": {
+    "stability": 0.35,
+    "similarity_boost": 0.75,
+    "style": 0.6,
+    "use_speaker_boost": true
+  },
+  "tonoBase": "",
+  "tonos": {
+    "heroico": "[excited]",
+    "exacto": "[serious]",
+    "directo": "[curious]",
+    "poderoso": "[confident]",
+    "honesto": "[sincerely]",
+    "cercano": "[warmly]"
+  },
   "claves": [
     "vitrina_lrv",
     "vitrina_perseverance",

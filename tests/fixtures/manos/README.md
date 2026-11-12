@@ -20,6 +20,15 @@ Esta carpeta guarda capturas reales de poses de la mano, grabadas con la tecla *
 
 La tecla P solo funciona en desarrollo: no está en la versión de producción.
 
+## Poses sintéticas (no son capturas de cámara)
+
+Mientras no haya capturas reales, los cinco archivos de la tabla son **poses sintéticas**, generadas con
+`node tests/fixtures/manos/generar-sinteticas.ts` a partir de una mano derecha aproximada (etiqueta `Right`).
+Cada una lleva `"sintetica": true` y una `descripcion` que empieza por "SINTÉTICA". No son datos de MediaPipe: sirven
+para las capturas de pantalla de `tests/capturas/manos/`. La prueba "con las capturas reales" de
+`tests/manoModelo.test.ts` las ignora. Al grabar una captura real con la tecla P, reemplaza el archivo sintético del
+mismo nombre (la captura real no lleva `sintetica`).
+
 ## Qué contiene cada captura
 
 - `version`, `fecha`, `ancho` y `alto` del vídeo.

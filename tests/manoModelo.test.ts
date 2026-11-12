@@ -262,8 +262,11 @@ test('normalización de topes: se ordenan mín y máx, se acotan a ±180° y los
 });
 
 // Capturas reales (tecla P). Sin capturas en tests/fixtures/manos/ esta prueba se salta.
+// Las poses sintéticas ("sintetica": true, ver el README de esa carpeta) no cuentan como capturas reales.
 const carpetaCapturas = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'manos');
-const capturas = readdirSync(carpetaCapturas).filter((f) => f.endsWith('.json'));
+const capturas = readdirSync(carpetaCapturas)
+  .filter((f) => f.endsWith('.json'))
+  .filter((f) => !(JSON.parse(readFileSync(join(carpetaCapturas, f), 'utf8')) as { sintetica?: boolean }).sintetica);
 
 test('con las capturas reales: ángulos dentro de límites', { skip: capturas.length === 0 && 'sin capturas (tecla P)' }, () => {
   for (const archivo of capturas) {

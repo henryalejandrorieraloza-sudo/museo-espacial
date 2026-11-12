@@ -43,3 +43,26 @@ palabra), como mucho uno por frase, y hay frases sin gesto. En reposo no hay mov
 descansan cerca de la pose neutra con una respiración de ≈1° y un balanceo lento del cuerpo.
 
 Hay un guion de ejemplo con las seis marcas en `tools/guion-ejemplo.txt`.
+
+## Personalidad y emoción de la voz
+
+- **Ajustes** (`voiceSettings` en `voz.config.json`): `stability` bajo (0,35) da más expresividad y variación entre
+  frases; `style` (0,6) exagera la interpretación. Si la voz suena errática, sube `stability` a 0,5.
+- **Tono por frase**: cada frase toma la etiqueta de la primera marca de gesto que contiene (`tonos`: `{heroico}` →
+  `[excited]`, `{honesto}` → `[sincerely]`…). Las etiquetas se envían a ElevenLabs y se quitan de los tiempos por
+  palabra, así que los gestos no se desplazan. Las frases sin marca usan `tonoBase` (vacío por defecto). Las
+  etiquetas son texto libre para el modelo `eleven_v3`: si una no tiene efecto, cámbiala en la configuración.
+- **Modelo**: `eleven_v3` admite etiquetas de emoción. Si la llamada `with-timestamps` no devuelve tiempos con este
+  modelo, vuelve a `eleven_multilingual_v2` (sin etiquetas: pon `tonos` vacío).
+
+### Crear la voz en ElevenLabs (Voice Design)
+
+Un robot con personalidad no sale de los ajustes sino de la voz. Con *Voice Design* puedes describirla. Prompt
+sugerido (en español, ajústalo a tu gusto):
+
+> Voz masculina de robot cálido y expresivo, con un toque de sarcasmo y mucha personalidad. Timbre metálico ligero
+> pero reconocible como humano, dicción clara y ritmo vivo. Entona con energía cuando celebra un logro, baja y se
+> vuelve seria con los datos, y suena cercana y algo traviesa al despedirse.
+
+Cuando la tengas, copia su ID en `voice` de `tools/voz.config.json`. No he usado la voz de Bender ni la de su actor:
+es una voz real protegida, así que la voz del museo tiene que ser una diseñada o clonada con permiso.

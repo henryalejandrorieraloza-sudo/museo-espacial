@@ -51,8 +51,8 @@ export const HAND_FIXED_DISTANCE = 0.5;
  */
 export const HAND_SCALE = 1.25;
 /**
- * Radio de huesos y articulaciones, en metros de la escena. Igual en todos los dedos y constante: no depende de la
- * profundidad. Subir o bajar este valor hace la mano más gruesa o más fina.
+ * Radio de referencia de huesos y articulaciones, en metros de la escena. Constante: no depende de la profundidad.
+ * El guante (guante.ts) lo usa como radio base de fuelles y puntas; el radio de cada falange está en RADIO_SEGMENTO.
  */
 export const HAND_BONE_RADIUS = 0.011;
 

@@ -73,9 +73,16 @@ const DISTANCIA_TIERRA = 30_000;
  * alcanza a las estrellas. Aquí se dejan muy tenues, con el brillo relativo real (flujo ∝ 10^(−0.4·m)):
  * solo se distinguen las más brillantes. Sirio (m = −1.44) queda en BRILLO_ESTRELLAS.
  */
-const BRILLO_ESTRELLAS = 0.9;
-/** Tamaño de cada estrella en píxeles de pantalla (antes de la densidad de píxeles). */
-const TAMANO_ESTRELLA_PX = 2.4;
+/**
+ * Para que se vean, el brillo se comprime respecto al real (exponente 0,2 en vez de 0,4 sobre la magnitud): se
+ * conservan la distribución real del catálogo y el orden de brillo, y las de magnitud 5 quedan tenues
+ * (BRILLO_MAG5) y las más brillantes saturan. El tamaño también crece con el brillo, como en una foto.
+ */
+const BRILLO_MAG5 = 0.3;
+/** Tamaño de las estrellas en píxeles de pantalla (antes de la densidad de píxeles): mínimo, por magnitud y máximo. */
+const TAMANO_MIN_PX = 1.6;
+const TAMANO_POR_MAG_PX = 0.4;
+const TAMANO_MAX_PX = 5;
 /** Brillo del disco solar: muy por encima del umbral del bloom (es el único emisivo intenso de la escena). */
 const BRILLO_SOL = 5;
 
@@ -101,11 +108,12 @@ function colorEstrella(bv: number, destino: THREE.Color): THREE.Color {
 
 const ESTRELLAS_VS = /* glsl */ `
   attribute vec3 brillo;
-  uniform float tamano;
+  attribute float tamanoEstrella;
+  uniform float escalaPx;
   varying vec3 vBrillo;
   void main() {
     vBrillo = brillo;
-    gl_PointSize = tamano;
+    gl_PointSize = tamanoEstrella * escalaPx;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -122,6 +130,7 @@ const ESTRELLAS_FS = /* glsl */ `
 function crearEstrellas(): THREE.Points {
   const posiciones: number[] = [];
   const brillos: number[] = [];
+  const tamanos: number[] = [];
   const color = new THREE.Color();
   const m = MATRIZ_J2000_A_HORIZONTE;
   for (let i = 0; i < ESTRELLAS_J2000.length; i += 4) {
@@ -134,17 +143,19 @@ function crearEstrellas(): THREE.Points {
     const cenit = m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2];
     if (cenit < -0.01) continue;
     posiciones.push(este * DISTANCIA_ESTRELLAS, cenit * DISTANCIA_ESTRELLAS, -norte * DISTANCIA_ESTRELLAS);
-    const flujo = BRILLO_ESTRELLAS * Math.pow(10, -0.4 * (mag + 1.44));
+    const flujo = Math.min(1.6, BRILLO_MAG5 * Math.pow(10, -0.2 * (mag - 5)));
     colorEstrella(ESTRELLAS_J2000[i + 3], color).multiplyScalar(flujo);
     brillos.push(color.r, color.g, color.b);
+    tamanos.push(Math.min(TAMANO_MAX_PX, TAMANO_MIN_PX + Math.max(0, 5 - mag) * TAMANO_POR_MAG_PX));
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(posiciones, 3));
   geo.setAttribute('brillo', new THREE.Float32BufferAttribute(brillos, 3));
+  geo.setAttribute('tamanoEstrella', new THREE.Float32BufferAttribute(tamanos, 1));
   const material = new THREE.ShaderMaterial({
     vertexShader: ESTRELLAS_VS,
     fragmentShader: ESTRELLAS_FS,
-    uniforms: { tamano: { value: TAMANO_ESTRELLA_PX * Math.min(window.devicePixelRatio, 1.25) } },
+    uniforms: { escalaPx: { value: Math.min(window.devicePixelRatio, 1.25) } },
     depthWrite: false,
   });
   const puntos = new THREE.Points(geo, material);

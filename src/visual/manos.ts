@@ -7,31 +7,17 @@
 import * as THREE from 'three';
 import { estimarPuntosOcultos, puntosManoMundo, type PuntoMano, type Vec3, type VistaCamara } from './manosGeometria.ts';
 import { ajustarMano, type TablaLimites } from './manoModelo.ts';
-import { crearGeometriasGuante, type GeometriasGuante } from './guante.ts';
+import {
+  actualizarDedos,
+  actualizarPalma,
+  actualizarTenar,
+  anilloDedo,
+  crearGeometriasGuante,
+  RADIO_SEGMENTO,
+  type GeometriasGuante,
+} from './guante.ts';
 import type { PuntoMundo } from '../tracking/tracker';
 
-/** Segmentos de cada dedo (punto inicial → final): tres por dedo. El pulgar empieza en su CMC (punto 1). */
-const SEGMENTOS: readonly (readonly [number, number])[] = [
-  [1, 2], [2, 3], [3, 4],
-  [5, 6], [6, 7], [7, 8],
-  [9, 10], [10, 11], [11, 12],
-  [13, 14], [14, 15], [15, 16],
-  [17, 18], [18, 19], [19, 20],
-];
-/** Grosor extra del primer segmento del pulgar (eminencia tenar del guante). Los demás segmentos, 1. */
-const GROSOR_BASE_PULGAR = 1.3;
-/** Articulaciones con fuelle: [articulación, punto siguiente]. Nudillos, PIP y DIP de cada dedo; MCP e IP del pulgar. */
-const FUELLES: readonly (readonly [number, number])[] = [
-  [2, 3], [3, 4],
-  [5, 6], [6, 7], [7, 8],
-  [9, 10], [10, 11], [11, 12],
-  [13, 14], [14, 15], [15, 16],
-  [17, 18], [18, 19], [19, 20],
-];
-/** Nudillos: su fuelle se orienta con la palma de entrada (el punto anterior en la cadena es lateral). */
-const NUDILLOS: ReadonlySet<number> = new Set([5, 9, 13, 17]);
-/** Puntas de los dedos: [punta, articulación anterior]. */
-const PUNTAS: readonly (readonly [number, number])[] = [[4, 3], [8, 7], [12, 11], [16, 15], [20, 19]];
 /** Duración (s) del deslizamiento cuando la mano reaparece cerca de donde estaba. */
 const DURACION_DESLIZAR_S = 0.15;
 
@@ -74,11 +60,14 @@ interface ManoVisual {
   grupo: THREE.Group;
   /** Puño rígido en la muñeca. Es el primer hijo del grupo y su posición es la de la muñeca. */
   puno: THREE.Mesh;
-  /** Palma: se orienta con la muñeca y se escala al ancho y largo de la palma. */
+  /** Palma: geometría dinámica en el espacio del grupo (ver actualizarPalma). */
   palma: THREE.Mesh;
-  segmentos: THREE.InstancedMesh;
-  fuelles: THREE.InstancedMesh;
-  puntas: THREE.InstancedMesh;
+  /** z del dorso de la mano (+1 o −1). */
+  ladoDorso: 1 | -1;
+  /** Cuña tenar: de la muñeca a la base del pulgar. */
+  tenar: THREE.Mesh;
+  /** Los cinco dedos en un solo tubo cerrado por dedo (ver actualizarDedos). */
+  dedos: THREE.Mesh;
   /** Parámetros del modelo ajustados en el fotograma anterior (null si no hay ajuste). */
   pose: Float64Array | null;
   /** Momento (s) de la última detección válida. null si nunca se ha detectado o si la mano ya se ocultó por tiempo. */
@@ -101,28 +90,23 @@ export function crearManos(): ManosAvatar {
   // Geometría del guante: se crea una vez. Cada fotograma solo cambia transformaciones (spec-visual-museo §9).
   const geo: GeometriasGuante = crearGeometriasGuante();
 
-  const instancias = (g: THREE.BufferGeometry, n: number): THREE.InstancedMesh => {
-    const malla = new THREE.InstancedMesh(g, geo.material, n);
-    malla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    // Las instancias se mueven cada fotograma: la esfera envolvente de la geometría base no sirve para recortar.
-    malla.frustumCulled = false;
-    return malla;
-  };
-
   const crearMano = (lado: 'Left' | 'Right'): ManoVisual => {
     const grupo = new THREE.Group();
     // Parche en el dorso. Con z = x × y (sistemaPalma), en el modelo de manoModelo.ts la cara palmar de la mano
     // izquierda queda en +z, así que su dorso está en −z; la derecha está reflejada y su dorso queda en +z.
-    const puno = new THREE.Mesh(lado === 'Left' ? geo.punoDorsoNegativo : geo.punoDorsoPositivo, geo.material);
-    const palma = new THREE.Mesh(geo.palma, geo.material);
-    const segmentos = instancias(geo.segmento, SEGMENTOS.length);
-    const fuelles = instancias(geo.fuelle, FUELLES.length);
-    const puntas = instancias(geo.punta, PUNTAS.length);
+    const piezas = lado === 'Left' ? geo.dorsoNegativo : geo.dorsoPositivo;
+    const puno = new THREE.Mesh(piezas.puno, geo.material);
+    const palma = new THREE.Mesh(piezas.palma.clone(), geo.material);
+    palma.frustumCulled = false;
+    const tenar = new THREE.Mesh(geo.tenar.clone(), geo.material);
+    tenar.frustumCulled = false;
+    const dedos = new THREE.Mesh(piezas.dedos.clone(), geo.material);
+    dedos.frustumCulled = false;
     // El puño va primero: es el nodo de la muñeca.
-    grupo.add(puno, palma, segmentos, fuelles, puntas);
+    grupo.add(puno, palma, tenar, dedos);
     grupo.visible = false;
     raiz.add(grupo);
-    return { grupo, puno, palma, segmentos, fuelles, puntas, pose: null, ultimaDeteccionS: null, ultimosPuntos: null, deslizar: null };
+    return { grupo, puno, palma, ladoDorso: lado === 'Left' ? -1 : 1, tenar, dedos, pose: null, ultimaDeteccionS: null, ultimosPuntos: null, deslizar: null };
   };
 
   const manos: Record<'Left' | 'Right', ManoVisual> = { Left: crearMano('Left'), Right: crearMano('Right') };
@@ -131,13 +115,12 @@ export function crearManos(): ManosAvatar {
   const ejeX = new THREE.Vector3();
   const ejeY = new THREE.Vector3();
   const ejeZ = new THREE.Vector3();
+  const mcpTmp = [0, 1, 2, 3].map(() => new THREE.Vector3());
+  const puntosV = Array.from({ length: 21 }, () => new THREE.Vector3());
   const centro = new THREE.Vector3();
   const va = new THREE.Vector3();
   const vb = new THREE.Vector3();
-  const entrada = new THREE.Vector3();
-  const salida = new THREE.Vector3();
-  const escalaV = new THREE.Vector3();
-  const matriz = new THREE.Matrix4();
+  const dirPulgar = new THREE.Vector3();
   const rotacion = new THREE.Matrix4();
   const v = (p: Vec3, destino: THREE.Vector3): THREE.Vector3 => destino.set(p.x, p.y, p.z);
 
@@ -160,18 +143,6 @@ export function crearManos(): ManosAvatar {
     ejeX.normalize();
     ejeZ.crossVectors(ejeX, ejeY);
     return { ancho, largo };
-  };
-
-  /**
-   * Orientación de una pieza a lo largo de `dir` (unitario). El giro alrededor del eje sigue el ancho de la palma,
-   * así las caras planas de todos los dedos quedan alineadas.
-   */
-  const orientar = (dir: THREE.Vector3): THREE.Matrix4 => {
-    va.copy(ejeX).addScaledVector(dir, -ejeX.dot(dir));
-    if (va.lengthSq() < 1e-10) va.copy(ejeZ).addScaledVector(dir, -ejeZ.dot(dir));
-    va.normalize();
-    vb.crossVectors(va, dir);
-    return rotacion.makeBasis(va, dir, vb);
   };
 
   const ocultarMano = (mano: ManoVisual): void => {
@@ -209,49 +180,43 @@ export function crearManos(): ManosAvatar {
 
     rotacion.makeBasis(ejeX, ejeY, ejeZ);
     mano.puno.quaternion.setFromRotationMatrix(rotacion);
-    mano.palma.position.copy(mano.puno.position);
-    mano.palma.quaternion.copy(mano.puno.quaternion);
-    // Palma en unidades de ancho y largo; su grosor (z) va en metros y no cambia.
-    mano.palma.scale.set(palma.ancho, palma.largo, 1);
+    // Palma: sus vértices se escriben en el espacio del grupo (sin transformación). El borde superior pasa por los
+    // 4 MCP reales, que no se mueven: ahí nace cada dedo.
+    const posPalma = mano.palma.geometry.getAttribute('position') as THREE.BufferAttribute;
+    actualizarPalma(
+      posPalma.array as Float32Array,
+      mano.ladoDorso,
+      v(muneca, vb),
+      ejeX,
+      ejeY,
+      ejeZ,
+      palma.ancho,
+      palma.largo,
+      [5, 9, 13, 17].map((j, k) => v(puntos[j], mcpTmp[k])),
+    );
+    posPalma.needsUpdate = true;
 
-    // Segmentos: de una articulación a la siguiente, estirados a lo largo del hueso. El radio no cambia.
-    SEGMENTOS.forEach(([a, b], k) => {
-      salida.copy(v(puntos[b], vb)).sub(v(puntos[a], va));
-      const largo = salida.length();
-      if (largo < 1e-6) {
-        mano.segmentos.setMatrixAt(k, matriz.makeScale(0, 0, 0));
-        return;
-      }
-      salida.divideScalar(largo);
-      const grosor = k === 0 ? GROSOR_BASE_PULGAR : 1;
-      matriz.copy(orientar(salida)).scale(escalaV.set(grosor, largo, grosor));
-      matriz.setPosition(puntos[a].x, puntos[a].y, puntos[a].z);
-      mano.segmentos.setMatrixAt(k, matriz);
-    });
-    mano.segmentos.instanceMatrix.needsUpdate = true;
+    // Los 21 puntos como vectores (los MCP y la muñeca no se mueven después de esto).
+    puntos.forEach((q, i) => puntosV[i].set(q.x, q.y, q.z));
 
-    // Fuelles: centrados en la articulación y orientados según la bisectriz del doblez.
-    FUELLES.forEach(([j, siguiente], k) => {
-      salida.copy(v(puntos[siguiente], vb)).sub(v(puntos[j], va)).normalize();
-      if (NUDILLOS.has(j)) entrada.copy(ejeY);
-      else entrada.copy(v(puntos[j], va)).sub(v(puntos[j - 1], vb)).normalize();
-      entrada.add(salida);
-      if (entrada.lengthSq() < 1e-10) entrada.copy(salida);
-      entrada.normalize();
-      matriz.copy(orientar(entrada)).setPosition(puntos[j].x, puntos[j].y, puntos[j].z);
-      mano.fuelles.setMatrixAt(k, matriz);
-    });
-    mano.fuelles.instanceMatrix.needsUpdate = true;
+    // Cuña tenar: de la muñeca al anillo base del pulgar. Ese anillo es el primer anillo del tubo del pulgar (mismos
+    // vértices): se calcula con la misma función y las mismas entradas.
+    dirPulgar.subVectors(puntosV[3], puntosV[2]);
+    if (dirPulgar.lengthSq() > 1e-12) {
+      dirPulgar.normalize();
+      const anillo = anilloDedo(puntosV[2], dirPulgar, null, RADIO_SEGMENTO[2], ejeX);
+      const pos = mano.tenar.geometry.getAttribute('position') as THREE.BufferAttribute;
+      actualizarTenar(pos.array as Float32Array, puntosV[0], ejeX, ejeZ, anillo);
+      pos.needsUpdate = true;
+      mano.tenar.visible = true;
+    } else {
+      mano.tenar.visible = false;
+    }
 
-    // Puntas: terminan en el landmark de la punta y miran en la dirección del último segmento.
-    PUNTAS.forEach(([punta, anterior], k) => {
-      salida.copy(v(puntos[punta], vb)).sub(v(puntos[anterior], va));
-      if (salida.lengthSq() < 1e-12) salida.copy(ejeY);
-      salida.normalize();
-      matriz.copy(orientar(salida)).setPosition(puntos[punta].x, puntos[punta].y, puntos[punta].z);
-      mano.puntas.setMatrixAt(k, matriz);
-    });
-    mano.puntas.instanceMatrix.needsUpdate = true;
+    // Dedos: un tubo cerrado por dedo, desde su MCP, con anillos compartidos en cada unión.
+    const posDedos = mano.dedos.geometry.getAttribute('position') as THREE.BufferAttribute;
+    actualizarDedos(posDedos.array as Float32Array, puntosV, ejeX);
+    posDedos.needsUpdate = true;
   };
 
   return {

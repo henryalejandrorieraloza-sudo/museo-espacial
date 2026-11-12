@@ -50,6 +50,23 @@ export function palabrasDeCaracteres(caracteres, inicios, finales) {
   return palabras;
 }
 
+/**
+ * Texto que se envía al proveedor: cada frase lleva al principio la etiqueta de tono (p. ej. [excited]) de la
+ * primera marca de gesto que contenga, o `tonoBase` si no tiene ninguna. Las etiquetas no se ven en el texto limpio.
+ */
+export function textoConTonos(crudo, cfg) {
+  const frases = crudo.match(/[^.!?…]+(?:[.!?…]+["”»)]*|$)/g) ?? [crudo];
+  return frases
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0)
+    .map((f) => {
+      const marca = [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).find((c) => cfg.tonos?.[c]);
+      const tono = marca ? cfg.tonos[marca] : cfg.tonoBase;
+      return tono ? `${tono} ${limpiar(f)}` : limpiar(f);
+    })
+    .join(' ');
+}
+
 const proveedores = {
   // Devuelve { audio: Buffer, words: [{ text, start, end }] }.
   async elevenlabs(texto, cfg, clave) {
@@ -57,7 +74,12 @@ const proveedores = {
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'xi-api-key': clave, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: texto, model_id: cfg.model, language_code: cfg.language }),
+      body: JSON.stringify({
+        text: texto,
+        model_id: cfg.model,
+        language_code: cfg.language,
+        ...(cfg.voiceSettings ? { voice_settings: cfg.voiceSettings } : {}),
+      }),
     });
     if (!resp.ok) throw new Error(`ElevenLabs ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
     const datos = await resp.json();
@@ -84,15 +106,18 @@ async function main() {
     const texto = limpiar(crudo);
     const mp3 = join(salida, `${id}.mp3`);
     const json = join(salida, `${id}.json`);
+    const enviado = textoConTonos(crudo, config);
     if (dryRun) {
-      console.log(`[dry-run] ${id} (${texto.length} caracteres): ${texto}`);
+      console.log(`[dry-run] ${id} (${texto.length} caracteres): ${enviado}`);
       continue;
     }
     if (!forzar && existsSync(mp3) && existsSync(json)) {
       console.log(`= ${id}: ya existe (usa --force para regenerar)`);
     } else {
       console.log(`+ ${id}: generando…`);
-      const { audio, words } = await proveedor(texto, config, clave);
+      const { audio, words: crudas } = await proveedor(enviado, config, clave);
+      // Las etiquetas de tono ([excited]…) no son palabras habladas: se quitan para no desplazar los gestos.
+      const words = crudas.filter((w) => !/^\[[^\]]*\]$/.test(w.text));
       writeFileSync(mp3, audio);
       writeFileSync(json, JSON.stringify({ texto, words }, null, 2));
     }

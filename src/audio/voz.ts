@@ -13,6 +13,9 @@ export type { OyenteVoz } from './sincronia';
 
 /** Ritmo del temporizador de respaldo cuando no hay voz (caracteres por segundo). */
 export const CARACTERES_POR_SEGUNDO = 15;
+/** Velocidad y tono de la síntesis del navegador (1 = normal). */
+export const RITMO_VOZ = 0.95;
+export const TONO_VOZ = 0.92;
 /** Margen (ms) que se da a una frase con voz antes de darla por perdida si nunca llega su evento de fin. */
 const MARGEN_VIGILANCIA_MS = 5000;
 
@@ -38,12 +41,32 @@ export function dividirFrases(texto: string): string[] {
   return partes.map((p) => p.trim()).filter((p) => p.length > 0);
 }
 
+/**
+ * Voz del navegador más natural disponible para `idioma`. Prefiere voces "neurales/premium" (Natural, Premium,
+ * Enhanced, Google) y, dentro del idioma, las que tengan nombre conocido de voz de calidad. Devuelve undefined si
+ * no hay ninguna: entonces el navegador usa la predeterminada.
+ */
+export function elegirVoz(voces: SpeechSynthesisVoice[], idioma: string): SpeechSynthesisVoice | undefined {
+  const base = idioma.slice(0, 2).toLowerCase();
+  const candidatas = voces.filter((v) => v.lang.toLowerCase().startsWith(base));
+  const puntuar = (v: SpeechSynthesisVoice): number => {
+    let p = 0;
+    if (v.lang.toLowerCase().replace('_', '-') === idioma.toLowerCase()) p += 4;
+    if (/natural|neural/i.test(v.name)) p += 10;
+    if (/premium|enhanced|google/i.test(v.name)) p += 6;
+    if (!v.localService) p += 1;
+    return p;
+  };
+  return candidatas.sort((a, b) => puntuar(b) - puntuar(a))[0];
+}
+
 /** Duración (ms) de una frase leída al ritmo del respaldo. */
 export function duracionRespaldoMs(frase: string): number {
   return Math.round((frase.length / CARACTERES_POR_SEGUNDO) * 1000);
 }
 
-export function crearVoz(idioma = 'es-ES', catalogo?: CatalogoVoz): Voz {
+/** `idioma` puede ser una función: se lee al hablar cada frase, para que el cambio de idioma se note al momento. */
+export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: CatalogoVoz): Voz {
   const sintesis: SpeechSynthesis | undefined = 'speechSynthesis' in window ? window.speechSynthesis : undefined;
   /** Identificador de la explicación en curso: cancelar o empezar otra lo invalida, y sus eventos se ignoran. */
   let vigente = 0;
@@ -155,7 +178,13 @@ export function crearVoz(idioma = 'es-ES', catalogo?: CatalogoVoz): Voz {
         }
         try {
           const utterance = new SpeechSynthesisUtterance(frase.texto);
-          utterance.lang = idioma;
+          const lang = typeof idioma === 'function' ? idioma() : idioma;
+          utterance.lang = lang;
+          // Ritmo algo más pausado y tono ligeramente bajo: suena menos apresurado y más de personaje.
+          utterance.rate = RITMO_VOZ;
+          utterance.pitch = TONO_VOZ;
+          const elegida = elegirVoz(sintesis.getVoices(), lang);
+          if (elegida) utterance.voice = elegida;
           frases.push(utterance);
           let conEventosDePalabra = false;
           utterance.onstart = () => {

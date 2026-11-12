@@ -65,13 +65,17 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 
 ## 9. Mano 3D
 - Se dibuja como guante de traje espacial low poly: malla sólida, no huesos sueltos. Todo se genera en código (`src/visual/guante.ts`), sin texturas ni modelos externos.
-- Palma presurizada con un pliegue sutil y una costura junto a los nudillos.
-- Cada dedo tiene tres segmentos. En cada articulación (nudillo, PIP y DIP; MCP e IP del pulgar) hay un fuelle de 5 costillas metálicas que sobresalen un poco. Puntas algo más gruesas y redondeadas.
-- Muñeca: manga, dos tiras de color, anillo de cierre grande y anillo metálico. En el dorso de la manga, un parche genérico (cuadrado redondeado con un círculo rojo y otro azul), sin logos de agencias ni de misiones.
-- Color: la constante `GUANTE_ESTILO` elige el estilo. `"blanco"` (por defecto): tela blanco hueso (#e9e6df) y fuelles, costuras y anillo en gris metálico (#9aa0a6). `"plata"`: plateado metálico con puntas negras.
-- Sombreado plano.
-- Rendimiento: las dos manos suman 7.200 triángulos y 10 llamadas de dibujo (presupuesto: 8.000). Las piezas se mueven con transformaciones; la geometría se crea una sola vez.
-- Los fuelles y anillos son solo decoración. Las longitudes de hueso siguen siendo `HAND_BONE_LENGTHS`, y los ángulos, topes, tamaño constante, separación y lógica de desaparición ya confirmados no cambian.
+- Forma facetada (referencia low poly), conservando el diseño de guante: tela blanco hueso (#e9e6df), panel palmar #d9d5cc, bandas grises (#9aa0a6). Material con `flatShading`, normales por cara y un tono ligeramente distinto por cara según su orientación. Sin `DoubleSide`.
+- Malla cerrada: palma, cuña tenar, dedos y puño forman una malla sin aristas abiertas y con todas las caras hacia afuera, en las dos manos (un único constructor con la lateralidad como parámetro; la palma izquierda invierte el orden de los vértices de cada cara en vez de reflejarse con escala negativa).
+- Dedos: cada dedo es un tubo hexagonal cerrado, generado en cada fotograma desde su MCP (`actualizarDedos`). Cada unión es un anillo compartido por los dos tramos (inglete), así el codo no deja huecos. El radio fijo en metros (`RADIO_SEGMENTO`) se afina de 1.0 a 0.75 hasta la punta, cortada casi plana con un bisel pequeño.
+- Bandas: caras de color metal del propio tubo, una por unión y con el mismo largo en todos los dedos, generadas con el mismo bucle (`CADENAS_DEDO`): MCP, PIP y DIP en los cuatro dedos largos y MCP e IP en el pulgar (su CMC queda dentro de la cuña): 4 × 3 + 2 = 14.
+- Palma (dinámica, `actualizarPalma`): su anillo superior se coloca sobre los 4 MCP reales (dos vértices por MCP, a ±12,5 mm: el dedo nace en su punto medio) y los MCP nunca se mueven. Los anillos intermedios salen de la plantilla en el marco local de la palma, a lo sumo 0,12 anchos más allá de los MCP (`LIMITE_LATERAL_PALMA`). El anillo de la muñeca es el del cuello del puño: comparten sus 8 vértices.
+- Pulgar: dos tramos que salen de la cuña tenar (de la muñeca a su MCP). El anillo final de la cuña es el primer anillo del pulgar (mismos vértices).
+- Puño: manga octogonal con una franja azul y otra roja, anillo de cierre metálico biselado y cuello. En el dorso, un emblema circular genérico (dos prismas hexagonales cerrados, rojo y azul), sin logos de agencias ni misiones.
+- Color: la constante `GUANTE_ESTILO` elige el estilo (`"blanco"` por defecto o `"plata"`).
+- Rendimiento: 690 triángulos por mano (1.380 las dos) y 4 llamadas de dibujo por mano (presupuesto: 400 a 700 por mano).
+- Las longitudes de hueso siguen siendo `HAND_BONE_LENGTHS`, y los ángulos, topes, tamaño constante (muñeca a `HAND_FIXED_DISTANCE`), separación y lógica de desaparición ya confirmados no cambian. El grosor no escala con el Tamaño de la mano: con Tamaño 0,6 los dedos vecinos se solapan.
+- Capturas de comprobación: `tests/capturas/manos/` (escena de captura, antes y después, y `geometria.ts` (malla cerrada, vértices compartidos, límites de la palma, bandas, separación) y `comprobar.ts`, que verifica que ningún dedo atraviesa la palma y que el pulgar queda a la izquierda con la palma de frente).
 
 ## 9.1 Control de entrada
 - Al abrir el juego, una pantalla de inicio muestra el título, las dos formas de control y el botón "Empezar". La elección se guarda en `localStorage` (`museo-espacial:control:v1`) y se puede cambiar en Opciones con "Cambiar control", que vuelve a la pantalla de inicio.

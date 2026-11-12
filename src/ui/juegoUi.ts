@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { alCambiarIdioma, t } from '../i18n';
 import { requireEl } from './dom';
 
 /** Los subtítulos del mentor se ocultan como mucho a los 30 s (SPEC 7.2). */
@@ -9,6 +9,8 @@ export interface JuegoUi {
   aviso(texto: string | null): void;
   /** Subtítulo del mentor. null lo oculta. */
   subtitulos(texto: string | null): void;
+  /** True si hay un subtítulo en pantalla ahora mismo. */
+  subtitulosVisibles(): boolean;
   /** Indicación “Aplaude para entrar”. null la oculta. No depende del temporizador de los subtítulos. */
   indicarEntrar(texto: string | null): void;
   mostrarMision(titulo: string): void;
@@ -25,6 +27,9 @@ export function crearUi(onVolver: () => void): JuegoUi {
   const volver = requireEl<HTMLButtonElement>('volver');
 
   volver.textContent = t('volver_museo');
+  alCambiarIdioma(() => {
+    volver.textContent = t('volver_museo');
+  });
   volver.addEventListener('click', onVolver);
 
   let temporizadorSubtitulos: number | undefined;
@@ -47,6 +52,9 @@ export function crearUi(onVolver: () => void): JuegoUi {
           subtitulos.hidden = true;
         }, SUBTITULO_MAX_MS);
       }
+    },
+    subtitulosVisibles() {
+      return !subtitulos.hidden && subtitulos.textContent !== '';
     },
     mostrarMision(titulo) {
       misionTitulo.textContent = titulo;

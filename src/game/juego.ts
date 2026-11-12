@@ -4,11 +4,11 @@
 // en cada vuelta lee una LecturaEntrada y la reparte.
 
 import { visual } from '../visual/museo';
-import { crearVoz, type Voz } from '../audio/voz';
+import { crearVoz, dividirFrases, type Voz } from '../audio/voz';
 import { cargarCatalogoVoz, type CatalogoVoz } from '../audio/lineaGrabada';
 import { crearOyenteMentor } from './mentorVoz';
 import { assetUrl } from '../tracking/assets';
-import { t, tGuion, type ClaveTexto } from '../i18n';
+import { alCambiarIdioma, idioma, LENGUA_VOZ, t, tGuion, type ClaveTexto } from '../i18n';
 import { requireEl } from '../ui/dom';
 import { crearCursor, type CursorUi } from '../ui/cursor';
 import { crearInicioUi } from '../ui/inicioUi';
@@ -57,10 +57,59 @@ function textoGuion(clave: ClaveTexto): string {
   return tGuion(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave);
 }
 
-/** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. Sin voz, el subtítulo sale igual. */
+/**
+ * Última explicación del mentor con subtítulo. Sirve para volver a leerla al cambiar de idioma: si el mentor
+ * aún habla, se repite en el idioma nuevo; si ya terminó, solo se traduce el subtítulo que sigue en pantalla.
+ */
+interface Habla {
+  clave: ClaveTexto;
+  alTerminar?: () => void;
+  /** El subtítulo es el texto entero (no frase a frase). */
+  completo: boolean;
+  /** Índice de la última frase mostrada. */
+  frase: number;
+}
+let habla: Habla | null = null;
+/** El mentor está hablando ahora mismo (lo dice la sincronía de la voz). */
+let mentorHablando = false;
+/** Textos de pantalla que se calculan al mostrarlos: se guarda su clave para volver a leerlos al cambiar de idioma. */
+let claveEntrar: ClaveTexto | null = null;
+let claveMision: ClaveTexto | null = null;
+
+/** Explica `clave` con voz y subtítulos. Sin voz, el subtítulo sale igual. No corta la anterior: `voz.hablar` la reemplaza. */
+function hablar(voz: Voz, ui: JuegoUi, clave: ClaveTexto, alTerminar?: () => void, completo = false): void {
+  const h: Habla = { clave, alTerminar, completo, frase: -1 };
+  habla = h;
+  if (completo) {
+    ui.subtitulos(texto(clave));
+    voz.hablar(textoGuion(clave), alTerminar);
+    return;
+  }
+  voz.hablar(textoGuion(clave), alTerminar, (frase) => {
+    h.frase++;
+    ui.subtitulos(frase);
+  });
+}
+
+/** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. */
 function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto): void {
   voz.cancelar();
-  voz.hablar(textoGuion(clave), undefined, (frase) => ui.subtitulos(frase));
+  hablar(voz, ui, clave);
+}
+
+/** Vuelve a leer en el idioma nuevo todo lo que ya está en pantalla. */
+function releerTextos(sesion: Sesion): void {
+  const { ui, voz } = sesion;
+  requireEl('ayuda').textContent = texto('ayuda');
+  if (claveEntrar) ui.indicarEntrar(texto(claveEntrar));
+  if (claveMision) ui.mostrarMision(t(claveMision));
+  if (!habla) return;
+  if (mentorHablando) {
+    hablar(voz, ui, habla.clave, habla.alTerminar, habla.completo);
+  } else if (ui.subtitulosVisibles()) {
+    const frases = dividirFrases(texto(habla.clave));
+    ui.subtitulos(habla.completo ? texto(habla.clave) : (frases[Math.min(Math.max(habla.frase, 0), frases.length - 1)] ?? null));
+  }
 }
 
 const mensajeDe = (err: unknown): string => (err instanceof Error ? err.message : String(err));
@@ -70,8 +119,15 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   // Se carga en segundo plano: no retrasa el arranque, y las líneas que lleguen tarde se hablan con síntesis.
   const catalogoVoz: CatalogoVoz = new Map();
   void cargarCatalogoVoz(assetUrl('voz/')).then((c) => c.forEach((linea, clave) => catalogoVoz.set(clave, linea)));
-  const voz = crearVoz('es-ES', catalogoVoz);
-  voz.escuchar(crearOyenteMentor());
+  const voz = crearVoz(() => LENGUA_VOZ[idioma()], catalogoVoz);
+  const oyenteMentor = crearOyenteMentor();
+  voz.escuchar({
+    ...oyenteMentor,
+    alEstado(estado) {
+      mentorHablando = estado === 'hablando';
+      oyenteMentor.alEstado?.(estado);
+    },
+  });
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
   const cursorUi = crearCursor();
@@ -86,40 +142,43 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         // El mentor explica la vitrina frase a frase; cada frase va como subtítulo al empezar.
         // Al terminar la última (no antes) se habilita entrar (SPEC 7.2).
         ui.indicarEntrar(null);
-        voz.hablar(
-          tGuion(evento.id),
-          () => museo.terminoVoz(evento.id),
-          (frase) => ui.subtitulos(frase),
-        );
+        claveEntrar = null;
+        hablar(voz, ui, evento.id, () => museo.terminoVoz(evento.id));
         break;
       case 'listoParaEntrar':
+        claveEntrar = 'entrar_aplauso';
         ui.indicarEntrar(texto('entrar_aplauso'));
         break;
       case 'vitrinaDeseleccionada':
         // Sin vitrina seleccionada no hay explicación ni entrada: se corta la voz y los textos.
         voz.cancelar();
+        habla = null;
         ui.subtitulos(null);
         ui.indicarEntrar(null);
+        claveEntrar = null;
         break;
       case 'misionAbierta':
         voz.cancelar();
+        habla = null;
         ui.subtitulos(null);
         ui.indicarEntrar(null);
+        claveEntrar = null;
         if (evento.mision === 'luna') {
           // Misión lunar (SPEC 8): sin cartel de "en construcción". El primer aplauso dentro sienta al jugador.
           mision = new MisionLuna();
           cursorUi.mostrar(false);
           decirFrase(voz, ui, 'luna_entrando_museo');
         } else {
-          ui.mostrarMision(t('escena_marte_construccion'));
+          claveMision = 'escena_marte_construccion';
+          ui.mostrarMision(t(claveMision));
         }
         break;
       case 'regresoMuseo':
         // Se quita el texto de la escena y el mentor da su conclusión (voz y subtítulos).
         mision = null;
         ui.ocultarMision();
-        ui.subtitulos(t('regreso_museo'));
-        voz.hablar(tGuion('regreso_museo'));
+        claveMision = null;
+        hablar(voz, ui, 'regreso_museo', undefined, true);
         break;
     }
   });
@@ -172,6 +231,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   requireEl('ayuda').textContent = texto('ayuda');
 
   const sesion: Sesion = { museo, ui, cursorUi, opciones, voz };
+  alCambiarIdioma(() => releerTextos(sesion));
   let avisoActual: string | null | undefined;
   const bucle = (): void => {
     const ahoraS = performance.now() / 1000;
