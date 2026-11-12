@@ -197,6 +197,8 @@ Parte visual: ver spec-visual-museo.md.
 - Zona neutral configurable.
 - Avance: subir las rodillas (caminar en el sitio). El LRV avanza 2.25 veces lo caminado: a la velocidad máxima de caminata (1.2 m/s) va a 2.7 m/s, su velocidad máxima de diseño (6 mph).
 - Al dejar de caminar, el vehículo se detiene.
+- Ruedas: las cuatro eran direccionables y, en el modo normal, las traseras giraban en sentido contrario a las delanteras, con un radio de giro de 3.1 m (NSSDC). En el juego, el ángulo de las ruedas sigue al volante: Ackermann en los dos ejes, hasta 50° la rueda interior y ~22° la exterior. Sin manos, las ruedas se quedan en el último ángulo; al detenerse conservan el ángulo y dejan de rodar en unas décimas de segundo. Ruedan según la velocidad, en sentido contrario al retroceder.
+- Bajarse: pellizco (pulgar e índice, sección 5.4) con las dos manos a la vez y los otros tres dedos extendidos, sostenido 0.4 s, con cooldown de 1.5 s; con teclado, la tecla B. Solo sentado y fuera del golpe y el agarre. El vehículo se detiene donde está y el jugador queda de pie junto al asiento del comandante. El LRV conserva su posición y la muestra, si ya se recogió. A pie, el aplauso junto al LRV vuelve a sentarlo; con la muestra recogida, el aplauso vuelve al museo.
 - El LRV no atraviesa el LM ni la roca, y no se aleja más de 260 m del LM.
 
 ### 8.3 Recolección

@@ -1,4 +1,4 @@
-import { HAND_IDX, palmDistanceRatio, pinchRatio } from './metrics';
+import { HAND_IDX, otrosDedosExtendidos, palmDistanceRatio, pinchRatio } from './metrics';
 import type { TrackedHand } from './tracker';
 
 // Gestos de SPEC 5.2 (aplauso), 5.4 (pellizco), 4 (inclinación de mano) y 8.2 (volante).
@@ -220,6 +220,61 @@ export function pellizco(
   if (!mano) return null;
   const distancia = pinchRatio(mano, w, h);
   return { distancia, cerrado: distancia < umbral };
+}
+
+// ---------------------------------------------------------------------------
+// Pellizco doble sostenido: bajarse del LRV (misión lunar)
+// ---------------------------------------------------------------------------
+
+/** Tiempo (s) que hay que sostener el pellizco con las dos manos para que cuente. */
+export const PELLIZCO_DOBLE_SOSTENER_S = 0.4;
+/** Tras un pellizco doble, tiempo (s) sin otro. Además, hay que soltar antes de que vuelva a contar. */
+export const PELLIZCO_DOBLE_COOLDOWN_S = 1.5;
+
+export interface PellizcoDobleEstado {
+  /** Desde cuándo (s) están las dos manos pellizcando; null si no lo están. */
+  desdeS: number | null;
+  /** false tras disparar, hasta que se suelte el pellizco: sostenerlo más no vuelve a disparar. */
+  armado: boolean;
+  /** Último disparo (s), para el cooldown. */
+  ultimoS: number;
+}
+
+export const pellizcoDobleEstadoInicial: PellizcoDobleEstado = {
+  desdeS: null,
+  armado: true,
+  ultimoS: Number.NEGATIVE_INFINITY,
+};
+
+/** ¿Pellizca esta mano para el gesto doble? Pulgar e índice juntos (SPEC 5.4) y los otros tres dedos extendidos. */
+function pellizcoAbierto(mano: TrackedHand | undefined, w: number, h: number, umbral: number): boolean {
+  if (!mano) return false;
+  return (pellizco(mano, w, h, umbral)?.cerrado ?? false) && otrosDedosExtendidos(mano, w, h);
+}
+
+/**
+ * Pellizco con las dos manos a la vez, sostenido PELLIZCO_DOBLE_SOSTENER_S. Reutiliza el pellizco de SPEC 5.4 y
+ * además pide los otros tres dedos extendidos (el gesto de «OK»): al sujetar el volante con el puño cerrado, el
+ * pulgar puede quedar junto al índice, pero los demás dedos están doblados, así que no cuenta. Un solo pellizco
+ * tampoco cuenta. Dispara una vez por pellizco y respeta PELLIZCO_DOBLE_COOLDOWN_S. Función pura.
+ */
+export function pellizcoDoble(
+  hands: TrackedHand[],
+  w: number,
+  h: number,
+  estado: PellizcoDobleEstado,
+  ahoraS: number,
+  umbral = PELLIZCO_UMBRAL_DEFAULT,
+): { detectado: boolean; estado: PellizcoDobleEstado } {
+  const izq = hands.find((m) => m.label === 'Left');
+  const der = hands.find((m) => m.label === 'Right');
+  const ambas = pellizcoAbierto(izq, w, h, umbral) && pellizcoAbierto(der, w, h, umbral);
+  if (!ambas) return { detectado: false, estado: { ...estado, desdeS: null, armado: true } };
+  const desdeS = estado.desdeS ?? ahoraS;
+  const listo =
+    estado.armado && ahoraS - desdeS >= PELLIZCO_DOBLE_SOSTENER_S && ahoraS - estado.ultimoS >= PELLIZCO_DOBLE_COOLDOWN_S;
+  if (!listo) return { detectado: false, estado: { ...estado, desdeS } };
+  return { detectado: true, estado: { desdeS, armado: false, ultimoS: ahoraS } };
 }
 
 // ---------------------------------------------------------------------------

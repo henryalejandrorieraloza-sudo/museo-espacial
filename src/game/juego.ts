@@ -45,6 +45,8 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
   luna_golpeando: 'luna_golpeando_teclado',
   luna_muestra_recogida: 'luna_muestra_recogida_teclado',
+  luna_bajado: 'luna_bajado_teclado',
+  luna_bajado_muestra: 'luna_bajado_muestra_teclado',
 };
 
 /** Texto según el control: con teclado usa la variante que nombra la tecla, si existe. */
@@ -284,7 +286,7 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
   // Escena lunar: volante, caminata, golpe y agarre van a la máquina de estados (SPEC 8).
   // A pie, el jugador camina y mira como en el museo; sentado, la caminata mueve el LRV y el giro solo la vista.
   if (mision !== null) {
-    const aPie = mision.estado === 'entrando_museo';
+    const aPie = mision.aPie;
     if (lectura.conMovimiento && !sesion.museo.enTransicion) {
       visual.museo.moverCamara(lectura.giroGrados, aPie ? lectura.avanceM : 0, lectura.cabeceoGrados, aPie ? lectura.lateralM : 0);
     }
@@ -297,6 +299,7 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
       volanteGrados: lectura.volanteGrados,
       velocidadGolpeHombrosS: lectura.golpeHombrosS,
       agarreNuevo: lectura.agarreNuevo,
+      bajarse: lectura.bajarse,
     });
     return;
   }
@@ -329,7 +332,9 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
     x: mision.posicion.x,
     z: mision.posicion.z,
     rumboGrados: mision.rumboGrados,
-    sentado: mision.estado !== 'entrando_museo',
+    direccionGrados: mision.direccionGrados,
+    dtS: entrada.dtS,
+    sentado: !mision.aPie,
     haloVisible: mision.haloVisible,
   });
   for (const evento of eventos) {
@@ -338,6 +343,8 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
       if (clave) decirFrase(sesion.voz, sesion.ui, clave);
     } else if (evento.tipo === 'golpeFallido') {
       decirFrase(sesion.voz, sesion.ui, 'luna_golpe_fallido');
+    } else if (evento.tipo === 'bajado') {
+      decirFrase(sesion.voz, sesion.ui, evento.conMuestra ? 'luna_bajado_muestra' : 'luna_bajado');
     } else if (evento.tipo === 'lejosDelLRV') {
       decirFrase(sesion.voz, sesion.ui, 'luna_lejos_LRV');
     } else if (evento.tipo === 'volver') {

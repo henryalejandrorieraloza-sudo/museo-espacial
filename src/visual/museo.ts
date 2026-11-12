@@ -5,6 +5,7 @@ import { EXPOSICION, crearAmbienteMuseo, crearPostproceso, type AmbienteMuseo } 
 import { ALTURA_PEDESTAL, LADO_VITRINA, RADIO_CAMINABLE, RADIO_PROYECTOR, crearRotonda, crearVitrinaArtefacto } from './arquitectura';
 import { ESCENAS, MODELOS, type ConfigModelo } from './config';
 import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, colocarLRV, crearEscenaLuna, crearPostprocesoLuna, ojosEnLRV } from './lunaEscena';
+import type { RuedasLRV } from './lrv';
 import { crearMentor, type EstadoMentor, type GestoMentor } from './mentor';
 import { alturaLuna } from './lunaTerreno';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
@@ -22,6 +23,11 @@ import { LLEGADA, LM, RADIO_A_PIE_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M
 const ALTURA_OJOS = 1.6;
 /** Posición inicial del jugador: frente a las vitrinas, mirando a −Z hacia el centro de la rotonda. */
 const INICIO = { x: 0, z: 11 };
+/**
+ * Al bajarse del LRV, el jugador queda de pie a la izquierda del asiento del comandante, a esta distancia del
+ * centro del LRV (m): justo fuera de RADIO_OBSTACULO_LRV_M, para no rebotar contra él al dar el primer paso.
+ */
+const DISTANCIA_BAJADA_LRV_M = RADIO_OBSTACULO_LRV_M + 0.3;
 /** Límite de movimiento en Marte (m, por eje). En el museo manda RADIO_CAMINABLE y en la Luna, RADIO_A_PIE_M. */
 const LIMITE_MISION_X_Z = 7.4;
 /** Plano lejano de la cámara en el museo y en Marte (m). En la Luna se amplía a LEJANO_CAMARA_LUNA_M. */
@@ -203,6 +209,9 @@ let miradaLRV = 0;
 /** LRV de la escena lunar y su rumbo actual (°), para apoyar la cámara y esquivarlo a pie. */
 let lrvLuna: THREE.Object3D | null = null;
 let rumboLRV = 0;
+/** Ruedas del LRV (dirección y rodadura) y la última posición del LRV, para saber cuánto avanzó. */
+let ruedasLRV: RuedasLRV | null = null;
+let posicionPreviaLRV: { x: number; z: number } | null = null;
 /** Render de la Luna (dos pasadas y bloom). */
 let postLuna: { render(): void; ajustar(ancho: number, alto: number): void } | null = null;
 /** Posición y giro del jugador en el museo, guardados mientras está en una escena. */
@@ -305,6 +314,7 @@ async function iniciar(container: HTMLElement): Promise<void> {
   }
   haloRoca = nodos.get('escena_luna')?.getObjectByName('halo_roca') ?? null;
   lrvLuna = nodos.get('escena_luna')?.getObjectByName('lrv_placeholder') ?? null;
+  ruedasLRV = (lrvLuna?.userData.ruedas as RuedasLRV | undefined) ?? null;
   postLuna = crearPostprocesoLuna(renderer, escenaNueva, camaraNueva);
 
   // Colocación: las vitrinas en su posición; el mentor y el halo se mueven en tiempo de juego.
@@ -412,6 +422,8 @@ function entrarEscena(escena: Escena): void {
   cabeceo = 0;
   sentadoLRV = false;
   miradaLRV = 0;
+  ruedasLRV?.reiniciar();
+  posicionPreviaLRV = null;
   if (escena === 'luna') {
     // Llegada junto al LM y al LRV, de pie, mirando hacia los dos (sitioApollo17.ts).
     posicion = new THREE.Vector3(LLEGADA.x, alturaLuna(LLEGADA.x, LLEGADA.z) + ALTURA_OJOS, LLEGADA.z);
@@ -622,10 +634,20 @@ function actualizarLuna(estado: {
   x: number;
   z: number;
   rumboGrados: number;
+  /** Ángulo de dirección de las ruedas (°, + = derecha). */
+  direccionGrados: number;
+  /** Duración del fotograma (s), para la rodadura de las ruedas. */
+  dtS: number;
   sentado: boolean;
   haloVisible: boolean;
 }): void {
   rumboLRV = estado.rumboGrados;
+  // Metros que avanzó el LRV en su rumbo desde el fotograma anterior (negativos al retroceder).
+  const rad = THREE.MathUtils.degToRad(estado.rumboGrados);
+  const previa = posicionPreviaLRV;
+  const avanceM = previa ? (estado.x - previa.x) * Math.sin(rad) - (estado.z - previa.z) * Math.cos(rad) : 0;
+  posicionPreviaLRV = { x: estado.x, z: estado.z };
+  ruedasLRV?.actualizar(estado.direccionGrados, avanceM, estado.dtS);
   if (lrvLuna) colocarLRV(lrvLuna, estado.x, estado.z, estado.rumboGrados);
   if (haloRoca) haloRoca.visible = estado.haloVisible;
   if (estado.sentado && lrvLuna) {
@@ -633,6 +655,13 @@ function actualizarLuna(estado: {
     ojosEnLRV(lrvLuna, posicion);
     yaw = -THREE.MathUtils.degToRad(estado.rumboGrados) + miradaLRV;
     actualizarCamara();
+  } else if (sentadoLRV && lrvLuna) {
+    // Se acaba de bajar: de pie junto al asiento del comandante (a la izquierda), mirando hacia donde miraba.
+    posicion.set(estado.x, 0, estado.z).addScaledVector(new THREE.Vector3(-Math.cos(rad), 0, -Math.sin(rad)), DISTANCIA_BAJADA_LRV_M);
+    posicion.y = alturaLuna(posicion.x, posicion.z) + ALTURA_OJOS;
+    // Ya a pie: moverEnLuna aparta al jugador del LM si hiciera falta y lo deja dentro del radio a pie.
+    sentadoLRV = false;
+    moverEnLuna(0, 0, 0);
   }
   sentadoLRV = estado.sentado;
 }

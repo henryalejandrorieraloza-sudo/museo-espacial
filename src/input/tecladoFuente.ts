@@ -7,6 +7,7 @@
 //   Espacio         aplaudir
 //   E o clic izq.   mantener para señalar la vitrina del centro de la pantalla; en la Luna, golpe
 //   F o clic der.   pellizco y agarre
+//   B               bajarse del LRV (misión lunar). La E ya es señalar y golpe, y la F el agarre
 //   Esc             abrir Opciones
 
 import { TIEMPO_FRENADO_S } from '../game/caminata';
@@ -48,6 +49,7 @@ export class FuenteTeclado implements FuenteEntrada {
   private espacioPendiente = false;
   private golpePendiente = false;
   private agarrePendiente = false;
+  private bajarsePendiente = false;
   /** Señalar: E o botón izquierdo mantenidos. */
   private senalarTecla = false;
   private senalarRaton = false;
@@ -126,7 +128,9 @@ export class FuenteTeclado implements FuenteEntrada {
     lectura.golpeHombrosS = this.golpePendiente ? GOLPE_TECLADO_HOMBROS_S : 0;
     lectura.pellizcoNuevo = this.agarrePendiente;
     lectura.agarreNuevo = this.agarrePendiente;
+    lectura.bajarse = this.bajarsePendiente;
     this.espacioPendiente = false;
+    this.bajarsePendiente = false;
     this.golpePendiente = false;
     this.agarrePendiente = false;
     return lectura;
@@ -183,6 +187,8 @@ export class FuenteTeclado implements FuenteEntrada {
       this.senalarTecla = true;
     } else if (ev.code === 'KeyF') {
       if (!ev.repeat) this.agarrePendiente = true;
+    } else if (ev.code === 'KeyB') {
+      if (!ev.repeat) this.bajarsePendiente = true;
     } else if (TECLAS_MOVIMIENTO.has(ev.code)) {
       this.pulsadas.add(ev.code);
     }

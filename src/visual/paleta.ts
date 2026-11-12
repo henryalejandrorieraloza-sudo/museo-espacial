@@ -65,6 +65,13 @@ export const HIST = {
   guardabarros: 0xbdb8aa,
   /** Consola del LRV: paneles oscuros con instrumentos. */
   consola: 0x2c2c2e,
+  /** LRV: cuerdas de la malla de acero cincado, algo más claras que la banda vista a través del tejido. */
+  mallaHilo: 0xbcb091,
+  /**
+   * LRV: mantas térmicas (MLI) forradas de beta cloth, blancas. En el LRV no había oro a la vista: el Kapton
+   * dorado y ámbar es del LM (Creel, "Coping with dust", 2017; NSSDC).
+   */
+  mantaLRV: 0xe8e6de,
 } as const;
 
 /**

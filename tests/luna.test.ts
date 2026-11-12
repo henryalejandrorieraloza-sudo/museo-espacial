@@ -5,8 +5,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DIRECCION_MAX_GRADOS,
   DISTANCIA_ROCA_M,
   MisionLuna,
+  direccionVolanteGrados,
   POSICION_ROCA,
   esGolpe,
   giroVolanteGradosS,
@@ -23,13 +25,14 @@ function entrada(extra: Partial<EntradaLuna> = {}): EntradaLuna {
     volanteGrados: null,
     velocidadGolpeHombrosS: 0,
     agarreNuevo: false,
+    jugador: { x: 0, z: 0 },
     ...extra,
   };
 }
 
-/** Misión ya dentro de la escena, sentada en el LRV (aplauso de entrada hecho). */
+/** Misión ya dentro de la escena, sentada en el LRV (aplauso de entrada hecho), con rumbo 0 (hacia −Z). */
 function sentada(posicion?: { x: number; z: number }): MisionLuna {
-  const m = new MisionLuna('sentado_en_LRV', posicion);
+  const m = new MisionLuna('sentado_en_LRV', posicion, 0);
   return m;
 }
 
@@ -41,7 +44,7 @@ const CERCA = { x: POSICION_ROCA.x - 1, z: POSICION_ROCA.z };
 test('el primer aplauso dentro de la escena sienta al jugador', () => {
   const m = new MisionLuna();
   assert.equal(m.estado, 'entrando_museo');
-  m.update(entrada({ aplauso: true }));
+  m.update(entrada({ aplauso: true, jugador: m.posicion }));
   assert.equal(m.estado, 'sentado_en_LRV');
 });
 
@@ -153,4 +156,75 @@ test('tras recoger la muestra, el aplauso vuelve al museo', () => {
   const m = new MisionLuna('muestra_recogida', CERCA);
   m.update(entrada({ aplauso: true }));
   assert.equal(m.estado, 'volviendo');
+});
+
+test('bajarse del LRV deja la posición del LRV donde estaba y pasa a pie', () => {
+  const m = sentada(LEJOS);
+  m.update(entrada({ metros: 0.5 }));
+  const donde = m.posicion;
+  const eventos = m.update(entrada({ metros: 0.5, bajarse: true }));
+  assert.equal(m.estado, 'a_pie');
+  assert.equal(m.aPie, true);
+  assert.deepEqual(m.posicion, donde, 'el LRV se detiene: no avanza en el fotograma de bajarse');
+  assert.ok(eventos.some((e) => e.tipo === 'bajado' && !e.conMuestra));
+  m.update(entrada({ metros: 1, volanteGrados: 40, dtS: 1 }));
+  assert.deepEqual(m.posicion, donde, 'a pie, la caminata ya no mueve el LRV');
+});
+
+test('bajarse conserva la muestra; el aplauso a pie vuelve al museo y el halo sigue apagado', () => {
+  const m = new MisionLuna('cerca_de_roca', CERCA);
+  m.update(entrada({ ahoraS: 10, velocidadGolpeHombrosS: 2 }));
+  m.update(entrada({ ahoraS: 10.5, agarreNuevo: true }));
+  assert.equal(m.estado, 'muestra_recogida');
+  const eventos = m.update(entrada({ ahoraS: 11, bajarse: true }));
+  assert.equal(m.estado, 'a_pie');
+  assert.ok(eventos.some((e) => e.tipo === 'bajado' && e.conMuestra));
+  assert.equal(m.muestraRecogida, true);
+  assert.equal(m.haloVisible, false);
+  const lejos = { x: m.posicion.x + 50, z: m.posicion.z };
+  m.update(entrada({ aplauso: true, jugador: lejos }));
+  assert.equal(m.estado, 'volviendo');
+});
+
+test('bajado sin muestra, el aplauso junto al LRV vuelve a sentarlo y lejos no', () => {
+  const m = sentada(LEJOS);
+  m.update(entrada({ bajarse: true }));
+  const ev = m.update(entrada({ aplauso: true, jugador: { x: LEJOS.x + 20, z: LEJOS.z } }));
+  assert.equal(m.estado, 'a_pie');
+  assert.ok(ev.some((e) => e.tipo === 'lejosDelLRV'));
+  m.update(entrada({ aplauso: true, jugador: { x: LEJOS.x + 2, z: LEJOS.z } }));
+  assert.equal(m.estado, 'sentado_en_LRV');
+});
+
+test('no se baja a pie, ni durante el golpe (perdería el agarre)', () => {
+  const llegada = new MisionLuna();
+  llegada.update(entrada({ bajarse: true }));
+  assert.equal(llegada.estado, 'entrando_museo');
+  const m = new MisionLuna('cerca_de_roca', CERCA);
+  m.update(entrada({ ahoraS: 10, velocidadGolpeHombrosS: 2 }));
+  m.update(entrada({ ahoraS: 10.2, bajarse: true }));
+  assert.equal(m.estado, 'golpeando');
+});
+
+test('la dirección de las ruedas sigue al volante, con el signo del giro, y se queda sin manos', () => {
+  assert.equal(direccionVolanteGrados(5), 0);
+  assert.equal(direccionVolanteGrados(70), DIRECCION_MAX_GRADOS);
+  assert.equal(direccionVolanteGrados(180), DIRECCION_MAX_GRADOS);
+  assert.ok(direccionVolanteGrados(-30) < 0);
+  const m = sentada(LEJOS);
+  m.update(entrada({ volanteGrados: 40 }));
+  assert.ok(m.direccionGrados > 0, 'parado, el volante ya gira las ruedas');
+  const antes = m.direccionGrados;
+  m.update(entrada({ volanteGrados: null, metros: 0.1 }));
+  assert.equal(m.direccionGrados, antes, 'sin manos, el último ángulo');
+  m.update(entrada({ volanteGrados: null, metros: 0 }));
+  assert.equal(m.direccionGrados, antes, 'al detenerse, mantiene el ángulo');
+});
+
+test('con teclado se puede retroceder desde parado', () => {
+  const m = sentada(LEJOS);
+  const antes = m.posicion;
+  m.update(entrada({ metros: -0.2 }));
+  assert.equal(m.estado, 'conduciendo');
+  assert.ok(m.posicion.z > antes.z, 'con rumbo 0, retroceder va hacia +Z');
 });

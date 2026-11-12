@@ -3,7 +3,16 @@
 // pellizco, volante, golpe y agarre. La lógica es la misma que antes vivía en juego.ts.
 
 import { checkFraming, type FramingStatus } from '../tracking/framing';
-import { aplauso, aplausoEstadoInicial, pellizco, volante, type AplausoEstado } from '../tracking/gestures';
+import {
+  aplauso,
+  aplausoEstadoInicial,
+  pellizco,
+  pellizcoDoble,
+  pellizcoDobleEstadoInicial,
+  volante,
+  type AplausoEstado,
+  type PellizcoDobleEstado,
+} from '../tracking/gestures';
 import {
   HAND_IDX,
   LegAlternationCounter,
@@ -41,6 +50,8 @@ export class FuenteCamara implements FuenteEntrada {
   private pellizcoCerrado = false;
   private pasosVistos = 0;
   private aplausoEstado: AplausoEstado = aplausoEstadoInicial;
+  /** Pellizco sostenido con las dos manos: bajarse del LRV. */
+  private pellizcoDobleEstado: PellizcoDobleEstado = pellizcoDobleEstadoInicial;
   private ultimoFrescoS: number | null = null;
   private ultimoDatoS = Number.NEGATIVE_INFINITY;
   /** Última posición (px) y tiempo de cada muñeca, para medir la velocidad de golpe (SPEC 8.3). */
@@ -141,6 +152,8 @@ export class FuenteCamara implements FuenteEntrada {
     lectura.golpeHombrosS = this.velocidadGolpe(frame, ahoraS, shoulderPx);
     lectura.agarreNuevo = this.agarreNuevo(frame);
     lectura.volanteGrados = volante(frame.hands, frame.width, frame.height)?.grados ?? null;
+    const doble = pellizcoDoble(frame.hands, frame.width, frame.height, this.pellizcoDobleEstado, ahoraS);
+    this.pellizcoDobleEstado = doble.estado;
 
     if (this.calibracion === null) {
       const nueva = this.calibrador.alimentar(ahoraS, roll, pitch, framing === 'ok');
@@ -159,6 +172,8 @@ export class FuenteCamara implements FuenteEntrada {
     lectura.hayDatos = true;
     // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
     lectura.aplauso = ap.detectado || (espacio && !this.pausada);
+    // Bajarse del LRV: solo la misión lunar lo usa, y solo con el jugador sentado.
+    lectura.bajarse = doble.detectado && !this.pausada;
     // Señalar y pellizco dependen solo de la mano que señala.
     this.senalar(frame, lectura);
 

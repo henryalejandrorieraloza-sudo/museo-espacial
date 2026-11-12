@@ -91,12 +91,13 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 | Espacio | Aplaudir: entrar a la misión o volver al museo | Aplauso |
 | E o clic izquierdo (mantener) | Señalar la vitrina del centro de la pantalla; 1.5 s la selecciona. En la Luna, golpe | Dedo índice; golpe con la mano |
 | F o clic derecho | Pellizco y agarre | Pellizco |
+| B | Bajarse del LRV (misión lunar) | Pellizco sostenido con las dos manos |
 | Esc | Abrir o cerrar Opciones. Soltar el ratón también abre Opciones | — |
 
 - Con teclado, los textos de ayuda y las frases del mentor en la Luna nombran la tecla en vez del gesto.
 
 ## 10. Escena lunar (Apollo 17)
-- El LM y el LRV siguen el lenguaje del museo: low poly, caras facetadas, sombreado plano y los lotes de `paleta.ts`.
+- El LM y el LRV siguen el lenguaje del museo: low poly, caras facetadas, sombreado plano y los lotes de `paleta.ts`. El LRV lleva más detalle que el resto (decisión de Henry, 11 de noviembre de 2026), sin cambiar de estilo: ruedas de malla tejida con chevrones, aros y buje; guardabarros con extensiones; bastidor con bisagras; asientos de cintas; mantas térmicas de beta cloth blanco (sin oro: el Kapton dorado es del LM); antenas con varillas y hélice; cables; y polvo gris en la parte baja. Cada rueda va en su propio grupo para girar con la dirección y rodar.
 - El suelo busca parecerse a las fotos de superficie de Apollo 17: lomas y cráteres con normales suaves (sin facetas), regolito con grano, hoyitos y motas por píxel (`regolito.ts`), y decenas de miles de rocas instanciadas con tamaños en ley de potencia, medio enterradas y facetadas. Más allá del suelo, un solo relieve lejano facetado (low poly) rodea el valle: colinas bajas en todo el horizonte que unen el suelo con los macizos, y los macizos con faldas, contrafuertes, cumbres, collados y barrancos. Las crestas son estilizadas (los macizos reales son más redondeados); las alturas de `sitioApollo17.ts` son el máximo. Suelo, rocas y macizos son mates y reflejan con la ley de Lommel-Seeliger en vez de Lambert: el suelo lejano no se oscurece hacia el horizonte y el contraste lo ponen las sombras.
 - Objetos históricos con colores de `HIST` (LM con Kapton ámbar, ámbar oscuro, amarillo, negro y plata; etapa de ascenso gris). La luz los tiñe, pero no se pintan con la paleta del museo.
 - Luz: sol direccional casi blanco con sombras duras (las únicas sombras proyectadas del juego), relleno gris desde abajo (la luz que rebota en el suelo; el cielo es negro) y cian solo en el halo. Bloom solo en el disco solar (umbral más alto que en el museo, para que las piezas al sol no brillen como emisivas). Sin niebla.

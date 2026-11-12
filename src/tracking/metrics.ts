@@ -16,6 +16,12 @@ export const HAND_IDX = {
   middleMcp: 9,
   pinkyMcp: 17,
   indexTip: 8,
+  middlePip: 10,
+  middleTip: 12,
+  ringPip: 14,
+  ringTip: 16,
+  pinkyPip: 18,
+  pinkyTip: 20,
 } as const;
 
 interface Px {
@@ -296,6 +302,22 @@ export function palmDistanceRatio(
 ): number | null {
   if (hands.length < 2 || !shoulderPx) return null;
   return dist(palmCenterPx(hands[0], w, h), palmCenterPx(hands[1], w, h)) / shoulderPx;
+}
+
+/**
+ * Corazón, anular y meñique extendidos: la punta de cada uno queda más lejos de la muñeca que su articulación
+ * media (PIP) por al menos `margen`. Con el puño cerrado (al sujetar el volante), las puntas se doblan hacia la
+ * palma y quedan más cerca de la muñeca que la PIP.
+ */
+export function otrosDedosExtendidos(hand: TrackedHand, w: number, h: number, margen = 1.1): boolean {
+  const lm = hand.landmarks;
+  const muneca = toPx(lm[HAND_IDX.wrist], w, h);
+  const pares = [
+    [HAND_IDX.middlePip, HAND_IDX.middleTip],
+    [HAND_IDX.ringPip, HAND_IDX.ringTip],
+    [HAND_IDX.pinkyPip, HAND_IDX.pinkyTip],
+  ] as const;
+  return pares.every(([pip, punta]) => dist(muneca, toPx(lm[punta], w, h)) > dist(muneca, toPx(lm[pip], w, h)) * margen);
 }
 
 /**

@@ -25,6 +25,15 @@ export const VOLANTE_NEUTRAL_GRADOS = 10;
 export const VOLANTE_SENSIBILIDAD = 1;
 /** Velocidad máxima de giro del LRV (°/s). */
 export const VOLANTE_VELOCIDAD_MAX_GRADOS_S = 60;
+/**
+ * Ángulo máximo de la rueda interior al girar (°). Con el giro del LRV a su tope (VOLANTE_VELOCIDAD_MAX_GRADOS_S),
+ * la rueda interior llega a este ángulo; por debajo, es proporcional. Es el ángulo que dibuja la escena: el giro
+ * del juego sigue saliendo de giroVolanteGradosS.
+ * // VERIFICAR: 50° interior y 22° exterior según un documento de NASA NTRS (20230013087) que describe dirección
+ * Ackermann delante y detrás. Con la batalla y la vía del LRV, 50° interior da 22° exterior y un radio de giro
+ * de ~3 m, que cuadra con los 3.1 m de la NSSDC.
+ */
+export const DIRECCION_MAX_GRADOS = 50;
 
 /** Posición inicial del LRV (m, plano del suelo): estacionado junto al LM. */
 export const POSICION_LRV_INICIAL = { x: LRV_ESTACIONADO.x, z: LRV_ESTACIONADO.z };
@@ -37,9 +46,13 @@ const DISTANCIA_MINIMA_LM_M = RADIO_OBSTACULO_LM_M + 1.6;
 /** Ni a la roca a menos de esto (m): se detiene delante sin pasarle por encima. */
 const DISTANCIA_MINIMA_ROCA_M = 2.0;
 
-/** `entrando_museo`: el jugador acaba de llegar y está a pie; puede caminar y mirar hasta subirse al LRV. */
+/**
+ * `entrando_museo`: el jugador acaba de llegar y está a pie; puede caminar y mirar hasta subirse al LRV.
+ * `a_pie`: se bajó del LRV. El LRV se queda donde estaba y la muestra, si ya la recogió, sigue recogida.
+ */
 export type EstadoLuna =
   | 'entrando_museo'
+  | 'a_pie'
   | 'sentado_en_LRV'
   | 'conduciendo'
   | 'cerca_de_roca'
@@ -63,6 +76,8 @@ export interface EntradaLuna {
   velocidadGolpeHombrosS: number;
   /** El pellizco de la otra mano se acaba de cerrar en este fotograma. */
   agarreNuevo: boolean;
+  /** Bajarse del LRV en este fotograma (tecla B o pellizco sostenido con las dos manos). Opcional: false. */
+  bajarse?: boolean;
   /** Posición del jugador a pie (m). Solo cuenta antes de subirse al LRV. */
   jugador: { x: number; z: number };
 }
@@ -74,6 +89,8 @@ export type EventoLuna =
   | { tipo: 'muestraRecogida' }
   /** Aplauso a pie lejos del LRV: no se sube. */
   | { tipo: 'lejosDelLRV' }
+  /** El jugador se bajó del LRV. `conMuestra`: ya había recogido la muestra. */
+  | { tipo: 'bajado'; conMuestra: boolean }
   /** El jugador pidió volver al museo (aplauso). */
   | { tipo: 'volver' };
 
@@ -90,6 +107,17 @@ export function giroVolanteGradosS(anguloGrados: number): number {
   return Math.sign(anguloGrados) * velocidad;
 }
 
+/**
+ * Ángulo de dirección (°, + = derecha) de la rueda interior delantera para un ángulo de volante: proporcional al
+ * giro que produce el volante, con DIRECCION_MAX_GRADOS cuando el giro llega a su tope. Volante recto = 0.
+ */
+export function direccionVolanteGrados(anguloGrados: number): number {
+  return (giroVolanteGradosS(anguloGrados) / VOLANTE_VELOCIDAD_MAX_GRADOS_S) * DIRECCION_MAX_GRADOS;
+}
+
+/** Estados en que el jugador va sentado en el LRV y puede bajarse. Golpeando o agarrando, no: perdería el golpe. */
+const PUEDE_BAJARSE: readonly EstadoLuna[] = ['sentado_en_LRV', 'conduciendo', 'cerca_de_roca', 'muestra_recogida'];
+
 export class MisionLuna {
   private estadoActual: EstadoLuna;
   private x: number;
@@ -98,6 +126,10 @@ export class MisionLuna {
   private rumbo: number;
   /** Instante (s) hasta el que vale el agarre tras un golpe; null si no hay golpe pendiente. */
   private finAgarreS: number | null = null;
+  /** Ángulo de dirección de las ruedas (°, + = derecha). Se queda en el último valor si no se ven las manos. */
+  private direccion = 0;
+  /** La muestra ya se recogió. Se conserva aunque el jugador se baje del LRV. */
+  private conMuestra: boolean;
 
   /**
    * `estadoInicial` por defecto es `entrando_museo`: la escena se abre con el aplauso de la vitrina
@@ -108,6 +140,7 @@ export class MisionLuna {
     this.x = posicion.x;
     this.z = posicion.z;
     this.rumbo = rumbo;
+    this.conMuestra = estadoInicial === 'muestra_recogida';
   }
 
   get estado(): EstadoLuna {
@@ -122,6 +155,21 @@ export class MisionLuna {
     return this.rumbo;
   }
 
+  /** Ángulo de dirección de las ruedas (°, + = derecha), para dibujarlas. Ver direccionVolanteGrados. */
+  get direccionGrados(): number {
+    return this.direccion;
+  }
+
+  /** La muestra ya está recogida (aunque el jugador se haya bajado). */
+  get muestraRecogida(): boolean {
+    return this.conMuestra;
+  }
+
+  /** El jugador está a pie: al llegar, o después de bajarse del LRV. */
+  get aPie(): boolean {
+    return this.estadoActual === 'entrando_museo' || this.estadoActual === 'a_pie';
+  }
+
   distanciaRoca(): number {
     return Math.hypot(this.x - POSICION_ROCA.x, this.z - POSICION_ROCA.z);
   }
@@ -133,7 +181,7 @@ export class MisionLuna {
 
   /** El halo de la roca se ve desde que se llega hasta recoger la muestra (SPEC 10: visible hasta completar la acción). */
   get haloVisible(): boolean {
-    return this.estadoActual !== 'muestra_recogida' && this.estadoActual !== 'volviendo';
+    return !this.conMuestra && this.estadoActual !== 'volviendo';
   }
 
   /** Avanza un fotograma. Devuelve los eventos ocurridos en él. */
@@ -148,10 +196,14 @@ export class MisionLuna {
     if (this.estadoActual === 'volviendo') return eventos;
 
     // El aplauso sienta al jugador si está junto al LRV, o vuelve al museo en cualquier otro estado (SPEC 8.3 y 8.4).
+    // Bajado del LRV con la muestra ya recogida, el aplauso vuelve al museo esté donde esté.
     if (entrada.aplauso) {
-      if (this.estadoActual === 'entrando_museo') {
-        if (this.distanciaJugador(entrada.jugador) <= DISTANCIA_SUBIR_M) ir('sentado_en_LRV');
-        else eventos.push({ tipo: 'lejosDelLRV' });
+      if (this.aPie && !(this.estadoActual === 'a_pie' && this.conMuestra)) {
+        if (this.distanciaJugador(entrada.jugador) <= DISTANCIA_SUBIR_M) {
+          ir(this.conMuestra ? 'muestra_recogida' : 'sentado_en_LRV');
+        } else {
+          eventos.push({ tipo: 'lejosDelLRV' });
+        }
       } else {
         ir('volviendo');
         eventos.push({ tipo: 'volver' });
@@ -159,7 +211,20 @@ export class MisionLuna {
       return eventos;
     }
 
-    if (this.estadoActual === 'sentado_en_LRV' && entrada.metros > 0) ir('conduciendo');
+    // Bajarse: el LRV se detiene donde está (no avanza en este fotograma) y conserva la muestra.
+    if (entrada.bajarse && PUEDE_BAJARSE.includes(this.estadoActual)) {
+      this.finAgarreS = null;
+      ir('a_pie');
+      eventos.push({ tipo: 'bajado', conMuestra: this.conMuestra });
+      return eventos;
+    }
+
+    // Sentado (también parado), el volante mueve las ruedas. Sin manos, se quedan en el último ángulo (SPEC 6).
+    if (!this.aPie && entrada.volanteGrados !== null) {
+      this.direccion = direccionVolanteGrados(entrada.volanteGrados);
+    }
+
+    if (this.estadoActual === 'sentado_en_LRV' && entrada.metros !== 0) ir('conduciendo');
 
     if (this.estadoActual === 'conduciendo' || this.estadoActual === 'cerca_de_roca') {
       this.avanzar(entrada);
@@ -182,6 +247,7 @@ export class MisionLuna {
       }
       if (entrada.agarreNuevo) {
         this.finAgarreS = null;
+        this.conMuestra = true;
         ir('agarrando');
         ir('muestra_recogida');
         eventos.push({ tipo: 'muestraRecogida' });

@@ -56,6 +56,8 @@ export interface LecturaEntrada {
   golpeHombrosS: number;
   /** Ángulo del volante en grados (+ = derecha), o null si no hay volante (manos no visibles). */
   volanteGrados: number | null;
+  /** Bajarse del LRV en este fotograma: tecla B, o pellizco sostenido con las dos manos (misión lunar). */
+  bajarse: boolean;
   /** Manos para el avatar: dibujarlas, ocultarlas o dejarlas como están (null). */
   manos: ManosFotograma | 'ocultar' | null;
 }
@@ -87,6 +89,7 @@ export function lecturaVacia(ahoraS: number): LecturaEntrada {
     agarreNuevo: false,
     golpeHombrosS: 0,
     volanteGrados: null,
+    bajarse: false,
     manos: null,
   };
 }

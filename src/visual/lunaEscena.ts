@@ -148,7 +148,10 @@ export function crearEscenaLuna(): THREE.Group {
 
   const lrv = new THREE.Group();
   lrv.name = 'lrv_placeholder';
-  lrv.add(crearLRVLuna(enEjesDe(DIRECCION_TIERRA, LRV_ESTACIONADO.rumbo)));
+  const modeloLRV = crearLRVLuna(enEjesDe(DIRECCION_TIERRA, LRV_ESTACIONADO.rumbo));
+  lrv.add(modeloLRV);
+  // La animación de las ruedas (dirección y rodadura) queda a mano en el grupo que mueve la escena.
+  lrv.userData.ruedas = modeloLRV.userData.ruedas;
   colocarLRV(lrv, LRV_ESTACIONADO.x, LRV_ESTACIONADO.z, LRV_ESTACIONADO.rumbo);
 
   const cielo = crearCielo();
