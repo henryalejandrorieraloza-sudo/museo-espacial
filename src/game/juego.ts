@@ -19,7 +19,7 @@ import { FuenteTeclado } from '../input/tecladoFuente';
 import type { FuenteEntrada, LecturaEntrada, Senal } from '../input/fuente';
 import { cargarControl, cargarOpciones, guardarControl, type ModoControl, type Opciones } from './opciones';
 import { Museo, type EventoMuseo } from './museo';
-import { MisionLuna, type EntradaLuna, type EstadoLuna } from './luna';
+import { MisionLuna, metrosAPieLuna, type EntradaLuna, type EstadoLuna } from './luna';
 
 /** Misión lunar activa (SPEC 8). Solo existe mientras la pantalla es la escena de Luna. */
 let mision: MisionLuna | null = null;
@@ -287,8 +287,10 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
   // A pie, el jugador camina y mira como en el museo; sentado, la caminata mueve el LRV y el giro solo la vista.
   if (mision !== null) {
     const aPie = mision.aPie;
+    // A pie en la Luna, el avance tiene el tope de la Luna (luna.ts); el museo no lo usa.
+    const avancePie = aPie ? metrosAPieLuna(lectura.avanceM, lectura.dtS) : 0;
     if (lectura.conMovimiento && !sesion.museo.enTransicion) {
-      visual.museo.moverCamara(lectura.giroGrados, aPie ? lectura.avanceM : 0, lectura.cabeceoGrados, aPie ? lectura.lateralM : 0);
+      visual.museo.moverCamara(lectura.giroGrados, avancePie, lectura.cabeceoGrados, aPie ? lectura.lateralM : 0);
     }
     aplicarLuna(sesion, {
       ahoraS,

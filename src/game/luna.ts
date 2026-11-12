@@ -4,17 +4,35 @@
 // Las posiciones del LRV y de la roca salen de src/visual/sitioApollo17.ts (datos sin Three.js), las mismas que
 // usa la escena.
 
-import { LM, LRV_ESTACIONADO, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, ROCA_ESTACION1 } from '../visual/sitioApollo17';
+import { LM, LRV_ESTACIONADO, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, ROCA_ESTACION1 } from '../visual/sitioApollo17.ts';
+
+// ---------------------------------------------------------------------------------------------------------------
+// VELOCIDADES DE LA MISIÓN LUNAR. Solo aplican en la Luna: el museo y Perseverance no las usan.
+// Son ESTIMACIONES AJUSTABLES, no datos verificados: cámbialas aquí y el resto del código las sigue.
+// ---------------------------------------------------------------------------------------------------------------
+/**
+ * Velocidad máxima a pie en la Luna (m/s). Estimación de partida: con 1/6 de la gravedad terrestre, el astronauta
+ * avanza despacio con pasos largos. Se aplica al avance por fotograma (metrosAPieLuna) sin tocar la caminata del museo.
+ */
+export const MOON_WALK_MAX_SPEED = 1.2;
+/**
+ * Velocidad máxima del LRV (m/s). Estimación: 18 km/h, la velocidad máxima que se citó para el LRV real (5 m/s).
+ */
+export const LRV_MAX_SPEED = 5;
+/** Aceleración máxima del LRV (m/s²). Estimación de partida para un arranque suave. */
+export const LRV_ACCEL = 0.5;
+/** Frenado máximo del LRV (m/s²). Estimación de partida: el LRV se para en ~5 s desde su velocidad máxima. */
+export const LRV_BRAKE = 1;
+/**
+ * El LRV avanza este múltiplo de lo que se camina (metros por metro). Se deriva de los topes para que caminar al
+ * tope a pie (MOON_WALK_MAX_SPEED) lleve al LRV a su tope (LRV_MAX_SPEED). Ajustar LRV_MAX_SPEED lo cambia solo.
+ */
+export const FACTOR_AVANCE_LRV = LRV_MAX_SPEED / MOON_WALK_MAX_SPEED;
 
 /** Distancia (m) entre el centro del LRV y la roca para resaltarla (SPEC 8.3). El LRV mide 3 m de largo. */
 export const DISTANCIA_ROCA_M = 3;
 /** Distancia (m) del jugador a pie al centro del LRV para poder subirse con un aplauso. */
 export const DISTANCIA_SUBIR_M = 3.2;
-/**
- * El LRV avanza este múltiplo de lo que se camina: con la caminata a 1.2 m/s, el LRV va a 2.7 m/s, su velocidad
- * máxima de diseño (6 mph; Wikipedia, "Lunar Roving Vehicle"). En Apollo 17 llegó a 11.2 mph cuesta abajo.
- */
-export const FACTOR_AVANCE_LRV = 2.25;
 /** Velocidad (hombros/s) con la que la muñeca baja para contar como golpe (SPEC 8.3). */
 export const GOLPE_VELOCIDAD_HOMBROS_S = 1.5;
 /** Tiempo (s) después del golpe para cerrar el agarre (SPEC 8.3). */
@@ -99,6 +117,33 @@ export function esGolpe(velocidadHombrosS: number): boolean {
   return velocidadHombrosS >= GOLPE_VELOCIDAD_HOMBROS_S;
 }
 
+/**
+ * Metros que avanza el jugador a pie en este fotograma, con el tope de MOON_WALK_MAX_SPEED. La caminata del museo
+ * (game/caminata.ts) sigue igual; solo la misión lunar recorta el avance.
+ */
+export function metrosAPieLuna(metros: number, dtS: number): number {
+  const tope = MOON_WALK_MAX_SPEED * Math.max(0, dtS);
+  return Math.max(-tope, Math.min(tope, metros));
+}
+
+/**
+ * Acerca la velocidad del LRV (m/s) a la objetivo en un fotograma: acelera como mucho a LRV_ACCEL y frena como
+ * mucho a LRV_BRAKE. El objetivo ya viene limitado a ±LRV_MAX_SPEED.
+ */
+export function acercarVelocidadLRV(actual: number, objetivo: number, dtS: number): number {
+  const tasa = Math.abs(objetivo) > Math.abs(actual) ? LRV_ACCEL : LRV_BRAKE;
+  const paso = tasa * Math.max(0, dtS);
+  const delta = objetivo - actual;
+  return Math.abs(delta) <= paso ? objetivo : actual + Math.sign(delta) * paso;
+}
+
+/** Velocidad objetivo del LRV (m/s) según los metros que la caminata da en el fotograma. */
+export function objetivoVelocidadLRV(metros: number, dtS: number): number {
+  if (dtS <= 0) return 0;
+  const velocidad = (metros / dtS) * FACTOR_AVANCE_LRV;
+  return Math.max(-LRV_MAX_SPEED, Math.min(LRV_MAX_SPEED, velocidad));
+}
+
 /** Giro del LRV (°/s) para un ángulo de volante: proporcional fuera de la zona neutral, con tope. */
 export function giroVolanteGradosS(anguloGrados: number): number {
   const exceso = Math.abs(anguloGrados) - VOLANTE_NEUTRAL_GRADOS;
@@ -130,6 +175,8 @@ export class MisionLuna {
   private direccion = 0;
   /** La muestra ya se recogió. Se conserva aunque el jugador se baje del LRV. */
   private conMuestra: boolean;
+  /** Velocidad actual del LRV (m/s, negativa al retroceder). Cambia con LRV_ACCEL y LRV_BRAKE. */
+  private velocidadLRV = 0;
 
   /**
    * `estadoInicial` por defecto es `entrando_museo`: la escena se abre con el aplauso de la vitrina
@@ -214,6 +261,7 @@ export class MisionLuna {
     // Bajarse: el LRV se detiene donde está (no avanza en este fotograma) y conserva la muestra.
     if (entrada.bajarse && PUEDE_BAJARSE.includes(this.estadoActual)) {
       this.finAgarreS = null;
+      this.velocidadLRV = 0;
       ir('a_pie');
       eventos.push({ tipo: 'bajado', conMuestra: this.conMuestra });
       return eventos;
@@ -227,10 +275,13 @@ export class MisionLuna {
     if (this.estadoActual === 'sentado_en_LRV' && entrada.metros !== 0) ir('conduciendo');
 
     if (this.estadoActual === 'conduciendo' || this.estadoActual === 'cerca_de_roca') {
+      this.velocidadLRV = acercarVelocidadLRV(this.velocidadLRV, objetivoVelocidadLRV(entrada.metros, entrada.dtS), entrada.dtS);
       this.avanzar(entrada);
       ir(this.rocaResaltada ? 'cerca_de_roca' : 'conduciendo');
       if (this.estadoActual === 'cerca_de_roca' && esGolpe(entrada.velocidadGolpeHombrosS)) {
         this.finAgarreS = entrada.ahoraS + VENTANA_AGARRE_S;
+        // Para agarrar la muestra el LRV se detiene: no avanza durante golpeando ni agarrando.
+        this.velocidadLRV = 0;
         ir('golpeando');
       }
       return eventos;
@@ -263,15 +314,15 @@ export class MisionLuna {
   }
 
   /**
-   * Giro con el volante y avance con los metros de la caminata (por FACTOR_AVANCE_LRV). Solo se llama conduciendo
-   * o cerca de la roca. El LRV no atraviesa el LM ni la roca, ni sale de RADIO_LRV_M alrededor del LM.
+   * Giro con el volante y avance a la velocidad del LRV (velocidadLRV, con aceleración y frenado limitados). Solo se
+   * llama conduciendo o cerca de la roca. El LRV no atraviesa el LM ni la roca, ni sale de RADIO_LRV_M alrededor del LM.
    */
   private avanzar(entrada: EntradaLuna): void {
     if (entrada.volanteGrados !== null) {
       this.rumbo += giroVolanteGradosS(entrada.volanteGrados) * entrada.dtS;
     }
     const rad = (this.rumbo * Math.PI) / 180;
-    const metros = entrada.metros * FACTOR_AVANCE_LRV;
+    const metros = this.velocidadLRV * entrada.dtS;
     const x = this.x + Math.sin(rad) * metros;
     const z = this.z - Math.cos(rad) * metros;
     // Solo se bloquea el paso que entra en el LM o sale del radio: alejarse o volver siempre se puede.
