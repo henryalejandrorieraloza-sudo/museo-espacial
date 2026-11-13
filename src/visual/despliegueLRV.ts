@@ -58,22 +58,24 @@ const RUMBO_RETIRO = 95;
 /** Altura (m) a la que lo levantan a mano al apartarlo. */
 const ELEVACION_RETIRO_M = 0.12;
 /**
- * Prueba de manejo: de la posición de preparación a LRV_ESTACIONADO. El recorrido exacto no está publicado: Cernan
- * condujo por detrás (al este) del LM. Aquí el LRV primero se aparta del LM marcha atrás (NSSDC: "ready to back away
- * from the LM"), luego rodea la pata sur por fuera y cierra un bucle a la izquierda para quedar apuntando a la roca.
- * Todas las curvas tienen al menos el radio de giro del LRV (3.1 m, NSSDC) y el recorrido deja ~0.4 m libres con los
- * pies y los puntales bajos del LM. Los dos rectos de avance se calculan para terminar justo en LRV_ESTACIONADO.
+ * Prueba de manejo: de la posición de preparación a LRV_ESTACIONADO. El recorrido exacto no está publicado: aquí el LRV
+ * se aparta del LM marcha atrás (NSSDC: "ready to back away from the LM"), sale en curva cerrada a la izquierda, da
+ * una vuelta amplia por fuera del LM y acaba en LRV_ESTACIONADO apuntando a la roca. Los parámetros salen de una
+ * búsqueda en scratchpad (no en el juego) sobre la huella real del modelo: el centro del LRV a ≥ 3.0 m del centro del
+ * LM (etapa de descenso de radio ~2.3 m) y a ≥ 1.9 m de cada pie (4.25 m del centro, radio 0.47 m). Todas las curvas
+ * tienen al menos el radio de giro del LRV (3.1 m, NSSDC). Los dos rectos de avance se calculan para terminar justo en
+ * LRV_ESTACIONADO, y con estos valores salen positivos (sin recorte).
  */
-const RECTO_ATRAS_M = 0.3;
+const RECTO_ATRAS_M = 0;
 /** Marcha atrás: el morro gira de RUMBO_RETIRO hacia el sureste. */
-const CURVA_ATRAS_GRADOS = 40;
-const RADIO_ATRAS_M = 3.6;
-/** Salida: curva a la izquierda hacia el este, por el sur de la pata sur. */
-const CURVA_SALIDA_GRADOS = -45;
-const RADIO_SALIDA_M = 5;
-/** Bucle a la izquierda hasta el rumbo de LRV_ESTACIONADO, con el radio mínimo del LRV redondeado hacia arriba. */
-const RADIO_BUCLE_M = 3.2;
-const RECTO_FINAL_M = 0.8;
+const CURVA_ATRAS_GRADOS = 20;
+const RADIO_ATRAS_M = 3.2;
+/** Salida: curva cerrada a la izquierda, alrededor de la pata del frente. */
+const CURVA_SALIDA_GRADOS = -150;
+const RADIO_SALIDA_M = 3.2;
+/** Vuelta amplia a la izquierda hasta el rumbo de LRV_ESTACIONADO. */
+const RADIO_BUCLE_M = 8;
+const RECTO_FINAL_M = 0;
 /** Fracción de la fase de prueba que dura la marcha atrás: va despacio y para antes de cambiar de sentido. */
 const FRACCION_MARCHA_ATRAS = 0.22;
 /** Fracción del avance en que acelera y en que frena (perfil trapezoidal de velocidad). */
