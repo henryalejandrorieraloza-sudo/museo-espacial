@@ -21,6 +21,7 @@ import { cargarControl, cargarOpciones, guardarControl, type ModoControl, type O
 import { Museo, type EventoMuseo } from './museo';
 import { MisionLuna, metrosAPieLuna, type EntradaLuna, type EstadoLuna } from './luna';
 import { DespliegueLRV } from './despliegueLRV';
+import { BalanceoCaminata, type EntradaBalanceo } from './balanceo';
 import type { FaseDespliegueLRV } from '../visual/despliegueApollo17';
 import { crearAnillo, type AnilloUi } from '../ui/anillo';
 
@@ -273,6 +274,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz };
   alCambiarIdioma(() => releerTextos(sesion));
   let avisoActual: string | null | undefined;
+  const balanceo = new BalanceoCaminata();
   const bucle = (): void => {
     const ahoraS = performance.now() / 1000;
     museo.tick(ahoraS);
@@ -281,6 +283,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
       avisoActual = lectura.aviso;
       ui.aviso(lectura.aviso);
     }
+    actualizarBalanceo(balanceo, sesion, lectura);
     dibujarManos(sesion, lectura);
     actualizarDespliegue(sesion, lectura);
     if (lectura.listo && lectura.hayDatos) aplicarLectura(sesion, lectura);
@@ -299,6 +302,20 @@ interface Sesion {
   /** Opciones vivas: el panel las modifica en el mismo objeto. */
   opciones: Opciones;
   voz: Voz;
+}
+
+/** Sin caminata: el balanceo se va a cero. */
+const SIN_BALANCEO: EntradaBalanceo = { caminando: false, pasosNuevos: 0, pasosPorSegundo: 0 };
+
+/**
+ * Balanceo de la cámara al caminar (solo visual): en el museo y a pie en la Luna. Sentado en el LRV, en Marte o
+ * durante una transición, no hay caminata: la amplitud baja a cero.
+ */
+function actualizarBalanceo(balanceo: BalanceoCaminata, sesion: Sesion, lectura: LecturaEntrada): void {
+  const enMuseo = mision === null && sesion.museo.pantalla.tipo === 'museo';
+  const aPieEnLuna = mision !== null && mision.aPie;
+  const caminaVisible = (enMuseo || aPieEnLuna) && !sesion.museo.enTransicion;
+  visual.museo.fijarBalanceo(balanceo.avanzar(lectura.ahoraS, caminaVisible ? lectura.balanceo : SIN_BALANCEO));
 }
 
 /** Las manos del avatar copian las detectadas por la cámara (SPEC 5.5). Con teclado no hay manos. */

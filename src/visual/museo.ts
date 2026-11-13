@@ -4,6 +4,7 @@ import { assetUrl } from '../tracking/assets';
 import { EXPOSICION, crearAmbienteMuseo, crearPostproceso, type AmbienteMuseo } from './ambiente';
 import { ALTURA_PEDESTAL, LADO_VITRINA, RADIO_CAMINABLE, RADIO_PROYECTOR, crearRotonda, crearVitrinaArtefacto } from './arquitectura';
 import { ESCENAS, MODELOS, type ConfigModelo } from './config';
+import type { PosturaCaminata } from '../game/balanceo';
 import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, colocarLRV, crearEscenaLuna, crearPostprocesoLuna, ojosEnLRV } from './lunaEscena';
 import type { RuedasLRV } from './lrv';
 import { crearMentor, type EstadoMentor, type GestoMentor } from './mentor';
@@ -198,6 +199,11 @@ let mentor: THREE.Object3D | null = null;
 let yaw = 0;
 /** Cabeceo de la cámara (rad): mirar arriba (+) o abajo (−) con el cabeceo de la cabeza. Limitado a ±LIMITE_CABECEO. */
 let cabeceo = 0;
+/**
+ * Postura de la caminata (desplazamiento lateral, subida y bajada, inclinación), solo visual: se suma a la cámara,
+ * no a `posicion`. Así la posición del jugador, el raycast por rayo y las misiones no lo ven (game/balanceo.ts).
+ */
+let balanceo: PosturaCaminata = { lateralM: 0, verticalM: 0, rollGrados: 0 };
 let posicion = new THREE.Vector3(INICIO.x, ALTURA_OJOS, INICIO.z);
 /** Escena three.js compartida por el museo y las escenas de misión (se muestra una a la vez). */
 let escenaPrincipal: THREE.Scene | null = null;
@@ -240,7 +246,19 @@ function vitrinaAim(id: string): THREE.Vector3 {
 function actualizarCamara(): void {
   if (!camara) return;
   camara.position.copy(posicion);
-  camara.rotation.set(cabeceo, yaw, 0, 'YXZ');
+  // El balanceo solo se aplica en el museo y a pie en la Luna (juego.ts decide cuándo hay caminata).
+  const conBalanceo = enMuseo || escenaActual === 'luna';
+  if (conBalanceo) {
+    camara.position.addScaledVector(derecha(), balanceo.lateralM);
+    camara.position.y += balanceo.verticalM;
+  }
+  camara.rotation.set(cabeceo, yaw, conBalanceo ? THREE.MathUtils.degToRad(balanceo.rollGrados) : 0, 'YXZ');
+}
+
+/** Fija la postura de la caminata para este fotograma. Solo se aplica en el museo y a pie en la Luna. */
+function fijarBalanceo(postura: PosturaCaminata): void {
+  balanceo = postura;
+  actualizarCamara();
 }
 
 /** Vector hacia donde mira el jugador, en el plano horizontal. */
@@ -727,6 +745,7 @@ export const visual = {
     mostrarVitrina,
     resaltarVitrina,
     moverCamara,
+    fijarBalanceo,
     posicionJugador,
     mentorAparece,
     mentorEstado,

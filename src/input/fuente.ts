@@ -2,6 +2,7 @@
 // juego.ts lee una `LecturaEntrada` por vuelta del bucle y la reparte al museo y a las misiones.
 // Ni game/museo.ts ni las misiones saben de qué fuente viene cada acción.
 
+import type { EntradaBalanceo } from '../game/balanceo';
 import type { ModoControl } from '../game/opciones';
 import type { TrackedHand } from '../tracking/tracker';
 
@@ -62,6 +63,8 @@ export interface LecturaEntrada {
   desplegarMantenido: boolean;
   /** Manos para el avatar: dibujarlas, ocultarlas o dejarlas como están (null). */
   manos: ManosFotograma | 'ocultar' | null;
+  /** Caminata para el balanceo lateral de la cámara en el museo. Solo visual (game/balanceo.ts). */
+  balanceo: EntradaBalanceo;
 }
 
 export interface FuenteEntrada {
@@ -94,6 +97,7 @@ export function lecturaVacia(ahoraS: number): LecturaEntrada {
     bajarse: false,
     desplegarMantenido: false,
     manos: null,
+    balanceo: { caminando: false, pasosNuevos: 0, pasosPorSegundo: 0 },
   };
 }
 

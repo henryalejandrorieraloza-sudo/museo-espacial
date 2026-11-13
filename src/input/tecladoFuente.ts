@@ -114,6 +114,12 @@ export class FuenteTeclado implements FuenteEntrada {
     this.acelerar(adelante, lado, dtS);
     lectura.avanceM = this.velAvance * dtS;
     lectura.lateralM = this.velLateral * dtS;
+    // Balanceo de la cámara (solo visual): camina con W o S, a la cadencia de la velocidad actual.
+    lectura.balanceo = {
+      caminando: adelante !== 0,
+      pasosNuevos: 0,
+      pasosPorSegundo: Math.abs(this.velAvance) / this.opciones.metrosPorPaso,
+    };
     // En el LRV, A y D son el volante. Sin teclas, volante recto.
     lectura.volanteGrados = lado * VOLANTE_TECLADO_GRADOS;
 

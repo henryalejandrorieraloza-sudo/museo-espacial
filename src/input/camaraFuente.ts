@@ -161,7 +161,8 @@ export class FuenteCamara implements FuenteEntrada {
 
     // Los pasos se cuentan siempre para no acumularlos de golpe al terminar la calibración.
     this.piernas.feed(ahoraS, legSample(frame.pose));
-    const pasosTotales = this.piernas.state(ahoraS).steps;
+    const estadoPiernas = this.piernas.state(ahoraS);
+    const pasosTotales = estadoPiernas.steps;
     const pasos = pasosTotales - this.pasosVistos;
     this.pasosVistos = pasosTotales;
 
@@ -190,6 +191,8 @@ export class FuenteCamara implements FuenteEntrada {
     this.aviso = null;
     lectura.aviso = null;
     lectura.hayDatos = true;
+    // Balanceo de la cámara (solo visual): cada paso detectado es un extremo. No usa el roll ni cambia la detección.
+    lectura.balanceo = { caminando: estadoPiernas.walking && roll !== null, pasosNuevos: pasos, pasosPorSegundo: null };
     // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
     lectura.aplauso = ap.detectado || (espacio && !this.pausada);
     // Bajarse del LRV: solo la misión lunar lo usa, y solo con el jugador sentado.
