@@ -241,6 +241,15 @@ Animación corta e informativa entre la vitrina del LRV y la misión lunar. Guio
 - Golpear y recoger es una simplificación interactiva, no la secuencia exacta de gestos reales.
 - No se inventan números de catálogo ni se identifica el fragmento como muestra específica sin verificarlo.
 
+### 8.8 Cinemática final: el despegue
+
+- Al recoger la muestra, el mentor dice "Misión cumplida" y explica el suelo y el LRV. Al terminar esa frase empieza una cinemática de ~40 s sin música, con textos abajo a la izquierda que el mentor lee en voz alta. Si la voz dura más que el hueco de su texto, la imagen se detiene en ese plano hasta que termina la frase (como mucho 15 s).
+- Tomas: acercamiento al LRV y a su cámara de TV con los dos astronautas junto a la escalera del LM; plano fijo de la cámara de TV (aspecto de transmisión de los años 70: grano, viñeta, color apagado) con el encendido del motor de ascenso, la llama tenue y la lluvia de restos; seguimiento con la cámara inclinándose y sobreexponiéndose hasta que el módulo es un punto de luz; vista desde el módulo de ascenso, hacia abajo y atrás, con la bandera, el LRV solo y sus huellas; plano final del LRV solo en el valle, con la cámara subiendo y la sombra alargándose; fundido a negro.
+- Datos: el LRV queda aparcado en su posición final vista por LRO (128 m al este-sureste del LM) con la cámara hacia el LM; la cámara la manejaba un operador en Houston. La llama del motor de ascenso es casi invisible en el vacío, así que se dibuja tenue. Aproximado (VERIFICAR): posición de la bandera, subida vertical de ~10 s y giro de ~52° hacia el oeste. La bajada del Sol en el plano final es un recurso visual, no un dato.
+- Tiempos y textos en `src/game/cinematicaDespegue.json` (se ajustan sin tocar el código). Lógica en `src/game/cinematicaDespegue.ts`, escena en `src/visual/despegueLM.ts`, capa de pantalla en `src/ui/cinematicaUi.ts`.
+- Botón "Omitir" (o Enter): pasa directo al final. Si se recarga la página a mitad, tras elegir el control se vuelve a la Luna y la cinemática sigue donde estaba (localStorage `museo-espacial:cinematica-despegue:v1`).
+- Al terminar, modo libre: el módulo de ascenso ya no está, el jugador queda a pie detrás del LRV y puede caminar y mirar; el aplauso (espacio) vuelve al museo. Las huellas del LRV en la Luna se dibujan desde que se conduce.
+
 ### 8.7 Modo de movilidad limitada — deshabilitado en beta
 
 - En el menú aparece en gris con la etiqueta “Próximamente”.
@@ -351,6 +360,7 @@ No se guardan muestras recogidas como progreso.
 - [ ] Misión lunar. Escena de Taurus-Littrow (LM, LRV, terreno, macizos, Sol, Tierra y estrellas), caminar a pie y subir al LRV: probado en Chrome sin interfaz con teclado, de la vitrina a la muestra y de vuelta al museo. Falta verlo en un navegador con ventana y con cámara real.
 - [ ] Despliegue del LRV desde la bahía del LM (mantener E, anillo y animación por fases): probado en Chrome sin interfaz con teclado, de la llegada a la Luna a subirse al LRV desplegado, y la secuencia revisada en capturas. Falta verlo en un navegador con ventana y decidir un gesto para el modo cámara.
 - [ ] Presentación del LRV entre la vitrina y la misión lunar (sección 7.4): guion probado con `node --test tests/presentacionLRV.test.ts` y tomas revisadas en capturas sin interfaz (`tests/capturas/presentacion/`). Falta verla en un navegador con ventana y con voz.
+- [ ] Cinemática del despegue (sección 8.8): línea de tiempo probada con `node --test tests/cinematicaDespegue.test.ts`, tomas revisadas en capturas sin interfaz (`tests/capturas/despegue/`) y, en Chrome sin interfaz con teclado, reanudar tras recargar, Omitir y caminar en el modo libre. Falta verla en un navegador con ventana, con cámara real y llegando desde la recogida de la muestra.
 - [ ] Misión marciana.
 - [ ] Mentor y voz.
 - [ ] Publicación.

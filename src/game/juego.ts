@@ -27,6 +27,10 @@ import type { FaseDespliegueLRV } from '../visual/despliegueApollo17';
 import { crearAnillo, type AnilloUi } from '../ui/anillo';
 import { GUION, PresentacionLRV, opacidadMarca, type EventoPresentacion } from './presentacionLRV';
 import { crearPresentacionUi, type PresentacionUi, type RotuloUi } from '../ui/presentacionUi';
+import { CinematicaDespegue, borrarProgresoDespegue, cargarProgresoDespegue, type EventoCinematica } from './cinematicaDespegue';
+import { crearCinematicaUi, type CinematicaUi } from '../ui/cinematicaUi';
+import { DURACION_DESPLIEGUE_LRV_S } from '../visual/despliegueApollo17';
+import { LRV_DESPEGUE } from '../visual/sitioApollo17';
 
 /** Misión lunar activa (SPEC 8). Solo existe mientras la pantalla es la escena de Luna. */
 let mision: MisionLuna | null = null;
@@ -65,6 +69,16 @@ const ROTULO_ENCIMA_PX = [0, -80] as const;
 /** Oscurecimiento del último plano mientras se ve "Estás listo para la misión". */
 const OSCURO_LISTO = 0.35;
 
+/** Cinemática del despegue del LM en curso (game/cinematicaDespegue.ts), o null. */
+let cinematica: CinematicaDespegue | null = null;
+/** Instante (s) de la última vuelta de la cinemática: avanza con el reloj, haya o no fotograma de la cámara. */
+let ultimaCinematicaS: number | null = null;
+/**
+ * Se recargó la página con la cinemática a medias: segundo en que se reanuda al llegar a la Luna, o null. La partida
+ * entra directo a la misión ya cumplida (LRV desplegado y muestra recogida) y la cinemática sigue desde ahí.
+ */
+let reanudarCinematicaS: number | null = null;
+
 /** Control con el que se juega. Decide qué textos de ayuda se muestran (gesto o tecla). */
 let modoControl: ModoControl = 'camara';
 
@@ -101,6 +115,7 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   luna_mision_salida: 'luna_mision_salida_teclado',
   luna_bajado: 'luna_bajado_teclado',
   luna_bajado_muestra: 'luna_bajado_muestra_teclado',
+  luna_despegue_libre: 'luna_despegue_libre_teclado',
 };
 
 /** Texto según el control: con teclado usa la variante que nombra la tecla, si existe. */
@@ -231,6 +246,9 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
   const presUi = crearPresentacionUi();
+  const cineUi = crearCinematicaUi();
+  /** Fuente de entrada, cuando ya exista (se elige después de montar los eventos). */
+  let fuenteActiva: FuenteEntrada | null = null;
   const cursorUi = crearCursor();
   const anillo = crearAnillo();
   const inicio = crearInicioUi();
@@ -282,8 +300,12 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         if (evento.mision === 'luna') {
           // Misión lunar (SPEC 8): sin cartel de "en construcción". El primer aplauso dentro sienta al jugador.
           mision = new MisionLuna();
+          // Al reanudar la cinemática del despegue tras recargar, la misión ya está cumplida.
+          const reanudando = reanudarCinematicaS !== null;
+          if (reanudando) sueloRecogidoEnSesion = true;
           // El LRV llega plegado en la bahía del LM: hay que mantener E para desplegarlo.
-          despliegue = new DespliegueLRV();
+          despliegue = new DespliegueLRV(reanudando ? 'desplegado' : 'plegado');
+          if (reanudando) visual.museo.poseDespliegueLRV(DURACION_DESPLIEGUE_LRV_S, 0);
           ultimoDespliegueS = null;
           sueloNaranja = new SueloNaranja(sueloRecogidoEnSesion);
           ultimoSueloS = null;
@@ -294,9 +316,14 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
           subidaLista = false;
           conduccionLista = false;
           cursorUi.mostrar(false);
-          decirFrase(voz, ui, 'luna_entrando_museo', () => {
-            instruccionDesplegarDicha = true;
-          });
+          if (reanudando) {
+            // La cinemática arranca en el bucle (actualizarCinematica), donde ya está la sesión.
+            mision.bloquear();
+          } else {
+            decirFrase(voz, ui, 'luna_entrando_museo', () => {
+              instruccionDesplegarDicha = true;
+            });
+          }
         } else {
           claveMision = 'escena_marte_construccion';
           ui.mostrarMision(t(claveMision));
@@ -307,6 +334,14 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         mision = null;
         despliegue = null;
         sueloNaranja = null;
+        if (cinematica) {
+          // Si se sale de la Luna con la cinemática a medias, se abandona (y no se reanuda al recargar).
+          cinematica = null;
+          cineUi.mostrar(false);
+          borrarProgresoDespegue();
+          fuenteActiva?.pausar(false);
+        }
+        reanudarCinematicaS = null;
         anillo.mostrar(null);
         ui.ocultarMision();
         claveMision = null;
@@ -360,11 +395,16 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   });
   // En modo teclado no se pide la cámara ni se carga MediaPipe, y las manos 3D no se muestran.
   const fuente: FuenteEntrada = camara ?? new FuenteTeclado(container, opciones, opcionesUi);
+  fuenteActiva = fuente;
   video.hidden = fuente.modo !== 'camara';
   opcionesUi.onVisibilidad((abierto) => fuente.pausar(abierto));
   requireEl('ayuda').textContent = texto('ayuda');
 
-  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz, presUi };
+  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz, presUi, cineUi, fuente };
+  // Omitir (botón o Enter): salta al modo libre, con la pantalla en negro.
+  cineUi.alOmitir(() => {
+    if (cinematica) eventosCinematica(sesion, cinematica.saltar());
+  });
   presUi.alTeclas(
     () => {
       if (presentacion?.saltar()) {
@@ -392,15 +432,24 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
       avisoActual = lectura.aviso;
       ui.aviso(lectura.aviso);
     }
-    actualizarBalanceo(balanceo, sesion, lectura);
-    dibujarManos(sesion, lectura);
+    // Mientras se ve la cinemática, la cámara es suya: no hay caminata, manos ni acciones del jugador.
+    const enCinematica = cinematicaActiva();
+    if (!enCinematica) {
+      actualizarBalanceo(balanceo, sesion, lectura);
+      dibujarManos(sesion, lectura);
+    }
     actualizarDespliegue(sesion, lectura);
     actualizarSueloNaranja(sesion, lectura);
     actualizarPresentacion(sesion, ahoraS);
-    if (lectura.listo && lectura.hayDatos) aplicarLectura(sesion, lectura);
+    actualizarCinematica(sesion, ahoraS);
+    if (lectura.listo && lectura.hayDatos && !enCinematica) aplicarLectura(sesion, lectura);
     requestAnimationFrame(bucle);
   };
   requestAnimationFrame(bucle);
+
+  // ¿Se recargó la página con la cinemática del despegue a medias? Entonces se vuelve directo a la Luna a terminarla.
+  reanudarCinematicaS = cargarProgresoDespegue();
+  if (reanudarCinematicaS !== null) museo.abrirMisionDirecta('luna');
 }
 
 /** Estado que persiste entre fotogramas. */
@@ -414,6 +463,112 @@ interface Sesion {
   opciones: Opciones;
   voz: Voz;
   presUi: PresentacionUi;
+  cineUi: CinematicaUi;
+  fuente: FuenteEntrada;
+}
+
+/** La cinemática del despegue lleva la cámara (hasta el modo libre; su fundido de salida ya deja jugar). */
+function cinematicaActiva(): boolean {
+  return cinematica !== null && !cinematica.enModoLibre;
+}
+
+/**
+ * Empieza la cinemática del despegue (desde `desdeS`, o donde se quedó al recargar): el LRV queda aparcado donde filmó,
+ * se calla el mentor y se pausa la entrada del jugador. Si la escena no la puede mostrar, pasa directo al modo libre.
+ */
+function iniciarCinematica(sesion: Sesion, desdeS: number): void {
+  const { voz, ui, anillo, cursorUi, cineUi, fuente } = sesion;
+  if (mision === null || cinematica !== null) return;
+  mision.estacionarLRV(LRV_DESPEGUE, LRV_DESPEGUE.rumbo);
+  colaFrases.length = 0;
+  voz.cancelar();
+  habla = null;
+  ui.subtitulos(null);
+  anillo.mostrar(null);
+  cursorUi.mostrar(false);
+  if (!visual.museo.iniciarDespegue()) {
+    borrarProgresoDespegue();
+    mision.liberar();
+    decirFrase(voz, ui, 'luna_despegue_libre');
+    return;
+  }
+  const c = new CinematicaDespegue(desdeS);
+  cinematica = c;
+  ultimaCinematicaS = null;
+  requireEl('ayuda').hidden = true;
+  // Pausada, la entrada no captura el ratón ni cuenta gestos; con teclado, suelta el puntero para poder pulsar Omitir.
+  fuente.pausar(true);
+  cineUi.mostrar(true);
+  cineUi.omitible(true);
+  // Al reanudar en mitad, la escena ya muestra la toma mientras termina el fundido del museo.
+  visual.museo.actualizarDespegue(c.estado);
+}
+
+/** Eventos de la cinemática: al pasar al modo libre (con la pantalla en negro) y al terminar el fundido de salida. */
+function eventosCinematica(sesion: Sesion, eventos: readonly EventoCinematica[]): void {
+  const { cineUi, voz, ui, fuente } = sesion;
+  for (const evento of eventos) {
+    if (evento.tipo === 'texto') {
+      // El mentor lee el texto que aparece en pantalla (el texto ya hace de subtítulo, abajo a la izquierda).
+      const c = cinematica;
+      colaFrases.length = 0;
+      habla = null;
+      ui.subtitulos(null);
+      voz.cancelar();
+      voz.hablar(tGuion(evento.clave), () => {
+        if (c && cinematica === c) c.vozTermino(evento.clave);
+      });
+    } else if (evento.tipo === 'libre') {
+      // Al omitir, la voz de la cinemática se corta.
+      voz.cancelar();
+      // Modo libre: el módulo de ascenso ya se fue y el jugador puede caminar por el valle.
+      visual.museo.terminarDespegue();
+      mision?.liberar();
+      fuente.pausar(false);
+      cineUi.omitible(false);
+      cineUi.texto(null, 0);
+      cineUi.aspecto(null, 0);
+    } else if (evento.tipo === 'fin') {
+      cinematica = null;
+      ultimaCinematicaS = null;
+      cineUi.mostrar(false);
+      visual.museo.fundido(0);
+      requireEl('ayuda').hidden = false;
+      decirFrase(voz, ui, 'luna_despegue_libre');
+    }
+  }
+}
+
+/**
+ * Cinemática del despegue, en cada vuelta del bucle: avanza la línea de tiempo y pone la toma, el fundido, el texto y
+ * el aspecto de TV. Durante el fundido del museo (al reanudar tras recargar) espera: ese negro es del museo.
+ */
+function actualizarCinematica(sesion: Sesion, ahoraS: number): void {
+  if (cinematica === null && reanudarCinematicaS !== null && mision !== null) {
+    const desde = reanudarCinematicaS;
+    reanudarCinematicaS = null;
+    iniciarCinematica(sesion, desde);
+  }
+  const c = cinematica;
+  if (c === null) return;
+  if (sesion.museo.enTransicion) {
+    ultimaCinematicaS = null;
+    return;
+  }
+  const { cineUi } = sesion;
+  const previo = ultimaCinematicaS;
+  ultimaCinematicaS = ahoraS;
+  const dtS = previo === null ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, ahoraS - previo));
+  eventosCinematica(sesion, c.actualizar(dtS));
+  if (cinematica !== c) return;
+  const estado = c.estado;
+  if (!c.enModoLibre) {
+    visual.museo.actualizarDespegue(estado);
+    const [texto] = c.textos;
+    cineUi.texto(texto ? t(texto.clave) : null, texto?.opacidad ?? 0);
+    cineUi.aspecto(estado.toma?.estilo ?? null, estado.sobreexposicion);
+  }
+  visual.museo.fundido(c.fundido);
 }
 
 /**
@@ -668,17 +823,21 @@ function actualizarSueloNaranja(sesion: Sesion, lectura: LecturaEntrada): void {
 }
 
 /**
- * Misión cumplida: la muestra ya está en la bolsa. El mentor dice "Misión cumplida", explica por qué importó el
- * suelo y el papel del LRV, y dice cómo volver al museo. Desde ahí el jugador se queda quieto (MisionLuna.bloquear).
- * Las frases van en cola: se dicen en orden aunque la anterior siga sonando.
+ * Misión cumplida: la muestra ya está en la bolsa. El mentor dice "Misión cumplida" y explica por qué importó el suelo
+ * y el papel del LRV; al terminar empieza la cinemática del despegue y, después, el modo libre (con cómo volver al
+ * museo). Hasta entonces el jugador se queda quieto (MisionLuna.bloquear). Las frases van en cola.
  */
 function celebrarMision(sesion: Sesion): void {
   if (mision === null || mision.bloqueada) return;
   mision.bloquear();
   const { voz, ui } = sesion;
   decirFrase(voz, ui, 'luna_mision_cumplida');
-  decirFrase(voz, ui, 'luna_suelo_recogido');
-  decirFrase(voz, ui, 'luna_mision_salida');
+  // Al terminar la frase del LRV empieza la cinemática del despegue (game/cinematicaDespegue.ts). Si mientras tanto el
+  // jugador volvió al museo, ya no es la misma misión y no arranca.
+  const esta = mision;
+  decirFrase(voz, ui, 'luna_suelo_recogido', () => {
+    if (mision === esta) iniciarCinematica(sesion, 0);
+  });
 }
 
 /** Avanza la misión lunar un fotograma, actualiza la escena y reacciona a los eventos (voz, volver). */

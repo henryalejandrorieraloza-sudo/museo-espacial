@@ -488,3 +488,87 @@
 .presentacion-division[hidden] {
   display: none;
 }
+
+/* Cinemática del despegue (src/ui/cinematicaUi.ts). Encima del fundido a negro de la escena (z-index 100, visual/museo.ts),
+   para que el botón Omitir se vea siempre. El grano, la viñeta y las líneas solo se ven en las tomas de TV y de película. */
+.cinematica {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 101;
+}
+
+.cinematica-grano {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  mix-blend-mode: screen;
+}
+
+.cinematica-vineta {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.55) 80%, rgba(0, 0, 0, 0.92) 100%);
+}
+
+.cinematica-vineta.pelicula {
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(10, 6, 0, 0.5) 85%, rgba(0, 0, 0, 0.85) 100%);
+}
+
+.cinematica-texto {
+  position: absolute;
+  left: 32px;
+  bottom: 40px;
+  max-width: min(560px, calc(100% - 64px));
+  margin: 0;
+  color: #fff;
+  font: 500 20px/1.5 system-ui, sans-serif;
+  text-align: left;
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
+    0 0 8px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+}
+
+.cinematica-omitir {
+  position: absolute;
+  right: 24px;
+  bottom: 32px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font: 500 15px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.cinematica-omitir:hover,
+.cinematica-omitir:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
+.cinematica-omitir[hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .cinematica-texto {
+    left: 16px;
+    bottom: 84px;
+    max-width: calc(100% - 32px);
+    font-size: 17px;
+  }
+
+  .cinematica-omitir {
+    right: 16px;
+    bottom: 24px;
+  }
+}

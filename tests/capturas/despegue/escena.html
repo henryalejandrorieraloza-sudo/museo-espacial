@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <title>Capturas de la cinemática del despegue</title>
+    <style>
+      html, body { margin: 0; background: #000; overflow: hidden; }
+      #scene { position: fixed; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <!-- Solo para desarrollo: npm run dev y abrir /tests/capturas/despegue/escena.html?t=9.5 -->
+    <main id="scene" class="scene"></main>
+    <section id="cinematica" class="cinematica" hidden>
+      <canvas id="cinematicaGrano" class="cinematica-grano" width="192" height="108"></canvas>
+      <div id="cinematicaVineta" class="cinematica-vineta"></div>
+      <p id="cinematicaTexto" class="cinematica-texto"></p>
+      <button id="cinematicaOmitir" class="cinematica-omitir" type="button"></button>
+    </section>
+    <script type="module" src="./escena.ts"></script>
+  </body>
+</html>

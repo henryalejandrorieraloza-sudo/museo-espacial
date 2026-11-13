@@ -46,6 +46,7 @@ import {
 } from './lunaEscena';
 import { SUELO_LUNA, azar, geometriaRoca, tinte } from './paleta';
 import { crearMaterialRoca, crearMaterialSuelo } from './regolito';
+import { crearHuellasLRV } from './huellasLRV';
 import { RADIO_LUNA_M, SHORTY } from './sitioApollo17';
 
 // Escena 3D de la presentación del LRV (guion en game/presentacionLRV.ts). Solo el LRV, sin astronautas ni figuras
@@ -348,86 +349,14 @@ function apoyarLRV(lrv: THREE.Object3D, x: number, z: number, rumbo = 0): void {
 const MAX_PUNTOS_HUELLA = 1400;
 const SEPARACION_HUELLA_M = 0.2;
 function crearHuellasDinamicas(): { grupo: THREE.Group; reiniciar(): void; anadir(x: number, z: number, rumbo: number): void } {
-  const grupo = new THREE.Group();
-  grupo.name = 'huellas_dinamicas';
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x4e4c48,
-    transparent: true,
-    opacity: 0.7,
-    roughness: 1,
-    metalness: 0,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -2,
-  });
-  const medio = ANCHO_RUEDA_LRV / 2;
-  interface Cinta {
-    lado: number;
-    pos: Float32Array;
-    geo: THREE.BufferGeometry;
-    n: number;
-  }
-  const cintas: Cinta[] = [-1, 1].map((lado) => {
-    const geo = new THREE.BufferGeometry();
-    const pos = new Float32Array(MAX_PUNTOS_HUELLA * 2 * 3);
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
-    const indices: number[] = [];
-    for (let k = 0; k < MAX_PUNTOS_HUELLA - 1; k++) {
-      const a = k * 2;
-      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
-    geo.setIndex(indices);
-    geo.setDrawRange(0, 0);
-    const malla = new THREE.Mesh(geo, material);
-    malla.frustumCulled = false;
-    malla.receiveShadow = true;
-    grupo.add(malla);
-    return { lado, pos, geo, n: 0 };
-  });
-  let ultimo: [number, number] | null = null;
-  const poner = (x: number, z: number, rumbo: number): void => {
-    const c = Math.cos(rumbo);
-    const sn = Math.sin(rumbo);
-    for (const cinta of cintas) {
-      if (cinta.n >= MAX_PUNTOS_HUELLA) continue;
-      // Centro de la rueda de ese lado y eje lateral (la derecha del LRV).
-      const cx = x + cinta.lado * (VIA_LRV / 2) * c;
-      const cz = z - cinta.lado * (VIA_LRV / 2) * sn;
-      for (const s of [-1, 1]) {
-        const px = cx + s * medio * c;
-        const pz = cz - s * medio * sn;
-        const k = (cinta.n * 2 + (s < 0 ? 0 : 1)) * 3;
-        cinta.pos[k] = px;
-        cinta.pos[k + 1] = alturaPresentacion(px, pz) + 0.02;
-        cinta.pos[k + 2] = pz;
-      }
-      cinta.n++;
-      cinta.geo.setDrawRange(0, Math.max(0, cinta.n - 1) * 6);
-      cinta.geo.attributes.position.needsUpdate = true;
-    }
-    ultimo = [x, z];
-  };
+  const huellas = crearHuellasLRV(alturaPresentacion, MAX_PUNTOS_HUELLA, SEPARACION_HUELLA_M);
   const reiniciar = (): void => {
-    for (const cinta of cintas) {
-      cinta.n = 0;
-      cinta.geo.setDrawRange(0, 0);
-    }
-    ultimo = null;
+    huellas.vaciar();
     // El LRV llegó conduciendo: ya hay huellas rectas detrás de él.
-    for (let z = 12; z >= 0; z -= SEPARACION_HUELLA_M) poner(0, z, 0);
-    ultimo = [0, 0];
+    for (let z = 12; z >= 0; z -= SEPARACION_HUELLA_M) huellas.poner(0, z, 0);
   };
   reiniciar();
-  return {
-    grupo,
-    reiniciar,
-    anadir(x, z, rumbo) {
-      if (ultimo && Math.hypot(x - ultimo[0], z - ultimo[1]) < SEPARACION_HUELLA_M) return;
-      poner(x, z, rumbo);
-    },
-  };
+  return { grupo: huellas.grupo, reiniciar, anadir: huellas.anadir };
 }
 
 // ---------------------------------------------------------------------------

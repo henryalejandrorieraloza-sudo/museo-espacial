@@ -150,5 +150,11 @@
   "luna_afuera": "You're outside.",
   "luna_suelo_junto": "You're next to the orange soil.",
   "luna_suelo_bajate": "Get off and collect samples.",
-  "luna_suelo_manten": "Hold E to collect samples."
+  "luna_suelo_manten": "Hold E to collect samples.",
+  "cine_despegue_ultimo_trabajo": "After helping the astronauts reach much greater distances, the LRV's last job was to use its camera to film our two astronauts as they lifted off from the surface.",
+  "cine_despegue_operador": "That camera was controlled by an operator back on Earth.",
+  "cine_despegue_solo": "And the LRV stayed there, alone on the lunar surface: a great success for NASA and for humanity.",
+  "cine_omitir": "Skip",
+  "luna_despegue_libre": "You can keep exploring the valley. Clap to return to the museum.",
+  "luna_despegue_libre_teclado": "You can keep exploring the valley. Press space to return to the museum."
 }

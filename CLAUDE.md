@@ -34,6 +34,7 @@ Per-frame flow: `juego.ts` loop → tracker → `procesarFotograma` → gesture/
 - Model placeholders and their node names live in `src/visual/config.ts` (`MODELOS`, `ESCENAS`). Swapping a placeholder for a real `.glb` changes only `ruta` and `escala`, and `src/visual/MODELS.md` documents the conventions. Node names must stay stable.
 - Showcase positions are hard-coded in `src/visual/museo.ts` (`POSICION_VITRINA`), not in config.
 - Tunable thresholds are exported constants at the top of each tracking/game module (e.g. `APLAUSO_*` in `gestures.ts`, `SEGUNDOS_SENALAR` and `DURACION_FUNDIDO_S` in `game/museo.ts`). Options exposed in the menu are defined in `game/opciones.ts`.
+- The final Moon cinematic (LM liftoff filmed by the LRV's TV camera) reads its timings and text keys from `src/game/cinematicaDespegue.json`; tweak times there, not in `visual/despegueLM.ts`.
 - All user-facing text is in `src/i18n/es.json`, accessed through `t()`. Only Spanish exists so far, even though SPEC.md mentions `en.json`.
 
 ## Project documents

@@ -36,6 +36,10 @@ const RADIO_PIES = 4.25;
 const RADIO_PIE = 0.47;
 /** Altura de la etapa de ascenso (m). */
 const ALTO_ASCENSO = 2.83;
+/** Altura (m, ejes del LM) de la base de la etapa de ascenso, donde está la tobera de su motor. */
+export const BASE_ASCENSO_Y = TECHO_DESCENSO;
+/** Altura (m, ejes del LM) del centro de la etapa de ascenso: pivote del grupo `lm_ascenso`. */
+export const CENTRO_ASCENSO_Y = TECHO_DESCENSO + ALTO_ASCENSO / 2;
 /** Peldaños de la escalera de la pata 1. */
 const PELDANOS = 9;
 /** Cintas doradas a lo largo del forro plateado de cada puntal principal. */
@@ -50,9 +54,19 @@ export function crearModuloLunar(haciaTierraLocal: THREE.Vector3): THREE.Group {
   const l = new Lote(false, 'museo', METALES_LM);
   const rnd = azar(1972);
   etapaDescenso(l, rnd);
-  etapaAscenso(l, rnd, haciaTierraLocal);
+  // La etapa de ascenso va en su propio lote y grupo (`lm_ascenso`), para que pueda despegar (visual/despegueLM.ts).
+  const la = new Lote(false, 'museo', METALES_LM);
+  etapaAscenso(la, rnd, haciaTierraLocal);
   const grupo = l.construir();
   grupo.name = 'lm_challenger';
+  // Pivote en el centro de la etapa de ascenso: así se inclina sobre sí misma al hacer el giro tras el despegue.
+  const ascenso = new THREE.Group();
+  ascenso.name = 'lm_ascenso';
+  ascenso.position.y = CENTRO_ASCENSO_Y;
+  const piezasAscenso = la.construir();
+  piezasAscenso.position.y = -CENTRO_ASCENSO_Y;
+  ascenso.add(piezasAscenso);
+  grupo.add(ascenso);
   grupo.traverse((o) => {
     o.castShadow = true;
     o.receiveShadow = true;

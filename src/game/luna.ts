@@ -240,6 +240,30 @@ export class MisionLuna {
     this.velocidadLRV = 0;
   }
 
+  /**
+   * Mueve el LRV a otra pose sin conducirlo: para la cinemática del despegue, que lo aparca donde filmó (en
+   * sitioApollo17.ts, LRV_DESPEGUE). Las ruedas quedan rectas y el LRV parado.
+   */
+  estacionarLRV(posicion: { x: number; z: number }, rumboGrados: number): void {
+    this.x = posicion.x;
+    this.z = posicion.z;
+    this.rumbo = rumboGrados;
+    this.direccion = 0;
+    this.velocidadLRV = 0;
+  }
+
+  /**
+   * Modo libre tras la cinemática del despegue: el jugador queda a pie y puede caminar y mirar por el valle. Conserva la
+   * muestra, así que el aplauso lo devuelve al museo (no vuelve a subir al LRV, que se quedó solo).
+   */
+  liberar(): void {
+    this.bloqueadaMision = false;
+    this.finAgarreS = null;
+    this.velocidadLRV = 0;
+    this.conMuestra = true;
+    this.estadoActual = 'a_pie';
+  }
+
   distanciaRoca(): number {
     return Math.hypot(this.x - POSICION_ROCA.x, this.z - POSICION_ROCA.z);
   }

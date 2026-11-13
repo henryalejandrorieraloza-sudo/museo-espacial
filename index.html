@@ -20,6 +20,14 @@
       <p id="presentacionAyuda" class="presentacion-ayuda" hidden></p>
       <h1 id="presentacionListo" class="presentacion-listo" role="status" hidden></h1>
     </section>
+    <!-- Cinemática del despegue del LM (src/ui/cinematicaUi.ts): grano y viñeta de TV, texto y botón Omitir.
+         Va por encima del fundido a negro de la escena. -->
+    <section id="cinematica" class="cinematica" hidden>
+      <canvas id="cinematicaGrano" class="cinematica-grano" width="192" height="108"></canvas>
+      <div id="cinematicaVineta" class="cinematica-vineta"></div>
+      <p id="cinematicaTexto" class="cinematica-texto"></p>
+      <button id="cinematicaOmitir" class="cinematica-omitir" type="button"></button>
+    </section>
     <div id="subtitulos" class="subtitulos" hidden></div>
     <p id="ayuda" class="ayuda"></p>
     <div id="cursor" class="cursor" hidden></div>

@@ -1,0 +1,28 @@
+{
+  "_nota": "Línea de tiempo de la cinemática del despegue (game/cinematicaDespegue.ts). Todos los tiempos en segundos desde que termina la frase del LRV. Se puede ajustar sin tocar el código de la escena. Las tomas van en orden y sin huecos; los textos son claves de src/i18n/es.json y el mentor los lee: si su voz dura más que el texto, la cinemática espera (como mucho esperaVozMaxS) justo antes de que el texto se desvanezca.",
+  "libreS": 40,
+  "duracionS": 40.8,
+  "tomas": [
+    { "id": "exteriorLRV", "desdeS": 1.5, "hastaS": 6, "estilo": "limpio" },
+    { "id": "camaraTV", "desdeS": 6, "hastaS": 12, "estilo": "tv" },
+    { "id": "seguimientoTV", "desdeS": 12, "hastaS": 20, "estilo": "tv" },
+    { "id": "ventanaLM", "desdeS": 20, "hastaS": 30, "estilo": "pelicula" },
+    { "id": "finalLRV", "desdeS": 30, "hastaS": 40, "estilo": "limpio" }
+  ],
+  "textos": [
+    { "clave": "cine_despegue_ultimo_trabajo", "desdeS": 1.8, "hastaS": 5.9, "fundidoS": 0.5 },
+    { "clave": "cine_despegue_operador", "desdeS": 6.5, "hastaS": 11.6, "fundidoS": 0.5 },
+    { "clave": "cine_despegue_solo", "desdeS": 30.6, "hastaS": 37.6, "fundidoS": 0.6 }
+  ],
+  "fundidos": [
+    { "desdeS": 0.9, "hastaS": 1.5, "de": 0, "a": 1 },
+    { "desdeS": 1.5, "hastaS": 2.1, "de": 1, "a": 0 },
+    { "desdeS": 38, "hastaS": 40, "de": 0, "a": 1 },
+    { "desdeS": 40, "hastaS": 40.8, "de": 1, "a": 0 }
+  ],
+  "ignicionS": 8.6,
+  "seguimientoRetrasoS": 0.45,
+  "ventanaLM": { "vueloDesdeS": 0.6, "vueloHastaS": 11 },
+  "solFinal": { "desdeS": 30, "hastaS": 38, "bajadaGrados": 5 },
+  "esperaVozMaxS": 15
+}

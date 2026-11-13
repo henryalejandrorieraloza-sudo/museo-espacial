@@ -178,6 +178,15 @@ export class Museo {
     this.iniciarTransicion(() => this.abrirMision(mision));
   }
 
+  /**
+   * Entra a una misión directamente desde el museo, sin vitrina ni presentación, con el fundido de siempre. Lo usa
+   * juego.ts para reanudar la cinemática del despegue después de recargar la página.
+   */
+  abrirMisionDirecta(mision: Mision): void {
+    if (this.transicion || this.pantallaActual.tipo !== 'museo') return;
+    this.iniciarTransicion(() => this.abrirMision(mision));
+  }
+
   private iniciarTransicion(cambio: () => void): void {
     this.transicion = { inicioS: null, cambio, cambiado: false };
   }

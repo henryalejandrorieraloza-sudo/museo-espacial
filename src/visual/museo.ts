@@ -14,7 +14,19 @@ import { crearDespliegueLRV, type DespliegueVisualLRV } from './despliegueLRV';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
 import { ARQ } from './paleta';
 import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
-import { LLEGADA, LM, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M, ROCA_ESTACION1 } from './sitioApollo17';
+import {
+  LLEGADA,
+  LM,
+  LRV_DESPEGUE,
+  RADIO_LRV_M,
+  RADIO_OBSTACULO_LM_M,
+  RADIO_OBSTACULO_LRV_M,
+  ROCA_ESTACION1,
+  azimutEntre,
+  enAzimut,
+} from './sitioApollo17';
+import { crearDespegueLM, type DespegueLM, type EstadoDespegueVisual } from './despegueLM';
+import { crearHuellasLRV, type HuellasLRV } from './huellasLRV';
 import { crearPresentacionVisual, type EstadoPresentacionVisual, type PosicionMarca, type PresentacionVisual } from './presentacionLRV';
 
 // Toda la parte visual del museo (Three.js). La lógica de juego solo llama a `visual.museo`.
@@ -246,6 +258,19 @@ let enMuseo = true;
 let presentacion: PresentacionVisual | null = null;
 /** true mientras se ve la presentación: se dibuja ella en vez del museo o la misión. */
 let enPresentacion = false;
+/** Cinemática del despegue del LM (despegueLM.ts), o null si no se pudo montar. */
+let despegue: DespegueLM | null = null;
+/** true mientras se ve la cinemática: la cámara la lleva ella, no el jugador. */
+let enDespegue = false;
+/** El LRV ya se movió a su sitio de filmación (se hace con la pantalla en negro, no a la vista). */
+let lrvAparcadoDespegue = false;
+/** Huellas de las ruedas del LRV en la Luna: las que deja al conducir y el camino hasta donde filma el despegue. */
+let huellasLuna: HuellasLRV | null = null;
+/** Puntos por cinta de huellas en la Luna (a 0.25 m, 1.5 km de recorrido) y su separación. */
+const MAX_PUNTOS_HUELLAS_LUNA = 6000;
+const SEPARACION_HUELLAS_LUNA_M = 0.25;
+/** Campo de visión de la cámara del jugador (°). La cinemática lo cambia y se restaura al salir de ella. */
+const CAMPO_VISION_JUGADOR = 60;
 /** Tamaño de la vista (px), para la presentación cuando se crea. */
 let anchoVista = 1;
 let altoVista = 1;
@@ -257,7 +282,8 @@ function vitrinaAim(id: string): THREE.Vector3 {
 }
 
 function actualizarCamara(): void {
-  if (!camara) return;
+  // Durante la cinemática del despegue la cámara la coloca despegueLM.ts.
+  if (!camara || enDespegue) return;
   camara.position.copy(posicion);
   // El balanceo solo se aplica en el museo y a pie en la Luna (juego.ts decide cuándo hay caminata).
   const conBalanceo = enMuseo || escenaActual === 'luna';
@@ -296,7 +322,7 @@ async function iniciar(container: HTMLElement): Promise<void> {
   const escenaNueva = new THREE.Scene();
   escenaPrincipal = escenaNueva;
 
-  const camaraNueva = new THREE.PerspectiveCamera(60, 1, 0.1, LEJANO_CAMARA_M);
+  const camaraNueva = new THREE.PerspectiveCamera(CAMPO_VISION_JUGADOR, 1, 0.1, LEJANO_CAMARA_M);
   camara = camaraNueva;
   actualizarCamara();
   // Las manos cuelgan de la cámara, así que siempre están en primera persona. La cámara debe estar en la escena para que sus hijos se dibujen.
@@ -358,6 +384,18 @@ async function iniciar(container: HTMLElement): Promise<void> {
   lrvLuna = nodos.get('escena_luna')?.getObjectByName('lrv_placeholder') ?? null;
   ruedasLRV = (lrvLuna?.userData.ruedas as RuedasLRV | undefined) ?? null;
   despliegueLRV = lrvLuna ? crearDespliegueLRV(lrvLuna) : null;
+  const escenaLuna = nodos.get('escena_luna');
+  if (escenaLuna) {
+    huellasLuna = crearHuellasLRV(alturaLuna, MAX_PUNTOS_HUELLAS_LUNA, SEPARACION_HUELLAS_LUNA_M);
+    escenaLuna.add(huellasLuna.grupo);
+    // Si la cinemática no se puede montar, el juego sigue sin ella (juego.ts pasa directo al modo libre).
+    try {
+      despegue = crearDespegueLM(escenaLuna);
+    } catch (err) {
+      console.error('No se pudo montar la cinemática del despegue', err);
+      despegue = null;
+    }
+  }
   postLuna = crearPostprocesoLuna(renderer, escenaNueva, camaraNueva);
 
   // Colocación: las vitrinas en su posición; el mentor y el halo se mueven en tiempo de juego.
@@ -475,8 +513,11 @@ function entrarEscena(escena: Escena): void {
   miradaLRV = 0;
   ruedasLRV?.reiniciar();
   posicionPreviaLRV = null;
+  salirDespegue();
   if (escena === 'luna') {
-    // El LRV empieza plegado en la bahía del LM, como viajó (despliegueLRV.ts).
+    // Cada visita empieza igual: LM entero, sin huellas, y el LRV plegado en la bahía del LM, como viajó (despliegueLRV.ts).
+    despegue?.reiniciar();
+    huellasLuna?.vaciar();
     poseDespliegueLRV(0, 0);
     // Llegada junto al LM y al LRV, de pie, mirando hacia los dos (sitioApollo17.ts).
     posicion = new THREE.Vector3(LLEGADA.x, alturaLuna(LLEGADA.x, LLEGADA.z) + ALTURA_OJOS, LLEGADA.z);
@@ -496,6 +537,7 @@ function volverAlMuseo(): void {
     const obj = nodos.get(escena.id);
     if (obj) obj.visible = false;
   }
+  salirDespegue();
   mostrarMuseo(true);
   activarAmbiente('museo');
   sentadoLRV = false;
@@ -705,6 +747,7 @@ function actualizarLuna(estado: {
     posicionPreviaLRV = { x: estado.x, z: estado.z };
     ruedasLRV?.actualizar(estado.direccionGrados, avanceM, estado.dtS);
     if (lrvLuna) colocarLRV(lrvLuna, estado.x, estado.z, estado.rumboGrados);
+    huellasLuna?.anadir(estado.x, estado.z, -rad);
   }
   if (haloRoca) haloRoca.visible = estado.haloVisible;
   if (estado.sentado && lrvLuna) {
@@ -797,6 +840,92 @@ function actualizarPresentacion(estado: EstadoPresentacionVisual): PosicionMarca
   return presentacion.actualizar(estado);
 }
 
+/** Corta la cinemática del despegue si estaba en marcha (al cambiar de escena) y devuelve la cámara al jugador. */
+function salirDespegue(): void {
+  if (!enDespegue) return;
+  despegue?.terminar();
+  enDespegue = false;
+  if (camara) {
+    camara.fov = CAMPO_VISION_JUGADOR;
+    camara.updateProjectionMatrix();
+  }
+}
+
+/** Huellas de un camino suave (curva de Bézier) del LRV entre dos poses: sale con su rumbo y llega con el otro. */
+function huellasCamino(desde: { x: number; z: number; rumbo: number }, hasta: { x: number; z: number; rumbo: number }): void {
+  if (!huellasLuna) return;
+  const largo = Math.hypot(hasta.x - desde.x, hasta.z - desde.z);
+  if (largo < SEPARACION_HUELLAS_LUNA_M) return;
+  const dir = (rumbo: number): [number, number] => {
+    const r = THREE.MathUtils.degToRad(rumbo);
+    return [Math.sin(r), -Math.cos(r)];
+  };
+  const [ax, az] = dir(desde.rumbo);
+  const [bx, bz] = dir(hasta.rumbo);
+  const p0 = [desde.x, desde.z];
+  const p1 = [desde.x + (ax * largo) / 3, desde.z + (az * largo) / 3];
+  const p2 = [hasta.x - (bx * largo) / 3, hasta.z - (bz * largo) / 3];
+  const p3 = [hasta.x, hasta.z];
+  const n = Math.ceil(largo / SEPARACION_HUELLAS_LUNA_M);
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const u = 1 - t;
+    const punto = (k: number): number => u * u * u * p0[k] + 3 * u * u * t * p1[k] + 3 * u * t * t * p2[k] + t * t * t * p3[k];
+    const tangente = (k: number): number => 3 * u * u * (p1[k] - p0[k]) + 6 * u * t * (p2[k] - p1[k]) + 3 * t * t * (p3[k] - p2[k]);
+    huellasLuna.anadir(punto(0), punto(1), -Math.atan2(tangente(0), -tangente(1)));
+  }
+}
+
+/** Mueve el LRV a donde filmó el despegue (LRV_DESPEGUE), con las huellas del camino desde donde estaba. */
+function aparcarLRVDespegue(): void {
+  lrvAparcadoDespegue = true;
+  if (!lrvLuna) return;
+  huellasCamino({ x: lrvLuna.position.x, z: lrvLuna.position.z, rumbo: rumboLRV }, LRV_DESPEGUE);
+  rumboLRV = LRV_DESPEGUE.rumbo;
+  ruedasLRV?.reiniciar();
+  colocarLRV(lrvLuna, LRV_DESPEGUE.x, LRV_DESPEGUE.z, LRV_DESPEGUE.rumbo);
+  posicionPreviaLRV = { x: LRV_DESPEGUE.x, z: LRV_DESPEGUE.z };
+}
+
+/**
+ * Empieza la cinemática del despegue (game/cinematicaDespegue.ts): desde aquí la cámara la lleva la cinemática. El LRV
+ * se mueve a su sitio de filmación en la primera toma, ya con la pantalla en negro. Devuelve false si no hay
+ * cinemática (fuera de la Luna o sin escena): entonces juego.ts pasa directo al modo libre.
+ */
+function iniciarDespegue(): boolean {
+  if (!despegue || !camara || escenaActual !== 'luna') return false;
+  enDespegue = true;
+  lrvAparcadoDespegue = false;
+  sentadoLRV = false;
+  if (haloRoca) haloRoca.visible = false;
+  manosAvatar?.ocultar();
+  despegue.preparar();
+  return true;
+}
+
+/** Un fotograma de la cinemática. Sin toma (la pausa inicial), la cámara se queda donde estaba el jugador. */
+function actualizarDespegue(estado: EstadoDespegueVisual): void {
+  if (!enDespegue || !despegue || !camara || !estado.toma) return;
+  if (!lrvAparcadoDespegue) aparcarLRVDespegue();
+  despegue.aplicar(estado, camara);
+}
+
+/**
+ * Fin de la cinemática (o se omitió), con la pantalla en negro: el módulo de ascenso ya se fue y la escena queda en
+ * modo libre. El jugador aparece de pie detrás del LRV, a su izquierda, mirando hacia la etapa de descenso.
+ */
+function terminarDespegue(): void {
+  if (!enDespegue) return;
+  if (!lrvAparcadoDespegue) aparcarLRVDespegue();
+  salirDespegue();
+  const pie = enAzimut(LRV_DESPEGUE.rumbo + 180 + 30, 5, LRV_DESPEGUE);
+  posicion.set(pie.x, alturaLuna(pie.x, pie.z) + ALTURA_OJOS, pie.z);
+  yaw = -THREE.MathUtils.degToRad(azimutEntre(pie, LM));
+  cabeceo = 0;
+  sentadoLRV = false;
+  moverEnLuna(0, 0, 0);
+}
+
 /** Oculta las dos manos del avatar, por ejemplo si el seguimiento se ha perdido (SPEC 6). */
 function ocultarManos(): void {
   manosAvatar?.ocultar();
@@ -825,6 +954,9 @@ export const visual = {
     volverAlMuseo,
     entrarPresentacion,
     actualizarPresentacion,
+    iniciarDespegue,
+    actualizarDespegue,
+    terminarDespegue,
     fundido,
   },
 };

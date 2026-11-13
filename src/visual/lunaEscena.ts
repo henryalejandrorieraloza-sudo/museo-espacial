@@ -274,20 +274,51 @@ export function crearEscenaLuna(): THREE.Group {
 
   // La caja de sombras sigue al jugador, un poco por delante de él, y se ajusta a la rejilla de texels del mapa
   // para que los bordes de las sombras no tiemblen al caminar.
-  const derecha = new THREE.Vector3().crossVectors(DIRECCION_SOL, EJE_Y).normalize();
-  const arriba = new THREE.Vector3().crossVectors(derecha, DIRECCION_SOL).normalize();
-  const texel = (2 * LADO_SOMBRA_M) / TAMANO_MAPA_SOMBRA;
+  // La cinemática del despegue (despegueLM.ts) puede fijar el centro y el tamaño de la caja (lo que filma está lejos
+  // del jugador) y bajar un poco la luz del Sol: `fijarSombras` y `bajarSol`. Sin llamarlas, todo queda como siempre.
+  const dirSol = DIRECCION_SOL.clone();
+  const derecha = new THREE.Vector3();
+  const arriba = new THREE.Vector3();
+  const orientarSol = (): void => {
+    derecha.crossVectors(dirSol, EJE_Y).normalize();
+    arriba.crossVectors(derecha, dirSol).normalize();
+  };
+  orientarSol();
+  let lado = LADO_SOMBRA_M;
+  let centroFijo: THREE.Vector3 | null = null;
   const adelante = new THREE.Vector3();
+  grupo.userData.fijarSombras = (centro: THREE.Vector3 | null, ladoM: number = LADO_SOMBRA_M): void => {
+    centroFijo = centro ? centro.clone() : null;
+    if (ladoM === lado) return;
+    lado = ladoM;
+    camSombra.left = -lado;
+    camSombra.right = lado;
+    camSombra.top = lado;
+    camSombra.bottom = -lado;
+    camSombra.updateProjectionMatrix();
+  };
+  /** Baja la luz del Sol `grados` (0 = su altura real, la de cielo.ts). El disco del Sol en el cielo no se mueve. */
+  grupo.userData.bajarSol = (grados: number): void => {
+    const altura = Math.asin(DIRECCION_SOL.y) - THREE.MathUtils.degToRad(grados);
+    const horizontal = new THREE.Vector3(DIRECCION_SOL.x, 0, DIRECCION_SOL.z).normalize();
+    dirSol.copy(horizontal).multiplyScalar(Math.cos(altura)).setY(Math.sin(altura));
+    orientarSol();
+  };
   grupo.userData.actualizar = (camara: THREE.Camera): void => {
     cielo.position.copy(camara.position);
-    camara.getWorldDirection(adelante).setY(0).normalize();
-    _p.copy(camara.position).addScaledVector(adelante, LADO_SOMBRA_M * 0.4);
-    _p.y = alturaLuna(_p.x, _p.z);
+    if (centroFijo) {
+      _p.copy(centroFijo);
+    } else {
+      camara.getWorldDirection(adelante).setY(0).normalize();
+      _p.copy(camara.position).addScaledVector(adelante, lado * 0.4);
+      _p.y = alturaLuna(_p.x, _p.z);
+    }
+    const texel = (2 * lado) / TAMANO_MAPA_SOMBRA;
     const u = Math.round(_p.dot(derecha) / texel) * texel;
     const v = Math.round(_p.dot(arriba) / texel) * texel;
-    const w = _p.dot(DIRECCION_SOL);
-    sol.target.position.copy(derecha).multiplyScalar(u).addScaledVector(arriba, v).addScaledVector(DIRECCION_SOL, w);
-    sol.position.copy(sol.target.position).addScaledVector(DIRECCION_SOL, 300);
+    const w = _p.dot(dirSol);
+    sol.target.position.copy(derecha).multiplyScalar(u).addScaledVector(arriba, v).addScaledVector(dirSol, w);
+    sol.position.copy(sol.target.position).addScaledVector(dirSol, 300);
     sol.target.updateMatrixWorld();
   };
   return grupo;

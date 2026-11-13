@@ -151,5 +151,11 @@
   "luna_afuera": "Estás afuera.",
   "luna_suelo_junto": "Estás junto al suelo naranja.",
   "luna_suelo_bajate": "Bájate y recoge muestras.",
-  "luna_suelo_manten": "Mantén E para recoger muestras."
+  "luna_suelo_manten": "Mantén E para recoger muestras.",
+  "cine_despegue_ultimo_trabajo": "Después de ayudar a los astronautas a llegar a distancias mucho más grandes, el último trabajo del LRV fue usar su cámara para filmar a nuestros dos astronautas al despegar de la superficie.",
+  "cine_despegue_operador": "Esa cámara era controlada por un operador en la Tierra.",
+  "cine_despegue_solo": "Y el LRV se quedó ahí, solo en la superficie lunar: un gran éxito para la NASA y para la humanidad.",
+  "cine_omitir": "Omitir",
+  "luna_despegue_libre": "Puedes seguir explorando el valle. Aplaude para volver al museo.",
+  "luna_despegue_libre_teclado": "Puedes seguir explorando el valle. Pulsa espacio para volver al museo."
 }

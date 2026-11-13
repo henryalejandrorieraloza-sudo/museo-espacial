@@ -96,8 +96,24 @@ export const STENO = { ...enAzimut(159, 1500), diametro: 560, profundidad: 84 } 
  */
 export const SHORTY = { ...enAzimut(255, 7000), diametro: 110, profundidad: 14 } as const;
 
-/** Posición final del LRV al terminar la EVA-3 (sombra vista por LRO): 128 m del LM, azimut 112°. No se usa en la escena. */
+/**
+ * Posición final del LRV al terminar la EVA-3 (sombra vista por LRO): 128 m del LM, azimut 112°. Allí lo dejaron
+ * aparcado para que su cámara de TV filmara el despegue (cinemática final, visual/despegueLM.ts).
+ */
 export const LRV_FINAL_EVA3 = enAzimut(112, 128);
+
+/**
+ * LRV aparcado para filmar el despegue: en su posición final y con el frente (donde va la cámara de TV) hacia el LM.
+ * // VERIFICAR: el rumbo exacto en que quedó aparcado; aquí se elige que la cámara mire al LM sin girarla.
+ */
+export const LRV_DESPEGUE = { ...LRV_FINAL_EVA3, rumbo: azimutEntre(LRV_FINAL_EVA3, ORIGEN_LM) } as const;
+
+/**
+ * Bandera de EE. UU. que la tripulación plantó junto al LM. Solo se ve desde la cinemática del despegue.
+ * // VERIFICAR: posición real de la bandera de Apollo 17; aquí se coloca entre el LM y el LRV, a la derecha del LM visto
+ * desde la cámara de TV (como en las referencias) y a la vista desde el módulo de ascenso.
+ */
+export const BANDERA = enAzimut(95, 22);
 
 /**
  * Macizos y relieve lejano. Se dibujan en su azimut, más allá del horizonte. Altura sobre el fondo del valle (m).
