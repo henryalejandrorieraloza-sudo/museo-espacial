@@ -50,28 +50,78 @@ export const HIST = {
   negro: 0x171416,
   plateado: 0xc4c4c0,
   salmon: 0xd8965f,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Colores del LRV y del LM de la escena lunar
+// ---------------------------------------------------------------------------
+// Tomados de las referencias de Henry de 2026-11-12 (modelos "Apollo 11 Lunar Lander" y "Lunar Roving Vehicle from
+// Apollo 15" de TurboSquid, y fotos del LM): mediana del color en pantalla de cada material en las capturas (dorado,
+// carbón, crema, plata, naranja, blanco, grises). Cada valor de abajo es el color de material que, con la luz de la
+// escena lunar, da ese color en pantalla: se calibró con tests/capturas/modelos/muestras.html (placas con el Sol a
+// ~35° detrás de la cámara) hasta quedar a pocos niveles del objetivo, que va en el comentario. Las láminas y piezas
+// metálicas van con el acabado de lámina metálica (METAL): mismo color en promedio y brillo cuando les da el Sol.
+
+/** Colores del LRV que van con acabado de lámina metálica. */
+export const METALES_LRV: ReadonlySet<number> = new Set([0x735c2b, 0x666a6d]);
+/** Colores del LM que van con acabado de lámina metálica. */
+export const METALES_LM: ReadonlySet<number> = new Set([0x58420f, 0x969a99]);
+
+/** LRV de Apollo 17 (escena lunar). El LRV del museo (props.ts) sigue con HIST. */
+export const COLOR_LRV = {
+  /** Guardabarros, asientos y reposabrazos: naranja caramelo (#9C6640) y su borde más oscuro (#7E5232). */
+  naranja: 0x57310f,
+  naranjaBorde: 0x472809,
+  /** Lámina dorada de la LCRU y de la cámara de TV (#B8995B), con acabado de lámina metálica. */
+  oro: 0x735c2b,
+  /** Chasis, consola, baterías y portaherramientas: blanco (#DCDCDC). */
+  blanco: 0xafb4b9,
+  /** Tubos, mástiles, aros y piezas metálicas grises (#9A9997), con acabado de lámina metálica; paraguas de rejilla
+   * de la antena (#9A9997, 'rejilla'). */
+  gris: 0x666a6d,
+  grisMalla: 0x6b6e72,
+  /** Ruedas: malla gris oscura (#565553), chevrones claros (#B5B5B3) y cubo blanco (#E2E2E2). */
+  rueda: 0x333638,
+  chevron: 0x6e7276,
+  cubo: 0xbdc3c8,
+  /** Interior de la rueda visto a través de la malla: sombra. */
+  interiorRueda: 0x0e0f11,
+  /** Panel de instrumentos de la consola: beige (#C9B98A). */
+  panel: 0x897a4f,
+  /** Empuñaduras, cinchas, cables y esferas: negro (#262626). */
+  negro: 0x040609,
+  /** Bandera de EE. UU.: rojo (#B22234), blanco (#EEEEEA) y azul (#3C3B6E). */
+  banderaRojo: 0x720318,
+  banderaBlanco: 0xe5e9e0,
+  banderaAzul: 0x21234d,
+  lente: 0x15161a,
+} as const;
+
+/** LM Challenger (LM-12) de Apollo 17 en la escena lunar. */
+export const COLOR_LM = {
   /**
-   * Módulo lunar: la etapa de descenso va forrada de mantas de Kapton aluminizado ámbar, ámbar oscuro (rojizo),
-   * negro, plata y amarillo (Wikipedia, "Apollo Lunar Module", a partir de la documentación de Grumman).
-   * La etapa de ascenso es gris claro con zonas negras alrededor del túnel y los propulsores.
+   * Lámina dorada del descenso, de los tramos bajos de las patas y de los platos (#9A7A43), con acabado de lámina
+   * metálica. Su muestra de calibración caía en el reflejo del Sol: se usa el color opaco calibrado (0x543f0e) con el
+   * mismo ajuste (+3 %) que dio la lámina dorada del LRV.
    */
-  kaptonAmbar: 0xc99a3e,
-  kaptonOscuro: 0x8c5a2c,
-  kaptonAmarillo: 0xd8b85a,
-  ascensoGris: 0xb4b3ad,
-  ascensoOscuro: 0x2b2a2c,
-  toberaDescenso: 0x3a3836,
-  /** LRV: guardabarros de fibra de vidrio, claros. // VERIFICAR: tono exacto (en las fotos se ven gris claro). */
-  guardabarros: 0xbdb8aa,
-  /** Consola del LRV: paneles oscuros con instrumentos. */
-  consola: 0x2c2c2e,
-  /** LRV: cuerdas de la malla de acero cincado, algo más claras que la banda vista a través del tejido. */
-  mallaHilo: 0xbcb091,
+  oro: 0x58420f,
+  /** Paneles carbón de la etapa de ascenso y faldones (#4A4B4C), y negro de toberas y puntales (#3A3B3D). */
+  carbon: 0x191e24,
+  negro: 0x1d2127,
+  /** Paneles crema de la etapa de ascenso (#CBC7B3). */
+  crema: 0x8c8a73,
   /**
-   * LRV: mantas térmicas (MLI) forradas de beta cloth, blancas. En el LRV no había oro a la vista: el Kapton
-   * dorado y ámbar es del LM (Creel, "Coping with dust", 2017; NSSDC).
+   * Lámina plateada y aluminio de patas, brazos, escalera, paneles y toberas de los RCS (#C9C9C5), con acabado de
+   * lámina metálica: color opaco calibrado (0x8b8f8e) con el ajuste (+8 %) entre el gris opaco y el metálico del LRV.
    */
-  mantaLRV: 0xe8e6de,
+  plata: 0x969a99,
+  /** Juntas claras entre paneles de la etapa de ascenso (#DCDCD8). */
+  costura: 0xb1b6b2,
+  /** Bandera y rótulo del frente: rojo (#B22234), blanco (#EEEEEA) y azul (#3C3B6E). */
+  banderaRojo: 0x720318,
+  banderaBlanco: 0xe5e9e0,
+  banderaAzul: 0x21234d,
+  lente: 0x15161a,
 } as const;
 
 /**
@@ -109,6 +159,12 @@ export interface Transformacion {
   e?: V3;
   /** Variación de brillo por cara (0–1): da el aspecto facetado en rocas, planetas y cúpula. */
   v?: number;
+  /**
+   * Acabado de la pieza (por defecto, el del lote). 'metal': lámina metálica brillante (metalicidad 0.8, rugosidad
+   * 0.35) que refleja un entorno de cielo negro y suelo gris; 'satinado': metal liso con sombreado suave (normales
+   * de la geometría), para tanques; 'rejilla': malla translúcida de doble cara, para el paraguas de una antena.
+   */
+  m?: 'metal' | 'satinado' | 'rejilla';
 }
 
 /** Generador pseudoaleatorio con semilla: el museo se ve igual en cada carga. */
@@ -133,6 +189,56 @@ const OPACO_SIN_NIEBLA = crearOpaco(false);
  * con el Sol rasante brillaría como asfalto mojado, y el polvo lunar no tiene brillo especular.
  */
 const MATE = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, fog: false });
+/**
+ * Entorno para los acabados metálicos: cielo negro arriba y regolito gris abajo, como en la Luna. Sin él, un metal
+ * solo refleja la luz directa y se ve casi negro. Es una textura equirrectangular pequeña: Three.js la convierte a
+ * PMREM al usarla.
+ */
+const ENTORNO_LUNAR = ((): THREE.DataTexture => {
+  const ancho = 32;
+  const alto = 16;
+  const datos = new Uint8Array(ancho * alto * 4);
+  for (let y = 0; y < alto; y++) {
+    // La fila 0 es el polo de abajo (suelo): gris del regolito que baja a negro en el horizonte y arriba.
+    const t = y / (alto - 1);
+    const gris = t < 0.5 ? Math.round(150 * Math.min(1, (0.5 - t) * 4)) : 0;
+    for (let x = 0; x < ancho; x++) datos.set([gris, gris, Math.round(gris * 0.97), 255], (y * ancho + x) * 4);
+  }
+  const textura = new THREE.DataTexture(datos, ancho, alto);
+  textura.mapping = THREE.EquirectangularReflectionMapping;
+  textura.colorSpace = THREE.SRGBColorSpace;
+  textura.needsUpdate = true;
+  return textura;
+})();
+/**
+ * Lámina metálica (las láminas doradas y plateadas y las piezas de metal del LRV y del LM): metalicidad baja y poca
+ * rugosidad, así conserva su color mate y, en las facetas que miran al Sol, el reflejo brilla (llega a ~4, por encima
+ * del umbral del bloom de la Luna, 3, sin hacer un halo). Con metalicidad alta el reflejo del cielo negro la
+ * oscurecía y el del suelo gris la desaturaba.
+ */
+const METAL = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  flatShading: true,
+  roughness: 0.38,
+  metalness: 0.35,
+  envMap: ENTORNO_LUNAR,
+  envMapIntensity: 0.6,
+  fog: false,
+});
+const SATINADO = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: false, roughness: 0.4, metalness: 0.45, envMap: ENTORNO_LUNAR, fog: false });
+const REJILLA = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  flatShading: true,
+  roughness: 0.6,
+  metalness: 0.3,
+  envMap: ENTORNO_LUNAR,
+  transparent: true,
+  opacity: 0.55,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  fog: false,
+});
+
 /** Sin iluminación y con colores mayores que 1: es lo único que supera el umbral del bloom. */
 const EMISIVO = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
 const ADITIVO = new THREE.MeshBasicMaterial({
@@ -164,16 +270,23 @@ const _q = new THREE.Quaternion();
 /** Acumula piezas estáticas y las fusiona por material. */
 export class Lote {
   private readonly opacas: THREE.BufferGeometry[] = [];
+  private readonly metales: THREE.BufferGeometry[] = [];
+  private readonly satinadas: THREE.BufferGeometry[] = [];
+  private readonly rejillas: THREE.BufferGeometry[] = [];
   private readonly emisivas: THREE.BufferGeometry[] = [];
   private readonly aditivas: THREE.BufferGeometry[] = [];
   private readonly vidrios: THREE.BufferGeometry[] = [];
   private readonly azarCara = azar(7);
   private matriz = new THREE.Matrix4();
 
-  /** `acabado`: 'museo' (rugosidad 0.75 y metalicidad 0.2, como pide el estilo) o 'mate' (suelo lunar). */
+  /**
+   * `acabado`: 'museo' (rugosidad 0.75 y metalicidad 0.2, como pide el estilo) o 'mate' (suelo lunar).
+   * `coloresMetal`: colores que, sin otro acabado pedido, van con el de lámina metálica ('metal').
+   */
   constructor(
     private readonly niebla = true,
     private readonly acabado: 'museo' | 'mate' = 'museo',
+    private readonly coloresMetal: ReadonlySet<number> = new Set(),
   ) {}
 
   /** Ejecuta `fn` con un sistema de coordenadas local (posición, giro y escala). */
@@ -186,7 +299,13 @@ export class Lote {
 
   /** Pieza mate iluminada. */
   pieza(geo: THREE.BufferGeometry, color: ColorCara, t: Transformacion = {}): void {
-    this.opacas.push(this.preparar(geo, color, 1, t));
+    if (t.m === 'satinado') {
+      this.satinadas.push(this.prepararSuave(geo, color, t));
+      return;
+    }
+    const metal = t.m === 'metal' || (t.m === undefined && typeof color === 'number' && this.coloresMetal.has(color));
+    const lista = metal ? this.metales : t.m === 'rejilla' ? this.rejillas : this.opacas;
+    lista.push(this.preparar(geo, color, 1, t));
   }
 
   /** Pieza que emite luz. `intensidad` > 1.2 hace que florezca con el bloom. */
@@ -229,6 +348,9 @@ export class Lote {
       lista.length = 0;
     };
     anadir(this.opacas, this.acabado === 'mate' ? MATE : this.niebla ? OPACO : OPACO_SIN_NIEBLA);
+    anadir(this.metales, METAL);
+    anadir(this.satinadas, SATINADO);
+    anadir(this.rejillas, REJILLA, 1);
     anadir(this.emisivas, EMISIVO);
     anadir(this.vidrios, VIDRIO, 1);
     anadir(this.aditivas, ADITIVO, 2);
@@ -241,6 +363,23 @@ export class Lote {
     _q.setFromEuler(_euler);
     _b.set(...e);
     return new THREE.Matrix4().compose(_a.clone(), _q.clone(), _b.clone());
+  }
+
+  /** Como `preparar`, pero conserva las normales de la geometría (sombreado suave) y un solo color por pieza. */
+  private prepararSuave(geo: THREE.BufferGeometry, color: ColorCara, t: Transformacion): THREE.BufferGeometry {
+    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    for (const nombre of Object.keys(g.attributes)) {
+      if (nombre !== 'position' && nombre !== 'normal') g.deleteAttribute(nombre);
+    }
+    g.clearGroups();
+    const pos = g.getAttribute('position');
+    _color.setHex(typeof color === 'function' ? color(_centro.set(0, 0, 0)) : color);
+    const colores = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) colores.set([_color.r, _color.g, _color.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(colores, 3));
+    g.applyMatrix4(this.matriz.clone().multiply(this.matrizDe(t)));
+    return g;
   }
 
   private preparar(geo: THREE.BufferGeometry, color: ColorCara, intensidad: number, t: Transformacion): THREE.BufferGeometry {
@@ -352,16 +491,46 @@ export function segmentoAnillo(r0: number, r1: number, a0: number, a1: number, y
   return geo;
 }
 
-/** Tubo recto entre dos puntos. */
-export function tuboEntre(a: V3, b: V3, radio: number, lados = 6): THREE.BufferGeometry {
+/** Tubo recto entre dos puntos. Con `tapas` en false queda abierto: en tubos finos las tapas no se ven. */
+export function tuboEntre(a: V3, b: V3, radio: number, lados = 6, tapas = true): THREE.BufferGeometry {
   const inicio = new THREE.Vector3(...a);
   const fin = new THREE.Vector3(...b);
   const eje = fin.clone().sub(inicio);
-  const geo = new THREE.CylinderGeometry(radio, radio, eje.length(), lados);
+  const geo = new THREE.CylinderGeometry(radio, radio, eje.length(), lados, 1, !tapas);
   geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), eje.clone().normalize()));
   const medio = inicio.add(fin).multiplyScalar(0.5);
   geo.translate(medio.x, medio.y, medio.z);
   return geo;
+}
+
+const _n = new THREE.Vector3();
+
+/**
+ * Malla hecha a mano, triángulo a triángulo. Cada cara recibe una dirección `fuera` y se orienta hacia ella, así no
+ * hay que cuidar el orden de los vértices (el material solo dibuja la cara delantera).
+ */
+export class MallaLibre {
+  private readonly pos: number[] = [];
+
+  tri(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, fuera: THREE.Vector3): void {
+    _a.subVectors(b, a);
+    _b.subVectors(c, a);
+    const invertir = _n.crossVectors(_a, _b).dot(fuera) < 0;
+    const [p1, p2] = invertir ? [c, b] : [b, c];
+    this.pos.push(a.x, a.y, a.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+  }
+
+  /** Cuadrilátero a-b-c-d (en orden alrededor del borde). */
+  quad(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3, fuera: THREE.Vector3): void {
+    this.tri(a, b, c, fuera);
+    this.tri(a, c, d, fuera);
+  }
+
+  geometria(): THREE.BufferGeometry {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    return geo;
+  }
 }
 
 /** Roca irregular: icosaedro con los vértices desplazados de forma coherente. */

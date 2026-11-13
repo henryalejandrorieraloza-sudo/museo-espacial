@@ -1,17 +1,28 @@
 import * as THREE from 'three';
-import { HIST, Lote, SUELO_LUNA, cajaBiselada, tuboEntre, type V3 } from './paleta';
+import { COLOR_LRV, Lote, METALES_LRV, MallaLibre, SUELO_LUNA, azar, cajaBiselada, tuboEntre, type V3 } from './paleta';
 
-// Lunar Roving Vehicle de Apollo 17 para la escena lunar, low poly. Frente hacia −Z, origen en el suelo y centrado.
-// Solo lleva lo que tenía el LRV real: chasis de tubo de aluminio en tres secciones, ruedas de malla de acero con
-// chevrones de titanio, guardabarros de fibra, dos asientos de tubo y red, mando en T entre los asientos, consola,
-// baterías en la sección delantera, unidad de comunicaciones (LCRU), cámara de TV, antenas y portaherramientas.
-// Sin techo ni puertas.
+// Lunar Roving Vehicle de Apollo 17 para la escena lunar, low poly facetado (caras planas, sin superficies suaves) y
+// con muchos polígonos. Frente hacia −Z, origen en el suelo y centrado. Solo lleva lo que tenía el LRV real: chasis de
+// perfiles de aluminio en tres secciones con piso de listones, ruedas de malla de acero con chevrones de titanio,
+// guardabarros con extensiones, suspensión de doble horquilla, dos asientos de tubo y lona, mando en T, consola,
+// baterías y electrónica, unidad de comunicaciones (LCRU), cámara de TV, antenas de alta y baja ganancia, cables y
+// portaherramientas trasero. Sin techo ni puertas.
+//
+// Aspecto (referencias de Henry de 2026-11-12: modelo "Lunar Roving Vehicle from Apollo 15" de TurboSquid): ruedas
+// de malla gris oscura con chevrones claros, aro con pernos y cubo blanco; guardabarros naranja caramelo con riel
+// remachado y bandera; asientos de lona naranja con respaldo de cintas cruzadas; chasis blanco; consola blanca con
+// panel beige; LCRU y cámara forradas de lámina dorada; paraguas de malla gris. Colores en COLOR_LRV (paleta.ts).
 //
 // Medidas (Wikipedia, "Lunar Roving Vehicle", a partir de la NASA y Boeing): largo 10 ft (3.05 m), batalla 7.5 ft
-// (2.29 m), alto 3.6 ft (1.1 m); ruedas de 32 in (0.81 m) de diámetro y 9 in (0.23 m) de ancho, malla de cuerdas de
-// acero cincado con chevrones de titanio sobre el 50 % del área de contacto; mando en T entre los dos asientos.
-// La NSSDC ("The Apollo Lunar Roving Vehicle") da lo mismo: bastidor de 3.1 m, batalla de 2.3 m, altura máxima de
-// 1.14 m, altura libre de 36 cm y ruedas de 81.8 × 23 cm con un bastidor de tope interior de 64.8 cm.
+// (2.29 m), alto 3.6 ft (1.1 m); ruedas de 32 in (0.81 m) de diámetro y 9 in (0.23 m) de ancho. La NSSDC ("The
+// Apollo Lunar Roving Vehicle") da lo mismo: bastidor de 3.1 m, batalla de 2.3 m, altura libre de 36 cm. ALSJ,
+// "Apollo 17 TV reflections": el paraguas queda ~50 cm por encima de la cámara. Aproximado (// VERIFICAR): la vía, el
+// diámetro del paraguas, el número de chevrones y la distribución de la consola.
+
+/** Lote del LRV: la lámina dorada y las piezas de metal gris van con acabado metálico (brillan al Sol). */
+function nuevoLote(): Lote {
+  return new Lote(false, 'museo', METALES_LRV);
+}
 
 const RADIO_RUEDA = 0.4064;
 const ANCHO_RUEDA = 0.2286;
@@ -27,6 +38,12 @@ const Z_COLA = 1.52;
 const X_ASIENTO = 0.31;
 const Y_ASIENTO = 0.62;
 const Z_ASIENTO = 0.15;
+/**
+ * Altura de la base de malla de los asientos tal como se dibujan, algo más baja que Y_ASIENTO. Y_ASIENTO sigue
+ * fijando los ojos del comandante (OJOS_COMANDANTE) y el mando en T, para que la posición del jugador sentado y la
+ * del agarre no cambien con el diseño de los asientos.
+ */
+const Y_BASE_ASIENTO = 0.57;
 
 /** Bisagras entre la sección central del chasis y las secciones delantera y trasera (|z|, m). */
 const Z_BISAGRA = 0.62;
@@ -53,74 +70,150 @@ export const RUEDAS_LRV: readonly (readonly [number, number])[] = [
 ];
 
 
-/** Diámetro del bastidor interior de tope (bump stop) de la rueda: 64.8 cm (NSSDC). Se ve oscuro a través de la malla. */
-const RADIO_TOPE_RUEDA = 0.324;
-/** Cuerdas de la malla por sentido (dos sentidos cruzados). Es una densidad de dibujo, no el número real de cuerdas. */
-const CUERDAS_MALLA = 30;
-/** Chevrones alrededor de la rueda. // VERIFICAR: número real de chevrones por rueda. */
+/**
+ * Cuerdas de la malla por sentido (dos sentidos cruzados), en tramos a lo ancho. Es una densidad de dibujo: la malla
+ * real tenía cientos de cuerdas de 0.84 mm (Wikipedia). Cada cuerda es una arista en relieve de cuatro caras.
+ */
+const CUERDAS_MALLA = 22;
+const TRAMOS_MALLA = 3;
+/** Ancho y relieve de cada cuerda dibujada (m): mucho más gruesas que las reales para que la rejilla se lea de lejos. */
+const MEDIO_ANCHO_CUERDA = 0.008;
+const RELIEVE_CUERDA = 0.005;
+/** Chevrones alrededor de la rueda: anchos y claros, como en la referencia. // VERIFICAR: número real por rueda. */
 const CHEVRONES_RUEDA = 18;
+/** Lados de los polígonos de la rueda (aros, flanco y cubo): facetada, sin curvas suaves. */
+const LADOS_RUEDA = 16;
+
+const _d = new THREE.Vector3();
+const _l = new THREE.Vector3();
+const _f = new THREE.Vector3();
+
+/** Punto de la banda de rodadura: `x` a lo ancho (eje de giro) y `a` el ángulo desde arriba (hacia +Z). */
+function enBanda(x: number, a: number, r: number): THREE.Vector3 {
+  return new THREE.Vector3(x, Math.cos(a) * r, Math.sin(a) * r);
+}
+
+function radial(a: number): THREE.Vector3 {
+  return new THREE.Vector3(0, Math.cos(a), Math.sin(a));
+}
 
 /**
- * Rueda de malla que rueda, en ejes de la rueda (centro en el origen, eje de giro en X). `lado`: −1 a la izquierda
- * del LRV y +1 a la derecha (el buje mira hacia fuera). Malla de cuerdas de acero cincado tejidas en diagonal,
- * chevrones de titanio en V sobre la mitad de la banda, aros y discos de aluminio a los lados y el bastidor de tope
- * por dentro (NSSDC: "zinc coated woven 0.083 cm diameter steel strands attached to the rim and discs of formed
- * aluminum… Titanium chevrons covered 50% of the contact area").
+ * Malla de cuerdas tejidas en diagonal: cada cuerda cruza la banda girando 1.5 pasos, así las de un sentido se
+ * cruzan con las del otro en los vértices de los tramos y dejan rombos abiertos que muestran el interior oscuro.
  */
-function ruedaRodante(l: Lote, lado: number): void {
+function mallaRueda(): THREE.BufferGeometry {
+  const m = new MallaLibre();
   const w = ANCHO_RUEDA / 2;
-  // Banda: el interior oscuro (bastidor de tope y sombra) visto a través del tejido, con las tapas oscuras.
-  const banda = new THREE.CylinderGeometry(RADIO_RUEDA, RADIO_RUEDA, ANCHO_RUEDA, 36, 1, true);
-  l.pieza(banda, HIST.malla, { r: [0, 0, Math.PI / 2], v: 0.18 });
-  l.pieza(new THREE.CylinderGeometry(RADIO_TOPE_RUEDA, RADIO_TOPE_RUEDA, ANCHO_RUEDA * 0.8, 24), HIST.consola, { r: [0, 0, Math.PI / 2] });
-  // Malla: cuerdas en los dos sentidos diagonales, cada una en tres tramos que siguen la curva de la banda.
-  const radioMalla = RADIO_RUEDA + 0.003;
-  const punto = (x: number, a: number): V3 => [x, Math.cos(a) * radioMalla, Math.sin(a) * radioMalla];
-  const giroCuerda = ANCHO_RUEDA / RADIO_RUEDA;
+  const r = RADIO_RUEDA - 0.004;
+  const paso = (Math.PI * 2) / CUERDAS_MALLA;
+  const giro = 1.5 * paso;
   for (let i = 0; i < CUERDAS_MALLA; i++) {
-    const a0 = (i / CUERDAS_MALLA) * Math.PI * 2;
     for (const sentido of [-1, 1]) {
-      for (let k = 0; k < 3; k++) {
-        const t0 = k / 3;
-        const t1 = (k + 1) / 3;
-        l.pieza(
-          tuboEntre(punto(-w + t0 * ANCHO_RUEDA, a0 + sentido * t0 * giroCuerda), punto(-w + t1 * ANCHO_RUEDA, a0 + sentido * t1 * giroCuerda), 0.0035, 3),
-          HIST.mallaHilo,
-        );
+      for (let k = 0; k < TRAMOS_MALLA; k++) {
+        const t0 = k / TRAMOS_MALLA;
+        const t1 = (k + 1) / TRAMOS_MALLA;
+        const a0 = i * paso + sentido * t0 * giro;
+        const a1 = i * paso + sentido * t1 * giro;
+        const p0 = enBanda(-w + t0 * ANCHO_RUEDA, a0, r);
+        const p1 = enBanda(-w + t1 * ANCHO_RUEDA, a1, r);
+        const n0 = radial(a0);
+        const n1 = radial(a1);
+        _d.subVectors(p1, p0);
+        _l.crossVectors(_d, _f.addVectors(n0, n1)).normalize().multiplyScalar(MEDIO_ANCHO_CUERDA);
+        const cresta0 = p0.clone().addScaledVector(n0, RELIEVE_CUERDA);
+        const cresta1 = p1.clone().addScaledVector(n1, RELIEVE_CUERDA);
+        for (const s of [-1, 1]) {
+          const b0 = p0.clone().addScaledVector(_l, s);
+          const b1 = p1.clone().addScaledVector(_l, s);
+          m.quad(b0, b1, cresta1, cresta0, _f.addVectors(n0, n1).addScaledVector(_l, s * 60));
+        }
       }
     }
   }
-  // Chevrones de titanio: dos placas en V por paso, cubriendo la mitad de la banda.
+  return m.geometria();
+}
+
+/** Placa en relieve sobre la banda, de p0 a p1 (puntos de la banda): cara de arriba, dos lados y la punta de p1. */
+function placaBanda(m: MallaLibre, x0: number, a0: number, x1: number, a1: number, medio: number, alto: number): void {
+  const r = RADIO_RUEDA;
+  const p0 = enBanda(x0, a0, r);
+  const p1 = enBanda(x1, a1, r);
+  const n0 = radial(a0);
+  const n1 = radial(a1);
+  const d = new THREE.Vector3().subVectors(p1, p0);
+  const l = new THREE.Vector3().crossVectors(d, new THREE.Vector3().addVectors(n0, n1)).normalize().multiplyScalar(medio);
+  const v = (p: THREE.Vector3, n: THREE.Vector3, s: number, h: number): THREE.Vector3 => p.clone().addScaledVector(l, s).addScaledVector(n, h);
+  const arriba = new THREE.Vector3().addVectors(n0, n1);
+  m.quad(v(p0, n0, 1, alto), v(p1, n1, 1, alto), v(p1, n1, -1, alto), v(p0, n0, -1, alto), arriba);
+  for (const s of [-1, 1]) {
+    m.quad(v(p0, n0, s, 0), v(p1, n1, s, 0), v(p1, n1, s, alto), v(p0, n0, s, alto), l.clone().multiplyScalar(s));
+  }
+  m.quad(v(p1, n1, 1, 0), v(p1, n1, -1, 0), v(p1, n1, -1, alto), v(p1, n1, 1, alto), d);
+}
+
+/**
+ * Chevrones de titanio en V sobre la malla, anchos y claros, cubriendo cerca de la mitad de la banda (NSSDC:
+ * "Titanium chevrons covered 50% of the contact area"). La V apunta en el sentido de giro al avanzar.
+ */
+function chevronesRueda(): THREE.BufferGeometry {
+  const m = new MallaLibre();
+  const w = ANCHO_RUEDA / 2;
   for (let i = 0; i < CHEVRONES_RUEDA; i++) {
-    const a = (i / CHEVRONES_RUEDA) * Math.PI * 2;
-    for (const s of [-1, 1]) {
-      l.en([0, Math.cos(a) * (RADIO_RUEDA + 0.008), Math.sin(a) * (RADIO_RUEDA + 0.008)], [a, 0, 0], () => {
-        l.pieza(cajaBiselada(ANCHO_RUEDA * 0.52, 0.007, 0.034, 0.002), HIST.chevron, { p: [s * ANCHO_RUEDA * 0.24, 0, 0], r: [0, s * 0.5, 0] });
+    const a = ((i + 0.5) / CHEVRONES_RUEDA) * Math.PI * 2;
+    for (const s of [-1, 1]) placaBanda(m, 0, a, s * w * 1.02, a + 0.19, 0.024, 0.016);
+  }
+  return m.geometria();
+}
+
+/**
+ * Rueda de malla que rueda, en ejes de la rueda (centro en el origen, eje de giro en X). `lado`: −1 a la izquierda
+ * del LRV y +1 a la derecha (el buje mira hacia fuera). Banda de malla de alambre oscura con chevrones claros, flanco
+ * de malla, aro de aluminio con pernos y cubo blanco en el centro, como en la referencia (NSSDC: "zinc coated woven
+ * 0.083 cm diameter steel strands attached to the rim and discs of formed aluminum").
+ */
+function ruedaRodante(l: Lote, interior: Lote, lado: number): void {
+  const w = ANCHO_RUEDA / 2;
+  // Interior oscuro visto a través del tejido. Va en su lote, sin polvo, para que siga oscuro.
+  interior.pieza(new THREE.CylinderGeometry(RADIO_RUEDA - 0.012, RADIO_RUEDA - 0.012, ANCHO_RUEDA * 0.97, LADOS_RUEDA, 1, true), COLOR_LRV.interiorRueda, { r: [0, 0, Math.PI / 2] });
+  l.pieza(mallaRueda(), COLOR_LRV.rueda, { v: 0.12 });
+  l.pieza(chevronesRueda(), COLOR_LRV.chevron, { v: 0.08 });
+  for (const s of [-1, 1]) {
+    const xf = s * (w - 0.004);
+    // Flanco de malla: corona facetada del aro al disco, con nervios radiales.
+    const flanco = new THREE.RingGeometry(0.25, RADIO_RUEDA - 0.004, LADOS_RUEDA, 2);
+    l.pieza(flanco, COLOR_LRV.interiorRueda, { p: [xf, 0, 0], r: [0, s * (Math.PI / 2), 0], v: 0.1 });
+    for (let k = 0; k < LADOS_RUEDA; k += 2) {
+      const a = (k / LADOS_RUEDA) * Math.PI * 2;
+      l.pieza(new THREE.BoxGeometry(0.006, 0.006, RADIO_RUEDA - 0.26), COLOR_LRV.rueda, {
+        p: [xf + s * 0.003, Math.cos(a) * (RADIO_RUEDA + 0.25) * 0.5, Math.sin(a) * (RADIO_RUEDA + 0.25) * 0.5],
+        r: [a + Math.PI / 2, 0, 0],
       });
     }
+    // Aro exterior de la banda.
+    l.pieza(new THREE.TorusGeometry(RADIO_RUEDA - 0.006, 0.009, 4, LADOS_RUEDA), COLOR_LRV.gris, { p: [xf, 0, 0], r: [0, Math.PI / 2, 0] });
   }
-  // Aros de aluminio a cada lado de la malla y disco repujado del buje, hacia fuera.
-  for (const s of [-1, 1]) {
-    l.pieza(new THREE.TorusGeometry(RADIO_RUEDA - 0.004, 0.009, 4, 36), HIST.aluminio, { p: [s * w, 0, 0], r: [0, Math.PI / 2, 0] });
+  // Por fuera: aro de aluminio con pernos, disco oscuro hundido y el cubo blanco.
+  const xa = lado * (w + 0.006);
+  l.pieza(new THREE.CylinderGeometry(0.25, 0.25, 0.026, LADOS_RUEDA, 1, true), COLOR_LRV.gris, { p: [xa, 0, 0], r: [0, 0, Math.PI / 2] });
+  const corona = new THREE.RingGeometry(0.19, 0.25, LADOS_RUEDA, 1);
+  l.pieza(corona, COLOR_LRV.gris, { p: [xa + lado * 0.013, 0, 0], r: [0, lado * (Math.PI / 2), 0], v: 0.05 });
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    l.pieza(new THREE.BoxGeometry(0.012, 0.014, 0.014), COLOR_LRV.cubo, { p: [xa + lado * 0.018, Math.cos(a) * 0.22, Math.sin(a) * 0.22], r: [a, 0, 0] });
   }
-  l.pieza(new THREE.CylinderGeometry(0.15, 0.2, 0.035, 18), HIST.aluminio, { p: [lado * (w + 0.008), 0, 0], r: [0, 0, -lado * Math.PI / 2] });
-  l.pieza(new THREE.CylinderGeometry(0.06, 0.08, 0.03, 12), HIST.plateado, { p: [lado * (w + 0.035), 0, 0], r: [0, 0, -lado * Math.PI / 2] });
-  // Nervios del disco, para que se vea el giro de la rueda.
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    l.pieza(new THREE.BoxGeometry(0.012, 0.012, 0.13), HIST.plateado, {
-      p: [lado * (w + 0.027), Math.cos(a) * 0.12, Math.sin(a) * 0.12],
-      r: [a + Math.PI / 2, 0, 0],
-    });
-  }
+  l.pieza(new THREE.CylinderGeometry(0.19, 0.19, 0.012, LADOS_RUEDA), COLOR_LRV.interiorRueda, { p: [xa - lado * 0.01, 0, 0], r: [0, 0, Math.PI / 2] });
+  l.pieza(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 10), COLOR_LRV.cubo, { p: [xa + lado * 0.02, 0, 0], r: [0, 0, Math.PI / 2], v: 0.04 });
+  l.pieza(new THREE.CylinderGeometry(0.05, 0.065, 0.025, 10), COLOR_LRV.cubo, { p: [xa + lado * 0.055, 0, 0], r: [0, 0, -lado * Math.PI / 2] });
 }
 
 /** Motor de tracción y caja armónica en el cubo, hacia dentro: giran con la dirección, pero no ruedan. */
 function motorRueda(l: Lote, lado: number): void {
   const x = -lado * (ANCHO_RUEDA / 2 + 0.05);
-  l.pieza(new THREE.CylinderGeometry(0.11, 0.11, 0.16, 16), HIST.plateado, { p: [x, 0, 0], r: [0, 0, Math.PI / 2], v: 0.06 });
-  l.pieza(new THREE.CylinderGeometry(0.125, 0.125, 0.025, 16), HIST.aluminio, { p: [x + lado * 0.07, 0, 0], r: [0, 0, Math.PI / 2] });
-  l.pieza(new THREE.CylinderGeometry(0.08, 0.1, 0.03, 12), HIST.aluminio, { p: [x - lado * 0.09, 0, 0], r: [0, 0, Math.PI / 2] });
+  l.pieza(new THREE.CylinderGeometry(0.11, 0.11, 0.16, 10), COLOR_LRV.gris, { p: [x, 0, 0], r: [0, 0, Math.PI / 2], v: 0.06 });
+  l.pieza(new THREE.CylinderGeometry(0.125, 0.125, 0.025, 10), COLOR_LRV.blanco, { p: [x + lado * 0.07, 0, 0], r: [0, 0, Math.PI / 2] });
+  l.pieza(new THREE.CylinderGeometry(0.08, 0.1, 0.03, 12), COLOR_LRV.blanco, { p: [x - lado * 0.09, 0, 0], r: [0, 0, Math.PI / 2] });
+  // Brazo de dirección del cubo, donde se unen los brazos de la suspensión.
+  l.pieza(new THREE.BoxGeometry(0.05, 0.2, 0.07), COLOR_LRV.blanco, { p: [x - lado * 0.04, 0, 0] });
 }
 
 /** Una rueda del LRV en el modelo: el pivote gira con la dirección (eje Y) y el buje rueda (eje X). */
@@ -134,17 +227,19 @@ function crearRueda(x: number, z: number): RuedaModelo {
   const pivote = new THREE.Group();
   pivote.name = `rueda_${z < 0 ? 'delantera' : 'trasera'}_${lado < 0 ? 'izquierda' : 'derecha'}`;
   pivote.position.set(x, RADIO_RUEDA, z);
-  const motor = new Lote(false);
+  const motor = nuevoLote();
   motorRueda(motor, lado);
   pivote.add(motor.construir());
   // El motor se empolva según su altura; la banda, entera (ver empolvar).
   empolvar(pivote, null);
   const buje = new THREE.Group();
   buje.name = `${pivote.name}_buje`;
-  const banda = new Lote(false);
-  ruedaRodante(banda, lado);
+  const banda = nuevoLote();
+  const interior = nuevoLote();
+  ruedaRodante(banda, interior, lado);
   buje.add(banda.construir());
   empolvar(buje, POLVO_RUEDA);
+  buje.add(interior.construir());
   pivote.add(buje);
   return { pivote, buje };
 }
@@ -227,59 +322,134 @@ function crearAnimacionRuedas(ruedas: RuedaModelo[]): RuedasLRV {
 }
 
 /**
- * Guardabarros de fibra de vidrio con resina epoxi sobre cada rueda, con las extensiones delante y detrás y un
- * borde de refuerzo (NSSDC: "Dust guards were mounted above the wheels"; Smithsonian, "Extension, Fender, Lunar
- * Roving Vehicle, Apollo 17"). La parte fija va en `l`; cada extensión, en su lote, porque corre sobre la parte
- * fija al desplegar el LRV (ALSJ: "a second portion is mounted on rails over the fixed piece").
+ * Canal barrido a lo largo de un arco alrededor del eje de la rueda (eje X por (x, RADIO_RUEDA, z)), de a0 a a1 en
+ * `n` tramos. `perfil`: polígono cerrado en (u, v), con u a lo ancho (X) y v la distancia al eje.
  */
-function guardabarros(l: Lote, extDelante: Lote, extDetras: Lote, x: number, z: number): void {
-  const radio = RADIO_RUEDA + 0.075;
-  const ancho = ANCHO_RUEDA + 0.08;
-  // Guardabarros fijo (de −1.0 a 1.0 rad) y extensiones (hasta ±1.45 rad), en tramos que siguen el arco.
-  const tramos: [number, number, number][] = [
-    [-1.45, -1.0, 3],
-    [-1.0, 1.0, 10],
-    [1.0, 1.45, 3],
-  ];
-  for (const [desde, hasta, n] of tramos) {
-    const paso = (hasta - desde) / n;
-    for (let i = 0; i < n; i++) {
-      const a = desde + paso * (i + 0.5);
-      const largo = 2 * radio * Math.sin(paso / 2) + 0.006;
-      const extension = Math.abs(a) > 1.0;
-      const r = extension ? radio + 0.006 : radio;
-      // Por delante de la rueda (−Z) el ángulo es negativo.
-      const lote = extension ? (a < 0 ? extDelante : extDetras) : l;
-      const centro: V3 = [x, RADIO_RUEDA + Math.cos(a) * r, z + Math.sin(a) * r];
-      lote.pieza(new THREE.BoxGeometry(extension ? ancho - 0.01 : ancho, 0.01, largo), HIST.guardabarros, { p: centro, r: [a, 0, 0], v: 0.05 });
-      // Borde de refuerzo a cada lado.
-      for (const s of [-1, 1]) {
-        lote.pieza(new THREE.BoxGeometry(0.012, 0.03, largo), HIST.guardabarros, {
-          p: [x + (s * ancho) / 2, RADIO_RUEDA + Math.cos(a) * (r - 0.012), z + Math.sin(a) * (r - 0.012)],
-          r: [a, 0, 0],
-        });
-      }
+function barridoArco(perfil: readonly (readonly [number, number])[], x: number, z: number, a0: number, a1: number, n: number): THREE.BufferGeometry {
+  const m = new MallaLibre();
+  let area = 0;
+  for (let i = 0; i < perfil.length; i++) {
+    const [u0, v0] = perfil[i];
+    const [u1, v1] = perfil[(i + 1) % perfil.length];
+    area += u0 * v1 - u1 * v0;
+  }
+  const signo = Math.sign(area);
+  const punto = (u: number, v: number, a: number): THREE.Vector3 => new THREE.Vector3(x + u, RADIO_RUEDA + Math.cos(a) * v, z + Math.sin(a) * v);
+  for (let k = 0; k < n; k++) {
+    const b0 = a0 + ((a1 - a0) * k) / n;
+    const b1 = a0 + ((a1 - a0) * (k + 1)) / n;
+    const am = (b0 + b1) / 2;
+    for (let i = 0; i < perfil.length; i++) {
+      const [u0, v0] = perfil[i];
+      const [u1, v1] = perfil[(i + 1) % perfil.length];
+      const nu = signo * (v1 - v0);
+      const nv = -signo * (u1 - u0);
+      const fuera = new THREE.Vector3(nu, Math.cos(am) * nv, Math.sin(am) * nv);
+      m.quad(punto(u0, v0, b0), punto(u1, v1, b0), punto(u1, v1, b1), punto(u0, v0, b1), fuera);
     }
   }
-  // Soporte del guardabarros al bastidor.
-  const lado = Math.sign(x);
-  l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR + 0.05, z], [x - lado * 0.06, RADIO_RUEDA + radio - 0.02, z], 0.012, 6), HIST.aluminio);
+  return m.geometria();
 }
 
-/** Suspensión de doble brazo: del bastidor al cubo de la rueda. */
+/**
+ * Perfil del guardabarros: concha abombada sobre la rueda (de labio a labio pasando por arriba), facetada en
+ * `tramos` caras y de 1 cm de espesor. `medio`: medio ancho; `radio`: distancia al eje en los labios.
+ */
+function perfilConcha(medio: number, radio: number, tramos = 6): [number, number][] {
+  const fuera: [number, number][] = [];
+  const dentro: [number, number][] = [];
+  for (let i = 0; i <= tramos; i++) {
+    const f = -Math.PI / 2 + (Math.PI * i) / tramos;
+    const u = Math.sin(f) * medio;
+    const v = radio + Math.cos(f) * 0.085;
+    fuera.push([u, v + 0.01]);
+    dentro.push([u * 0.97, v]);
+  }
+  return [...fuera, ...dentro.reverse()];
+}
+
+/**
+ * Bandera de EE. UU. sobre el costado de un guardabarros (como en la referencia): placa blanca, siete franjas rojas y
+ * el cantón azul. `p`: centro en la cara de fuera; `a`: ángulo del arco; `fuera`: ±1 hacia fuera.
+ */
+function bandera(l: Lote, p: V3, a: number, fuera: number): void {
+  const alto = 0.1;
+  const largo = 0.17;
+  const franja = alto / 13;
+  // Ejes locales: X hacia fuera, Y radial (arriba de la bandera) y Z a lo largo del arco.
+  l.en(p, [a, 0, 0], () => {
+    l.pieza(new THREE.BoxGeometry(0.003, alto, largo), COLOR_LRV.banderaBlanco, { p: [fuera * 0.0015, 0, 0] });
+    for (let k = 0; k < 7; k++) {
+      l.pieza(new THREE.BoxGeometry(0.002, franja, largo), COLOR_LRV.banderaRojo, { p: [fuera * 0.003, alto / 2 - franja * (2 * k + 0.5), 0] });
+    }
+    l.pieza(new THREE.BoxGeometry(0.002, franja * 7, largo * 0.4), COLOR_LRV.banderaAzul, { p: [fuera * 0.0045, alto / 2 - franja * 3.5, -largo * 0.3] });
+  });
+}
+
+/**
+ * Guardabarros naranja sobre cada rueda: concha abombada que abraza la rueda, con las extensiones delante y detrás,
+ * un riel oscuro remachado a lo largo y la bandera en el costado (NSSDC: "Dust guards were mounted above the
+ * wheels"; Smithsonian, "Extension, Fender, Lunar Roving Vehicle, Apollo 17"). La parte fija va en `l`; cada
+ * extensión, en su lote, porque corre sobre la parte fija al desplegar el LRV (ALSJ).
+ */
+function guardabarros(l: Lote, extDelante: Lote, extDetras: Lote, x: number, z: number): void {
+  const radio = RADIO_RUEDA + 0.03;
+  const medio = ANCHO_RUEDA / 2 + 0.045;
+  const fuera = Math.sign(x);
+  l.pieza(barridoArco(perfilConcha(medio, radio), x, z, -1.25, 1.25, 10), COLOR_LRV.naranja, { v: 0.06 });
+  extDelante.pieza(barridoArco(perfilConcha(medio + 0.006, radio + 0.012), x, z, -1.65, -1.2, 3), COLOR_LRV.naranja, { v: 0.06 });
+  extDetras.pieza(barridoArco(perfilConcha(medio + 0.006, radio + 0.012), x, z, 1.2, 1.65, 3), COLOR_LRV.naranja, { v: 0.06 });
+  // Bordes de los labios, más oscuros.
+  for (const s of [-1, 1]) {
+    l.pieza(barridoArco(perfilRect(s * medio - 0.008, s * medio + 0.008, radio - 0.012, radio + 0.012), x, z, -1.25, 1.25, 10), COLOR_LRV.naranjaBorde);
+  }
+  // Riel oscuro remachado a lo largo del guardabarros, hacia dentro, por el que corren las extensiones.
+  const ur = -fuera * medio * 0.45;
+  const vr = radio + Math.cos(Math.asin(0.45)) * 0.085 + 0.012;
+  l.pieza(barridoArco(perfilRect(ur - 0.014, ur + 0.014, vr - 0.004, vr + 0.006), x, z, -1.2, 1.2, 10), COLOR_LRV.negro);
+  for (let k = 0; k <= 7; k++) {
+    const a = -1.1 + (2.2 * k) / 7;
+    l.pieza(new THREE.BoxGeometry(0.008, 0.008, 0.008), COLOR_LRV.cubo, { p: [x + ur, RADIO_RUEDA + Math.cos(a) * (vr + 0.008), z + Math.sin(a) * (vr + 0.008)], r: [a, 0, 0] });
+  }
+  // Bandera en el costado de fuera, abajo delante en las ruedas delanteras y abajo detrás en las traseras.
+  const aBandera = z < 0 ? -0.95 : 0.95;
+  bandera(l, [x + fuera * (medio + 0.004), RADIO_RUEDA + Math.cos(aBandera) * (radio + 0.03), z + Math.sin(aBandera) * (radio + 0.03)], aBandera, fuera);
+  // Soporte del guardabarros al bastidor.
+  const lado = Math.sign(x);
+  l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR + 0.05, z], [x - lado * 0.06, RADIO_RUEDA + radio + 0.03, z], 0.011, 4, false), COLOR_LRV.gris);
+}
+
+/** Rectángulo (u0..u1, v0..v1) como perfil cerrado para `barridoArco`. */
+function perfilRect(u0: number, u1: number, v0: number, v1: number): [number, number][] {
+  return [
+    [u0, v0],
+    [u1, v0],
+    [u1, v1],
+    [u0, v1],
+  ];
+}
+
+/**
+ * Suspensión de doble horquilla horizontal, con barras de torsión arriba y abajo y un amortiguador entre el
+ * bastidor y la horquilla superior (Wikipedia, NSSDC). Del bastidor al brazo de dirección del cubo.
+ */
 function suspension(l: Lote, x: number, z: number): void {
   const lado = Math.sign(x);
-  const cubo = lado * (Math.abs(x) - ANCHO_RUEDA / 2 - 0.08);
+  const cubo = lado * (Math.abs(x) - ANCHO_RUEDA / 2 - 0.1);
   for (const [y, apertura] of [
-    [Y_BASTIDOR - 0.05, 0.28],
-    [Y_BASTIDOR + 0.08, 0.2],
+    [Y_BASTIDOR - 0.06, 0.28],
+    [Y_BASTIDOR + 0.07, 0.2],
   ] as const) {
     for (const s of [-1, 1]) {
-      l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, y, z + s * apertura], [cubo, RADIO_RUEDA + (y - Y_BASTIDOR) * 0.4, z], 0.017, 5), HIST.aluminio);
+      l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, y, z + s * apertura], [cubo, RADIO_RUEDA + (y - Y_BASTIDOR) * 0.5, z], 0.016, 6, false), COLOR_LRV.gris);
     }
+    l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, y, z - apertura - 0.04], [lado * MEDIO_ANCHO_BASTIDOR, y, z + apertura + 0.04], 0.022, 8), COLOR_LRV.gris);
   }
-  // Barra de torsión a lo largo del bastidor.
-  l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR - 0.05, z - 0.3], [lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR - 0.05, z + 0.3], 0.025, 6), HIST.plateado);
+  const arriba: V3 = [lado * (MEDIO_ANCHO_BASTIDOR - 0.02), Y_BASTIDOR + 0.2, z + 0.12];
+  const abajo: V3 = [(lado * MEDIO_ANCHO_BASTIDOR + cubo) / 2, Y_BASTIDOR + 0.04, z + 0.04];
+  const medio: V3 = [(arriba[0] + abajo[0]) / 2, (arriba[1] + abajo[1]) / 2, (arriba[2] + abajo[2]) / 2];
+  l.pieza(tuboEntre(arriba, medio, 0.022, 8), COLOR_LRV.blanco);
+  l.pieza(tuboEntre(medio, abajo, 0.01, 6, false), COLOR_LRV.gris);
 }
 
 /** Lotes de las tres secciones del chasis: cada una se pliega por separado. */
@@ -296,253 +466,314 @@ function seccionEn(s: Secciones, z: number): Lote {
   return s.centro;
 }
 
+/** Tubo fino abierto (las tapas de un tubo de pocos centímetros no se ven). */
+function varilla(l: Lote, a: V3, b: V3, radio: number, color: number = COLOR_LRV.gris, lados = 8): void {
+  l.pieza(tuboEntre(a, b, radio, lados, false), color);
+}
+
+/** Perfil de sección cuadrada (cuatro caras) entre dos puntos, blanco como el chasis. */
+function perfilCuadrado(l: Lote, a: V3, b: V3, medio: number, tapas = false): void {
+  l.pieza(tuboEntre(a, b, medio * Math.SQRT2, 4, tapas), COLOR_LRV.blanco, { v: 0.04 });
+}
+
 /**
- * Bastidor de tubo de aluminio en tres secciones (delantera, central y trasera) unidas por bisagras: el LRV viajaba
- * plegado en el LM. Travesaños y suelo de paneles con nervios en la sección central.
+ * Bastidor de perfiles blancos de aluminio 2219, en tres secciones unidas por bisagras: el LRV viajaba plegado en el
+ * LM (Wikipedia, NSSDC). Largueros con aligeramientos oscuros, piso de listones longitudinales y celosía lateral.
  */
 function bastidor(s: Secciones): void {
   const l = s.centro;
   const w = MEDIO_ANCHO_BASTIDOR;
+  const yAlto = Y_BASTIDOR + 0.12;
   for (const x of [-w, w]) {
-    // Larguero inferior en tres tramos, uno por sección.
-    s.delantera.pieza(tuboEntre([x, Y_BASTIDOR, Z_FRENTE], [x, Y_BASTIDOR, -Z_BISAGRA], 0.026, 8), HIST.aluminio);
-    l.pieza(tuboEntre([x, Y_BASTIDOR, -Z_BISAGRA], [x, Y_BASTIDOR, Z_BISAGRA], 0.026, 8), HIST.aluminio);
-    s.trasera.pieza(tuboEntre([x, Y_BASTIDOR, Z_BISAGRA], [x, Y_BASTIDOR, Z_COLA], 0.026, 8), HIST.aluminio);
-    l.pieza(tuboEntre([x, Y_BASTIDOR + 0.12, -0.62], [x, Y_BASTIDOR + 0.12, 0.62], 0.02, 8), HIST.aluminio);
-    for (const z of [-0.62, -0.31, 0, 0.31, 0.62]) l.pieza(tuboEntre([x, Y_BASTIDOR, z], [x, Y_BASTIDOR + 0.12, z], 0.014, 6), HIST.aluminio);
-    // Diagonales de la sección central.
+    for (const [sec, z0, z1] of [
+      [s.delantera, Z_FRENTE, -Z_BISAGRA],
+      [l, -Z_BISAGRA, Z_BISAGRA],
+      [s.trasera, Z_BISAGRA, Z_COLA],
+    ] as const) {
+      perfilCuadrado(sec, [x, Y_BASTIDOR, z0], [x, Y_BASTIDOR, z1], 0.025, true);
+      // Aligeramientos oscuros en la cara de fuera del larguero.
+      for (let z = z0 + 0.12; z < z1 - 0.08; z += 0.16) {
+        sec.pieza(new THREE.BoxGeometry(0.004, 0.018, 0.04), COLOR_LRV.negro, { p: [x + Math.sign(x) * 0.026, Y_BASTIDOR, z] });
+      }
+    }
+    perfilCuadrado(l, [x, yAlto, -Z_BISAGRA], [x, yAlto, Z_BISAGRA], 0.014);
+    for (const z of [-0.62, -0.31, 0, 0.31, 0.62]) perfilCuadrado(l, [x, Y_BASTIDOR, z], [x, yAlto, z], 0.01);
     for (const [z0, z1] of [
       [-0.62, -0.31],
+      [-0.31, 0],
       [0, 0.31],
+      [0.31, 0.62],
     ] as const) {
-      l.pieza(tuboEntre([x, Y_BASTIDOR, z0], [x, Y_BASTIDOR + 0.12, z1], 0.01, 5), HIST.aluminio);
+      perfilCuadrado(l, [x, Y_BASTIDOR, z0], [x, yAlto, z1], 0.007);
     }
-    // Bisagras entre las secciones.
-    for (const z of [-0.62, 0.62]) {
-      l.pieza(new THREE.CylinderGeometry(0.035, 0.035, 0.07, 10), HIST.plateado, { p: [x, Y_BASTIDOR, z], r: [0, 0, Math.PI / 2] });
-      l.pieza(cajaBiselada(0.05, 0.06, 0.09, 0.006), HIST.aluminio, { p: [x, Y_BASTIDOR + 0.03, z] });
+    for (const [sec, z0, z1] of [
+      [s.delantera, Z_FRENTE + 0.04, -Z_BISAGRA - 0.04],
+      [s.trasera, Z_BISAGRA + 0.04, Z_COLA - 0.04],
+    ] as const) {
+      perfilCuadrado(sec, [x, Y_BASTIDOR + 0.07, z0], [x, Y_BASTIDOR + 0.07, z1], 0.01);
+      const zm = (z0 + z1) / 2;
+      for (const z of [z0, zm, z1]) perfilCuadrado(sec, [x, Y_BASTIDOR, z], [x, Y_BASTIDOR + 0.07, z], 0.008);
+    }
+    for (const z of [-Z_BISAGRA, Z_BISAGRA]) {
+      l.pieza(new THREE.CylinderGeometry(0.032, 0.032, 0.08, 12), COLOR_LRV.gris, { p: [x, Y_BASTIDOR, z], r: [0, 0, Math.PI / 2] });
+      l.pieza(new THREE.BoxGeometry(0.045, 0.065, 0.09), COLOR_LRV.blanco, { p: [x, Y_BASTIDOR + 0.03, z] });
     }
   }
   for (const z of [Z_FRENTE, -1.05, -Z_BISAGRA, 0, Z_BISAGRA, 1.05, Z_COLA]) {
-    seccionEn(s, z).pieza(tuboEntre([-w, Y_BASTIDOR, z], [w, Y_BASTIDOR, z], 0.02, 8), HIST.aluminio);
+    perfilCuadrado(seccionEn(s, z), [-w, Y_BASTIDOR, z], [w, Y_BASTIDOR, z], 0.016, Math.abs(z) > 1.4);
   }
-  // Suelo de la sección central, de paneles de aluminio con nervios.
-  l.pieza(cajaBiselada(2 * w - 0.04, 0.02, 1.2, 0.005), HIST.aluminio, { p: [0, Y_BASTIDOR + 0.02, 0], v: 0.05 });
-  for (const x of [-0.4, -0.2, 0, 0.2, 0.4]) {
-    l.pieza(new THREE.BoxGeometry(0.02, 0.015, 1.18), HIST.plateado, { p: [x, Y_BASTIDOR + 0.035, 0] });
-  }
-  for (const z of [-0.3, 0.3]) {
-    l.pieza(new THREE.BoxGeometry(2 * w - 0.06, 0.012, 0.02), HIST.plateado, { p: [0, Y_BASTIDOR + 0.033, z] });
+  // Piso de listones longitudinales en las tres secciones, con un travesaño de apoyo.
+  for (const [sec, z0, z1] of [
+    [s.delantera, Z_FRENTE + 0.02, -Z_BISAGRA - 0.02],
+    [l, -Z_BISAGRA + 0.02, Z_BISAGRA - 0.02],
+    [s.trasera, Z_BISAGRA + 0.02, Z_COLA - 0.02],
+  ] as const) {
+    for (let k = 0; k < 10; k++) {
+      const x = -w + 0.06 + ((2 * w - 0.12) * k) / 9;
+      sec.pieza(new THREE.BoxGeometry(0.035, 0.012, z1 - z0), COLOR_LRV.blanco, { p: [x, Y_BASTIDOR + 0.018, (z0 + z1) / 2], v: 0.04 });
+    }
   }
 }
 
 /**
- * Dos asientos plegables de tubo de aluminio con cintas de nailon (NSSDC: "two side-by-side foldable seats made of
- * tubular aluminum with nylon webbing"), cinturón, reposapiés y el reposabrazos central. Cada asiento y cada
- * reposapiés va en su lote (`asiento[i]`, `reposapies[i]`, izquierda primero), porque viajaban plegados.
+ * Dos asientos plegables de tubo de aluminio (NSSDC: "two side-by-side foldable seats made of tubular aluminum with
+ * nylon webbing"): base de lona naranja tensada en el marco y respaldo de cintas naranjas cruzadas, como en la
+ * referencia, con asidero exterior, reposapiés y el reposabrazos central. Cada asiento y cada reposapiés va en su
+ * lote (`asiento[i]`, `reposapies[i]`, izquierda primero), porque viajaban plegados.
  */
 function asientos(centro: Lote, asiento: readonly Lote[], reposapies: readonly Lote[]): void {
+  const y = Y_BASE_ASIENTO;
   [-X_ASIENTO, X_ASIENTO].forEach((x, i) => {
     const l = asiento[i];
-    // Cintas del asiento y del respaldo, tejidas: longitudinales y transversales, con el marco visible entre ellas.
-    for (let k = 0; k < 5; k++) {
-      const u = -0.18 + k * 0.09;
-      l.pieza(new THREE.BoxGeometry(0.06, 0.012, 0.42), HIST.asiento, { p: [x + u, Y_ASIENTO, Z_ASIENTO], v: 0.04 });
+    const exterior = Math.sign(x);
+    // Base: lona naranja algo inclinada hacia atrás, con las patas del marco al bastidor.
+    l.pieza(new THREE.BoxGeometry(0.42, 0.014, 0.4), COLOR_LRV.naranja, { p: [x, y, Z_ASIENTO], r: [0.06, 0, 0], v: 0.05 });
+    for (const sx of [-1, 1]) {
+      const xs = x + sx * 0.22;
+      varilla(l, [xs, y, Z_ASIENTO - 0.21], [xs, y + 0.03, Z_ASIENTO + 0.21], 0.011);
+      for (const sz of [-1, 1]) varilla(l, [xs, Y_BASTIDOR + 0.12, Z_ASIENTO + sz * 0.18], [xs, y + 0.015 * sz, Z_ASIENTO + sz * 0.18], 0.011);
     }
-    for (let k = 0; k < 4; k++) {
-      const v = -0.15 + k * 0.1;
-      l.pieza(new THREE.BoxGeometry(0.44, 0.008, 0.05), HIST.asiento, { p: [x, Y_ASIENTO + 0.009, Z_ASIENTO + v], v: 0.04 });
-    }
-    l.en([x, Y_ASIENTO + 0.26, Z_ASIENTO + 0.25], [-0.25, 0, 0], () => {
-      for (let k = 0; k < 5; k++) {
-        l.pieza(new THREE.BoxGeometry(0.06, 0.46, 0.012), HIST.asiento, { p: [-0.18 + k * 0.09, 0, 0], v: 0.04 });
-      }
-      for (let k = 0; k < 4; k++) {
-        l.pieza(new THREE.BoxGeometry(0.44, 0.05, 0.008), HIST.asiento, { p: [0, -0.15 + k * 0.1, 0.009], v: 0.04 });
-      }
+    // Travesaño delantero curvado en tres tramos.
+    varilla(l, [x - 0.22, y, Z_ASIENTO - 0.21], [x - 0.16, y - 0.02, Z_ASIENTO - 0.24], 0.011);
+    varilla(l, [x - 0.16, y - 0.02, Z_ASIENTO - 0.24], [x + 0.16, y - 0.02, Z_ASIENTO - 0.24], 0.011);
+    varilla(l, [x + 0.16, y - 0.02, Z_ASIENTO - 0.24], [x + 0.22, y, Z_ASIENTO - 0.21], 0.011);
+    // Respaldo: marco de tubo y cintas naranjas cruzadas (tres horizontales y dos verticales).
+    l.en([x, y + 0.22, Z_ASIENTO + 0.25], [-0.22, 0, 0], () => {
+      for (const sx of [-1, 1]) varilla(l, [sx * 0.21, -0.22, 0], [sx * 0.21, 0.22, 0], 0.011);
+      varilla(l, [-0.21, 0.22, 0], [0.21, 0.22, 0], 0.011);
+      for (const v of [-0.12, 0.0, 0.12]) l.pieza(new THREE.BoxGeometry(0.42, 0.055, 0.008), COLOR_LRV.naranja, { p: [0, v, 0], v: 0.06 });
+      for (const u of [-0.08, 0.08]) l.pieza(new THREE.BoxGeometry(0.055, 0.4, 0.008), COLOR_LRV.naranja, { p: [u, 0, 0.006], v: 0.06 });
     });
-    // Marco de tubo.
-    for (const s of [-1, 1]) {
-      const xs = x + s * 0.22;
-      l.pieza(tuboEntre([xs, Y_BASTIDOR + 0.12, Z_ASIENTO - 0.2], [xs, Y_ASIENTO, Z_ASIENTO - 0.2], 0.012, 6), HIST.aluminio);
-      l.pieza(tuboEntre([xs, Y_ASIENTO, Z_ASIENTO - 0.21], [xs, Y_ASIENTO, Z_ASIENTO + 0.21], 0.012, 6), HIST.aluminio);
-      l.pieza(tuboEntre([xs, Y_BASTIDOR + 0.12, Z_ASIENTO + 0.22], [xs, Y_ASIENTO + 0.5, Z_ASIENTO + 0.36], 0.012, 6), HIST.aluminio);
-    }
-    l.pieza(tuboEntre([x - 0.22, Y_ASIENTO, Z_ASIENTO - 0.21], [x + 0.22, Y_ASIENTO, Z_ASIENTO - 0.21], 0.012, 6), HIST.aluminio);
-    l.pieza(tuboEntre([x - 0.22, Y_ASIENTO + 0.5, Z_ASIENTO + 0.36], [x + 0.22, Y_ASIENTO + 0.5, Z_ASIENTO + 0.36], 0.012, 6), HIST.aluminio);
-    // Cinturón: una cinta cruzada sobre el asiento, con su hebilla.
-    l.pieza(new THREE.BoxGeometry(0.05, 0.006, 0.44), HIST.antena, { p: [x, Y_ASIENTO + 0.02, Z_ASIENTO], r: [0, 0.6, 0] });
-    l.pieza(cajaBiselada(0.06, 0.012, 0.04, 0.003), HIST.plateado, { p: [x, Y_ASIENTO + 0.026, Z_ASIENTO], r: [0, 0.6, 0] });
+    // Asidero exterior: arco de tubo junto al asiento, para subir y bajar.
+    const xa = x + exterior * 0.27;
+    const asidero: V3[] = [
+      [xa, Y_BASTIDOR + 0.12, Z_ASIENTO - 0.22],
+      [xa + exterior * 0.03, y + 0.14, Z_ASIENTO - 0.16],
+      [xa + exterior * 0.03, y + 0.16, Z_ASIENTO + 0.12],
+      [xa, Y_BASTIDOR + 0.12, Z_ASIENTO + 0.2],
+    ];
+    for (let k = 0; k < asidero.length - 1; k++) varilla(l, asidero[k], asidero[k + 1], 0.012);
+    // Cinturón con su hebilla.
+    l.pieza(new THREE.BoxGeometry(0.04, 0.006, 0.42), COLOR_LRV.naranjaBorde, { p: [x, y + 0.014, Z_ASIENTO], r: [0, 0.6, 0] });
+    l.pieza(new THREE.BoxGeometry(0.05, 0.012, 0.035), COLOR_LRV.gris, { p: [x, y + 0.02, Z_ASIENTO], r: [0, 0.6, 0] });
     // Reposapiés delante del asiento, en la parte delantera de la sección central.
     const pie = reposapies[i];
-    pie.pieza(cajaBiselada(0.34, 0.015, 0.16, 0.005), HIST.aluminio, { p: [x, Y_BASTIDOR + 0.1, -0.5], r: [0.45, 0, 0] });
-    for (const s of [-1, 1]) {
-      pie.pieza(tuboEntre([x + s * 0.16, Y_BASTIDOR + 0.03, -0.44], [x + s * 0.16, Y_BASTIDOR + 0.1, -0.5], 0.008, 5), HIST.aluminio);
-    }
+    pie.pieza(cajaBiselada(0.34, 0.012, 0.16, 0.004), COLOR_LRV.blanco, { p: [x, Y_BASTIDOR + 0.1, -0.5], r: [0.45, 0, 0] });
+    for (const sx of [-1, 1]) varilla(pie, [x + sx * 0.16, Y_BASTIDOR + 0.03, -0.44], [x + sx * 0.16, Y_BASTIDOR + 0.1, -0.5], 0.007, COLOR_LRV.gris, 6);
   });
-  // Reposabrazos central.
-  centro.pieza(cajaBiselada(0.08, 0.05, 0.4, 0.01), HIST.asiento, { p: [0, Y_ASIENTO + 0.15, Z_ASIENTO + 0.05] });
-  centro.pieza(tuboEntre([0, Y_BASTIDOR + 0.12, Z_ASIENTO + 0.05], [0, Y_ASIENTO + 0.13, Z_ASIENTO + 0.05], 0.014, 6), HIST.aluminio);
+  // Reposabrazos central naranja sobre su caja blanca, con el mando en T delante.
+  centro.pieza(cajaBiselada(0.11, 0.14, 0.42, 0.02), COLOR_LRV.blanco, { p: [0, Y_ASIENTO + 0.03, Z_ASIENTO + 0.05], v: 0.04 });
+  centro.pieza(cajaBiselada(0.1, 0.035, 0.36, 0.012), COLOR_LRV.naranja, { p: [0, Y_ASIENTO + 0.12, Z_ASIENTO + 0.08] });
+  varilla(centro, [0, Y_BASTIDOR + 0.12, Z_ASIENTO + 0.05], [0, Y_ASIENTO - 0.04, Z_ASIENTO + 0.05], 0.014);
 }
 
 /**
  * Mando en T entre los asientos (a la derecha del comandante), en `l`, y consola de control y presentación, en
- * `consola` (gira sobre su base al desplegar el LRV).
+ * `consola` (gira sobre su base al desplegar el LRV): carcasa blanca inclinada, panel beige de instrumentos con la
+ * esfera de rumbo, medidores e interruptores, y dos empuñaduras negras a los lados, como en la referencia.
  */
 function mandos(l: Lote, consola: Lote): void {
-  // Mando en T: base con fuelle, palanca vertical y empuñadura transversal, delante del reposabrazos.
   const base: V3 = [0, Y_ASIENTO + 0.1, Z_ASIENTO - 0.2];
   const cima: V3 = [0, Y_ASIENTO + 0.32, Z_ASIENTO - 0.24];
-  l.pieza(cajaBiselada(0.1, 0.06, 0.12, 0.01), HIST.consola, { p: base });
-  l.pieza(new THREE.CylinderGeometry(0.022, 0.035, 0.06, 10), HIST.negro, { p: [0, base[1] + 0.06, base[2] - 0.005] });
-  l.pieza(tuboEntre(base, cima, 0.014, 8), HIST.negro);
-  l.pieza(tuboEntre([-0.075, cima[1], cima[2]], [0.075, cima[1], cima[2]], 0.016, 8), HIST.negro);
-  for (const s of [-1, 1]) {
-    l.pieza(new THREE.CylinderGeometry(0.02, 0.02, 0.035, 8), HIST.consola, { p: [s * 0.06, cima[1], cima[2]], r: [0, 0, Math.PI / 2] });
-  }
-  // Consola sobre un poste, inclinada hacia el conductor.
+  l.pieza(cajaBiselada(0.11, 0.07, 0.13, 0.015), COLOR_LRV.blanco, { p: base });
+  l.pieza(new THREE.CylinderGeometry(0.03, 0.045, 0.06, 12), COLOR_LRV.gris, { p: [0, base[1] + 0.06, base[2] - 0.005] });
+  l.pieza(tuboEntre(base, cima, 0.016, 8, false), COLOR_LRV.blanco);
+  l.pieza(tuboEntre([-0.075, cima[1], cima[2]], [0.075, cima[1], cima[2]], 0.018, 8), COLOR_LRV.blanco);
+  l.pieza(new THREE.BoxGeometry(0.02, 0.015, 0.02), COLOR_LRV.negro, { p: [0, cima[1] + 0.02, cima[2]] });
   l = consola;
-  l.pieza(tuboEntre(BASE_CONSOLA, [0, 0.98, -0.62], 0.022, 8), HIST.aluminio);
+  varilla(l, BASE_CONSOLA, [0, 0.98, -0.62], 0.024, COLOR_LRV.gris, 10);
+  for (const s of [-1, 1]) varilla(l, [s * 0.12, Y_BASTIDOR + 0.02, -0.5], [s * 0.05, 0.9, -0.6], 0.01, COLOR_LRV.gris, 6);
   l.en([0, 1.05, -0.63], [-0.3, 0, 0], () => {
-    l.pieza(cajaBiselada(0.4, 0.3, 0.06, 0.012), HIST.consola);
-    l.pieza(cajaBiselada(0.42, 0.32, 0.02, 0.006), HIST.aluminio, { p: [0, 0, -0.035] });
-    // Indicadores: esferas y medidores claros sobre el panel, con su bisel.
-    for (const [x, y] of [
-      [-0.11, 0.06],
-      [0.0, 0.07],
-      [0.11, 0.06],
-      [-0.1, -0.07],
-      [0.1, -0.07],
-    ] as const) {
-      l.pieza(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 12), HIST.antena, { p: [x, y, 0.035], r: [Math.PI / 2, 0, 0] });
-      l.pieza(new THREE.TorusGeometry(0.032, 0.005, 4, 12), HIST.plateado, { p: [x, y, 0.04] });
+    // Carcasa blanca facetada, más ancha atrás.
+    l.pieza(cajaBiselada(0.44, 0.36, 0.12, 0.03), COLOR_LRV.blanco, { p: [0, 0, -0.04], v: 0.04 });
+    // Panel beige con los instrumentos, hacia el conductor.
+    l.pieza(new THREE.BoxGeometry(0.38, 0.3, 0.012), COLOR_LRV.panel, { p: [0, 0, 0.026] });
+    l.pieza(new THREE.CylinderGeometry(0.06, 0.06, 0.01, 16), COLOR_LRV.banderaBlanco, { p: [-0.09, 0.07, 0.034], r: [Math.PI / 2, 0, 0] });
+    l.pieza(new THREE.TorusGeometry(0.062, 0.008, 4, 16), COLOR_LRV.negro, { p: [-0.09, 0.07, 0.038] });
+    l.pieza(new THREE.BoxGeometry(0.004, 0.05, 0.004), COLOR_LRV.negro, { p: [-0.09, 0.08, 0.04], r: [0, 0, 0.5] });
+    l.pieza(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 12), COLOR_LRV.negro, { p: [0.08, 0.1, 0.034], r: [Math.PI / 2, 0, 0] });
+    for (const x of [0.03, 0.13]) l.pieza(new THREE.BoxGeometry(0.035, 0.08, 0.01), COLOR_LRV.negro, { p: [x, -0.01, 0.034] });
+    for (let fila = 0; fila < 2; fila++) {
+      for (let k = 0; k < 8; k++) {
+        l.pieza(new THREE.BoxGeometry(0.01, 0.01, 0.022), COLOR_LRV.negro, { p: [-0.14 + k * 0.04, -0.09 - fila * 0.04, 0.04], r: [0.4, 0, 0] });
+      }
     }
-    // Fila de interruptores y disyuntores en la parte baja del panel.
-    for (let k = 0; k < 7; k++) {
-      l.pieza(new THREE.BoxGeometry(0.012, 0.012, 0.025), HIST.plateado, { p: [-0.12 + k * 0.04, -0.125, 0.04], r: [0.4, 0, 0] });
+    // Empuñaduras negras a los lados del panel.
+    for (const s of [-1, 1]) {
+      varilla(l, [s * 0.24, -0.12, 0.02], [s * 0.24, 0.05, 0.02], 0.012, COLOR_LRV.gris, 8);
+      l.pieza(new THREE.CylinderGeometry(0.022, 0.022, 0.12, 10), COLOR_LRV.negro, { p: [s * 0.24, 0.12, 0.02] });
     }
-    // Dispositivo de sombra solar para la navegación, encima del panel.
-    l.pieza(new THREE.BoxGeometry(0.08, 0.04, 0.05), HIST.aluminio, { p: [0, 0.17, 0] });
-    l.pieza(new THREE.BoxGeometry(0.004, 0.05, 0.004), HIST.negro, { p: [0, 0.205, 0] });
+    // Dispositivo de sombra solar encima del panel.
+    l.pieza(new THREE.BoxGeometry(0.08, 0.04, 0.05), COLOR_LRV.blanco, { p: [0, 0.2, -0.02] });
+    l.pieza(new THREE.BoxGeometry(0.004, 0.05, 0.004), COLOR_LRV.negro, { p: [0, 0.235, -0.02] });
   });
 }
 
 /** Cable entre dos puntos, con una comba hacia abajo de `comba` metros. */
-function cable(l: Lote, a: V3, b: V3, comba: number, color: number = HIST.negro): void {
+function cable(l: Lote, a: V3, b: V3, comba: number, color: number = COLOR_LRV.gris): void {
   const tramos = 6;
   let previo = a;
   for (let i = 1; i <= tramos; i++) {
     const t = i / tramos;
     const actual: V3 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - comba * 4 * t * (1 - t), a[2] + (b[2] - a[2]) * t];
-    l.pieza(tuboEntre(previo, actual, 0.006, 4), color);
+    l.pieza(tuboEntre(previo, actual, 0.007, 5, false), color);
     previo = actual;
   }
 }
 
+/** Caja forrada de manta blanca con dos cinchas negras alrededor, como las baterías y la electrónica. */
+function cajaCinchada(l: Lote, p: V3, ancho: number, alto: number, fondo: number): void {
+  l.pieza(cajaBiselada(ancho, alto, fondo, 0.02), COLOR_LRV.blanco, { p, v: 0.06 });
+  for (const f of [-0.28, 0.28]) {
+    l.pieza(new THREE.BoxGeometry(0.035, alto + 0.008, fondo + 0.008), COLOR_LRV.negro, { p: [p[0] + f * ancho, p[1], p[2]] });
+  }
+}
+
+/** Caja forrada de lámina dorada arrugada (LCRU, cámara): caja base y una capa de facetas abultadas encima, opaca (con
+ * acabado metálico destellaba por encima del umbral del bloom). */
+function cajaDorada(l: Lote, p: V3, ancho: number, alto: number, fondo: number, semilla: number): void {
+  l.pieza(cajaBiselada(ancho, alto, fondo, 0.012), COLOR_LRV.oro, { p });
+  const forro = new THREE.BoxGeometry(ancho + 0.01, alto + 0.01, fondo + 0.01, 3, 2, 3);
+  const rnd = azar(semilla);
+  const pos = forro.getAttribute('position');
+  const hechos = new Map<string, [number, number, number]>();
+  for (let i = 0; i < pos.count; i++) {
+    const k = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+    let d = hechos.get(k);
+    if (!d) {
+      d = [(rnd() - 0.5) * 0.02, (rnd() - 0.5) * 0.02, (rnd() - 0.5) * 0.02];
+      hechos.set(k, d);
+    }
+    pos.setXYZ(i, pos.getX(i) + d[0], pos.getY(i) + d[1], pos.getZ(i) + d[2]);
+  }
+  l.pieza(forro, COLOR_LRV.oro, { p, v: 0.35 });
+}
+
+/** Diámetro del plato de la antena de alta ganancia (m). // VERIFICAR: ~0.9 m (3 ft) según fotos; sin cifra oficial. */
+const RADIO_ANTENA_ALTA = 0.46;
+/** Varillas del paraguas de la antena de alta ganancia. */
+const NERVADURAS_ANTENA = 16;
+
 /**
  * Sección delantera: baterías y electrónica (en `l`, viajaban en el LRV plegado), y LCRU, cámara de TV y antenas
- * (en `carga.delantera`). Sección trasera: portaherramientas (geopallet, en `carga.trasera`). La carga se montó
- * después del despliegue (ALSJ, "Loading the Rover"). Las mantas térmicas (MLI) van forradas de beta cloth blanco
- * (HIST.mantaLRV).
+ * (en `carga.delantera`). Sección trasera: portaherramientas con sus cajas y las pinzas (en `carga.trasera`). La
+ * carga se montó después del despliegue (ALSJ, "Loading the Rover").
  */
 function equipos(l: Lote, carga: { delantera: Lote; trasera: Lote }, haciaTierraLocal: THREE.Vector3): void {
   const y = Y_BASTIDOR + 0.02;
-  // Dos baterías de plata-zinc con su manta térmica, bajo sus cubiertas antipolvo. // VERIFICAR: color de las cubiertas.
-  for (const x of [-0.28, 0.28]) {
-    l.pieza(cajaBiselada(0.44, 0.17, 0.42, 0.015), HIST.mantaLRV, { p: [x, y + 0.09, -0.92], v: 0.06 });
-    for (const dz of [-0.12, 0, 0.12]) {
-      l.pieza(new THREE.BoxGeometry(0.446, 0.004, 0.006), HIST.antena, { p: [x, y + 0.13, -0.92 + dz] });
-    }
-    l.pieza(cajaBiselada(0.46, 0.02, 0.44, 0.006), HIST.cubierta, { p: [x, y + 0.19, -0.92] });
-    l.pieza(new THREE.CylinderGeometry(0.008, 0.008, 0.44, 6), HIST.plateado, { p: [x, y + 0.19, -0.7], r: [0, 0, Math.PI / 2] });
-  }
-  // Electrónica de mando (DCE) y unidad de procesado de señales (SPU), con su manta térmica.
-  l.pieza(cajaBiselada(0.9, 0.12, 0.3, 0.015), HIST.mantaLRV, { p: [0, y + 0.07, -1.3], v: 0.05 });
-  l.pieza(cajaBiselada(0.3, 0.02, 0.2, 0.004), HIST.plateado, { p: [-0.25, y + 0.14, -1.3] });
+  // Dos baterías de plata-zinc de 36 V con su manta blanca y cinchas negras, y la electrónica de mando delante.
+  for (const x of [-0.28, 0.28]) cajaCinchada(l, [x, y + 0.1, -0.92], 0.44, 0.18, 0.42);
+  cajaCinchada(l, [0, y + 0.08, -1.3], 0.9, 0.13, 0.3);
+  cable(l, [0.02, 0.95, -0.6], [0.1, y + 0.15, -1.15], 0.08);
+  cable(l, [-0.28, y + 0.2, -0.72], [-0.18, y + 0.14, -1.16], 0.03);
+  cable(l, [0.28, y + 0.2, -0.72], [0.2, y + 0.14, -1.16], 0.03);
   // Lo que sigue se montó en la Luna, después del despliegue.
   l = carga.delantera;
-  // Unidad de comunicaciones (LCRU) delante, con manta térmica y espejos de radiador arriba.
-  l.pieza(cajaBiselada(0.48, 0.3, 0.28, 0.02), HIST.mantaLRV, { p: [0, y + 0.3, -1.38], v: 0.05 });
-  l.pieza(cajaBiselada(0.4, 0.012, 0.22, 0.004), HIST.plateado, { p: [0, y + 0.456, -1.38] });
-  for (const dx of [-0.1, 0, 0.1]) {
-    l.pieza(new THREE.BoxGeometry(0.004, 0.003, 0.22), HIST.antena, { p: [dx, y + 0.463, -1.38] });
-  }
-  // Cámara de televisión en color (GCTA) sobre su unidad de control (TCU) y su mástil, mirando hacia delante.
-  l.pieza(tuboEntre([0, y + 0.45, -1.4], [0, 1.1, -1.44], 0.016, 8), HIST.aluminio);
-  l.pieza(cajaBiselada(0.12, 0.07, 0.12, 0.01), HIST.mantaLRV, { p: [0, 1.14, -1.45] });
-  l.pieza(cajaBiselada(0.14, 0.14, 0.3, 0.015), HIST.antena, { p: [0, 1.26, -1.46] });
-  l.pieza(new THREE.CylinderGeometry(0.035, 0.05, 0.09, 12), HIST.lente, { p: [0, 1.26, -1.65], r: [Math.PI / 2, 0, 0] });
-  // Parasol de la lente.
-  l.pieza(new THREE.CylinderGeometry(0.06, 0.052, 0.05, 12, 1, true), HIST.negro, { p: [0, 1.26, -1.71], r: [Math.PI / 2, 0, 0] });
-  // Antena de alta ganancia (paraguas de malla con varillas) en su mástil, apuntando a la Tierra con el LRV estacionado.
-  const cimaMastil: V3 = [-0.3, 1.62, -1.3];
-  l.pieza(tuboEntre([-0.3, y + 0.3, -1.3], cimaMastil, 0.016, 8), HIST.aluminio);
+  // Unidad de comunicaciones (LCRU) forrada de lámina dorada, con su asa y su panel de mando.
+  cajaDorada(l, [0, y + 0.3, -1.38], 0.56, 0.24, 0.36, 41);
+  l.pieza(tuboEntre([-0.2, y + 0.45, -1.56], [0.2, y + 0.45, -1.56], 0.01, 6), COLOR_LRV.gris);
+  l.pieza(new THREE.BoxGeometry(0.3, 0.12, 0.012), COLOR_LRV.negro, { p: [0.08, y + 0.3, -1.565] });
+  // Cámara de televisión en color (GCTA) forrada de lámina dorada, sobre su pedestal dorado y la unidad de control
+  // blanca, mirando hacia delante.
+  cajaDorada(l, [0.1, y + 0.62, -1.42], 0.12, 0.26, 0.12, 43);
+  l.pieza(cajaBiselada(0.14, 0.1, 0.12, 0.012), COLOR_LRV.blanco, { p: [0.1, y + 0.5, -1.42] });
+  cajaDorada(l, [0.1, y + 0.82, -1.46], 0.14, 0.13, 0.3, 47);
+  l.pieza(new THREE.CylinderGeometry(0.035, 0.04, 0.07, 12), COLOR_LRV.negro, { p: [0.1, y + 0.82, -1.64], r: [Math.PI / 2, 0, 0] });
+  l.pieza(new THREE.CylinderGeometry(0.028, 0.028, 0.004, 12), COLOR_LRV.lente, { p: [0.1, y + 0.82, -1.676], r: [Math.PI / 2, 0, 0] });
+  cable(l, [0.16, y + 0.5, -1.36], [0.2, y + 0.38, -1.25], 0.03);
+  cable(l, [0.04, y + 0.5, -1.36], [-0.1, y + 0.42, -1.25], 0.03);
+  // Antena de alta ganancia: paraguas de malla gris con varillas, cubo dentado y la varilla de apuntado que lo
+  // atraviesa, en un mástil plateado; apunta a la Tierra con el LRV estacionado. El centro del paraguas queda ~50 cm
+  // por encima de la cámara (ALSJ, "TV reflections", Apollo 17).
+  const cimaMastil: V3 = [-0.3, 1.7, -1.3];
+  varilla(l, [-0.3, y + 0.3, -1.3], cimaMastil, 0.014, COLOR_LRV.gris, 10);
   const giro = new THREE.Euler().setFromQuaternion(
     new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), haciaTierraLocal.clone().normalize()),
   );
   l.en(cimaMastil, [giro.x, giro.y, giro.z], () => {
-    // Cono cerrado con el vértice hacia el mástil: la tapa hace de cara cóncava del plato.
-    l.pieza(new THREE.ConeGeometry(0.46, 0.17, 24), HIST.antena, { p: [0, 0.09, 0], r: [Math.PI, 0, 0], v: 0.05 });
-    // Varillas del paraguas, del vértice al borde.
+    const fondo = 0.12;
+    const radios = [0.04, 0.18, 0.32, RADIO_ANTENA_ALTA];
+    const perfil = radios.map((r) => new THREE.Vector2(r, fondo * (r / RADIO_ANTENA_ALTA) ** 2));
+    // Malla en gajos entre las varillas: un polígono de NERVADURAS_ANTENA lados (facetado, como el real).
+    l.pieza(new THREE.LatheGeometry(perfil, NERVADURAS_ANTENA), COLOR_LRV.grisMalla, { m: 'rejilla' });
+    for (let k = 0; k < NERVADURAS_ANTENA; k++) {
+      const a = (k / NERVADURAS_ANTENA) * Math.PI * 2;
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      for (let j = 0; j < perfil.length - 1; j++) {
+        const p0 = perfil[j];
+        const p1 = perfil[j + 1];
+        varilla(l, [c * p0.x, p0.y + 0.003, sn * p0.x], [c * p1.x, p1.y + 0.003, sn * p1.x], 0.005, COLOR_LRV.gris, 4);
+      }
+    }
+    // Cubo dentado en el centro y la varilla de apuntado con su alimentador.
+    l.pieza(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), COLOR_LRV.negro, { p: [0, 0.01, 0] });
     for (let k = 0; k < 12; k++) {
       const a = (k / 12) * Math.PI * 2;
-      l.pieza(tuboEntre([0, 0.005, 0], [Math.cos(a) * 0.465, 0.18, Math.sin(a) * 0.465], 0.006, 4), HIST.plateado);
+      l.pieza(new THREE.BoxGeometry(0.03, 0.035, 0.03), COLOR_LRV.negro, { p: [Math.cos(a) * 0.08, 0.01, Math.sin(a) * 0.08], r: [0, -a, 0] });
     }
-    l.pieza(new THREE.CylinderGeometry(0.01, 0.01, 0.3, 6), HIST.lente, { p: [0, 0.2, 0] });
+    varilla(l, [0, -0.35, 0], [0, 0.36, 0], 0.012, COLOR_LRV.gris, 8);
+    l.pieza(new THREE.CylinderGeometry(0.04, 0.03, 0.05, 10), COLOR_LRV.gris, { p: [0, 0.36, 0] });
+    l.pieza(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8), COLOR_LRV.negro, { p: [0, -0.38, 0] });
   });
-  // Antena de baja ganancia, helicoidal, en el lado derecho: varilla con la hélice enrollada.
-  const baseBaja: V3 = [0.3, y + 0.35, -1.32];
-  const cimaBaja: V3 = [0.3, 1.55, -1.36];
-  l.pieza(tuboEntre(baseBaja, cimaBaja, 0.014, 6), HIST.antena);
-  const vueltas = 10;
-  const pasosHelice = vueltas * 8;
-  let previo: V3 | null = null;
-  for (let k = 0; k <= pasosHelice; k++) {
-    const t = k / pasosHelice;
-    const a = t * vueltas * Math.PI * 2;
-    const yh = 1.1 + t * 0.42;
-    const zh = baseBaja[2] + (cimaBaja[2] - baseBaja[2]) * ((yh - baseBaja[1]) / (cimaBaja[1] - baseBaja[1]));
-    const actual: V3 = [0.3 + Math.cos(a) * 0.03, yh, zh + Math.sin(a) * 0.03];
-    if (previo) l.pieza(tuboEntre(previo, actual, 0.004, 3), HIST.antena);
-    previo = actual;
-  }
-  // Cables de la LCRU a las antenas y a la cámara, y de la consola a la electrónica delantera.
+  // Antena de baja ganancia: tubo blanco con su corona perforada en un mástil curvo, con la empuñadura negra.
+  const p0: V3 = [0.3, y + 0.35, -1.32];
+  const p1: V3 = [0.32, 1.25, -1.34];
+  const p2: V3 = [0.42, 1.45, -1.3];
+  varilla(l, p0, p1, 0.012, COLOR_LRV.gris, 8);
+  varilla(l, p1, p2, 0.012, COLOR_LRV.gris, 8);
+  l.en(p2, [0.3, 0, -0.7], () => {
+    l.pieza(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 12), COLOR_LRV.blanco, { p: [0, 0.1, 0] });
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2;
+      l.pieza(new THREE.BoxGeometry(0.03, 0.06, 0.012), COLOR_LRV.blanco, { p: [Math.cos(a) * 0.085, 0.02, Math.sin(a) * 0.085], r: [0, -a + Math.PI / 2, 0] });
+    }
+    l.pieza(new THREE.TorusGeometry(0.085, 0.006, 3, 14), COLOR_LRV.blanco, { p: [0, 0.055, 0], r: [Math.PI / 2, 0, 0] });
+    l.pieza(new THREE.TorusGeometry(0.085, 0.006, 3, 14), COLOR_LRV.blanco, { p: [0, -0.015, 0], r: [Math.PI / 2, 0, 0] });
+    varilla(l, [0, -0.02, 0], [0.18, -0.2, 0], 0.008, COLOR_LRV.gris, 6);
+    l.pieza(new THREE.CylinderGeometry(0.015, 0.015, 0.12, 8), COLOR_LRV.negro, { p: [0.22, -0.25, 0], r: [0, 0, 0.75] });
+  });
   cable(l, [-0.15, y + 0.42, -1.25], [-0.3, y + 0.62, -1.3], 0.04);
-  cable(l, [0.15, y + 0.42, -1.25], [0.3, y + 0.62, -1.32], 0.04);
-  cable(l, [0.05, y + 0.45, -1.3], [0.03, 1.12, -1.4], 0.03);
-  cable(l, [0.02, 0.95, -0.6], [0.1, y + 0.14, -1.15], 0.08);
-  // Portaherramientas trasero (geopallet): bandeja con bolsas de muestras y herramientas (pinzas, pala y rastrillo).
+  cable(l, [0.15, y + 0.42, -1.25], [0.31, y + 0.62, -1.32], 0.04);
+  // Portaherramientas trasero: bastidor blanco perforado con las cajas de muestras y las pinzas de pie.
   l = carga.trasera;
-  l.pieza(cajaBiselada(0.95, 0.28, 0.5, 0.02), HIST.aluminio, { p: [0, y + 0.18, 1.18] });
-  for (const dx of [-0.3, 0, 0.3]) {
-    l.pieza(new THREE.BoxGeometry(0.012, 0.26, 0.505), HIST.plateado, { p: [dx, y + 0.18, 1.18] });
-  }
-  // Bolsas de muestras en su dispensador.
-  l.pieza(cajaBiselada(0.4, 0.22, 0.25, 0.02), HIST.asiento, { p: [-0.22, y + 0.42, 1.12] });
+  const zp = 1.2;
+  l.pieza(cajaBiselada(1.0, 0.5, 0.56, 0.02), COLOR_LRV.blanco, { p: [0, y + 0.3, zp], v: 0.04 });
   for (let k = 0; k < 4; k++) {
-    l.pieza(cajaBiselada(0.08, 0.1, 0.03, 0.006), HIST.antena, { p: [-0.37 + k * 0.1, y + 0.58, 1.06], r: [-0.15, 0, 0] });
+    l.pieza(new THREE.CylinderGeometry(0.05, 0.05, 0.012, 12), COLOR_LRV.negro, { p: [-0.33 + k * 0.22, y + 0.556, zp + 0.12], v: 0.02 });
+    l.pieza(new THREE.CylinderGeometry(0.04, 0.04, 0.012, 10), COLOR_LRV.negro, { p: [-0.33 + k * 0.22, y + 0.3, zp - 0.282], r: [Math.PI / 2, 0, 0] });
   }
-  // Mangos de las herramientas con su pieza: pinzas, pala y rastrillo.
-  const herramientas: [number, number][] = [
-    [0.1, 0.15],
-    [0.25, 0.25],
-    [0.38, 0.1],
-  ];
-  for (const [x, inclinacion] of herramientas) {
-    l.pieza(tuboEntre([x, y + 0.2, 1.35], [x, y + 0.95, 1.35 + inclinacion], 0.012, 6), HIST.aluminio);
-    l.pieza(new THREE.CylinderGeometry(0.018, 0.018, 0.05, 8), HIST.negro, { p: [x, y + 0.36, 1.35 + inclinacion * 0.2] });
+  for (const x of [-0.25, 0.25]) l.pieza(cajaBiselada(0.4, 0.22, 0.42, 0.03), COLOR_LRV.blanco, { p: [x, y + 0.66, zp + 0.02], v: 0.08 });
+  for (const x of [-0.5, 0.5]) varilla(l, [x, y + 0.05, zp - 0.28], [x, y + 0.8, zp - 0.28], 0.014, COLOR_LRV.blanco, 6);
+  varilla(l, [-0.5, y + 0.8, zp - 0.28], [0.5, y + 0.8, zp - 0.28], 0.014, COLOR_LRV.blanco, 6);
+  // Pinzas (dos), de pie a la izquierda del portaherramientas, con su soporte.
+  for (const dz of [-0.06, 0.06]) {
+    const xt = -0.42;
+    varilla(l, [xt, y + 0.35, zp + dz + 0.2], [xt, y + 1.2, zp + dz + 0.2], 0.012, COLOR_LRV.gris, 8);
+    for (const s of [-1, 1]) varilla(l, [xt + s * 0.012, y + 1.2, zp + dz + 0.2], [xt + s * 0.03, y + 1.32, zp + dz + 0.2], 0.008, COLOR_LRV.gris, 6);
+    l.pieza(new THREE.CylinderGeometry(0.02, 0.02, 0.08, 8), COLOR_LRV.negro, { p: [xt, y + 0.9, zp + dz + 0.2] });
   }
-  // Pinzas: dos brazos cerrados abajo.
-  for (const s of [-1, 1]) {
-    l.pieza(tuboEntre([0.1 + s * 0.008, y + 0.2, 1.35], [0.1 + s * 0.02, y + 0.12, 1.34], 0.006, 4), HIST.plateado);
-  }
-  // Pala: hoja plana.
-  l.pieza(cajaBiselada(0.08, 0.1, 0.012, 0.003), HIST.plateado, { p: [0.25, y + 0.15, 1.35] });
-  // Rastrillo: travesaño con púas.
-  l.pieza(new THREE.BoxGeometry(0.12, 0.012, 0.012), HIST.plateado, { p: [0.38, y + 0.18, 1.35] });
-  for (let k = 0; k < 6; k++) {
-    l.pieza(new THREE.BoxGeometry(0.005, 0.05, 0.005), HIST.plateado, { p: [0.33 + k * 0.02, y + 0.15, 1.35] });
-  }
+  l.pieza(new THREE.BoxGeometry(0.08, 0.1, 0.22), COLOR_LRV.blanco, { p: [-0.42, y + 0.6, zp + 0.2] });
 }
 
 /** Color del polvo lunar que se pega a la parte baja del LRV: el gris del regolito. */
@@ -550,8 +781,11 @@ const COLOR_POLVO = new THREE.Color(SUELO_LUNA.gris);
 /** Altura (m) hasta la que llega el polvo en el bastidor y los guardabarros, y cuánto tiñe (0–1) en lo más bajo. */
 const ALTURA_POLVO_M = 0.75;
 const POLVO_MAX = 0.55;
-/** Polvo en la malla de las ruedas: uniforme, porque la rueda gira y todo su contorno toca el suelo. */
-const POLVO_RUEDA = 0.3;
+/**
+ * Polvo en la malla de las ruedas: uniforme, porque la rueda gira y todo su contorno toca el suelo. Poco, para que la
+ * malla se vea gris oscura con los chevrones claros, como en la referencia.
+ */
+const POLVO_RUEDA = 0.08;
 
 const _v = new THREE.Vector3();
 
@@ -680,11 +914,11 @@ function construirEmpolvado(l: Lote): THREE.Group {
  * el mismo que se conduce.
  */
 export function crearLRVLuna(haciaTierraLocal: THREE.Vector3): THREE.Group {
-  const secciones: Secciones = { delantera: new Lote(false), centro: new Lote(false), trasera: new Lote(false) };
-  const carga = { delantera: new Lote(false), trasera: new Lote(false) };
-  const consola = new Lote(false);
-  const asiento = [new Lote(false), new Lote(false)];
-  const reposapies = [new Lote(false), new Lote(false)];
+  const secciones: Secciones = { delantera: nuevoLote(), centro: nuevoLote(), trasera: nuevoLote() };
+  const carga = { delantera: nuevoLote(), trasera: nuevoLote() };
+  const consola = nuevoLote();
+  const asiento = [nuevoLote(), nuevoLote()];
+  const reposapies = [nuevoLote(), nuevoLote()];
   bastidor(secciones);
   asientos(secciones.centro, asiento, reposapies);
   mandos(secciones.centro, consola);
@@ -734,9 +968,9 @@ export function crearLRVLuna(haciaTierraLocal: THREE.Vector3): THREE.Group {
     const esDelantera = z < 0;
     const nombre = `pliegue_rueda_${esDelantera ? 'delantera' : 'trasera'}_${lado < 0 ? 'izquierda' : 'derecha'}`;
     const pliegue = pivoteEn([lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR, z], nombre);
-    const brazo = new Lote(false);
-    const extDelante = new Lote(false);
-    const extDetras = new Lote(false);
+    const brazo = nuevoLote();
+    const extDelante = nuevoLote();
+    const extDetras = nuevoLote();
     guardabarros(brazo, extDelante, extDetras, x, z);
     suspension(brazo, x, z);
     pliegue.contenido.add(construirEmpolvado(brazo));
