@@ -118,9 +118,10 @@ export const MACIZOS: readonly Macizo[] = [
   { nombre: 'Escarpe Lee-Lincoln', azimutDesde: 238, azimutHasta: 330, distanciaPie: 4200, distanciaCima: 4700, altura: 80, semilla: 67 },
 ];
 
-/** Radio en el que el jugador puede caminar alrededor del LM (m). Decisión de juego. */
-export const RADIO_A_PIE_M = 70;
-/** Radio en el que puede conducir el LRV (m): el detalle del suelo se concentra cerca del LM. Decisión de juego. */
+/**
+ * Radio alrededor del LM (m) en el que se puede conducir el LRV y caminar a pie: el mismo límite para los dos.
+ * El detalle del suelo se concentra cerca del LM. Decisión de juego.
+ */
 export const RADIO_LRV_M = 260;
 
 /** Obstáculos circulares para el jugador a pie (m): el LM (etapa de descenso) y el LRV cuando no va sentado. */

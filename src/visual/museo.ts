@@ -11,7 +11,7 @@ import { alturaLuna } from './lunaTerreno';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
 import { ARQ } from './paleta';
 import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
-import { LLEGADA, LM, RADIO_A_PIE_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M } from './sitioApollo17';
+import { LLEGADA, LM, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M } from './sitioApollo17';
 
 // Toda la parte visual del museo (Three.js). La lógica de juego solo llama a `visual.museo`.
 // Convención de ejes: X a la derecha, Y arriba (metros), −Z hacia donde mira la cámara al inicio.
@@ -28,7 +28,7 @@ const INICIO = { x: 0, z: 11 };
  * centro del LRV (m): justo fuera de RADIO_OBSTACULO_LRV_M, para no rebotar contra él al dar el primer paso.
  */
 const DISTANCIA_BAJADA_LRV_M = RADIO_OBSTACULO_LRV_M + 0.3;
-/** Límite de movimiento en Marte (m, por eje). En el museo manda RADIO_CAMINABLE y en la Luna, RADIO_A_PIE_M. */
+/** Límite de movimiento en Marte (m, por eje). En el museo manda RADIO_CAMINABLE y en la Luna, RADIO_LRV_M. */
 const LIMITE_MISION_X_Z = 7.4;
 /** Plano lejano de la cámara en el museo y en Marte (m). En la Luna se amplía a LEJANO_CAMARA_LUNA_M. */
 const LEJANO_CAMARA_M = 100;
@@ -510,7 +510,7 @@ function moverCamara(dx: number, dy: number, dCabeceo = 0, dLateral = 0): void {
 
 /**
  * Movimiento en la Luna. A pie: gira, camina sobre el suelo (con la curvatura), sin atravesar el LM ni el LRV y
- * dentro de RADIO_A_PIE_M. Sentado en el LRV: el giro mueve solo la vista, hasta ±100° del rumbo; el avance lo
+ * dentro de RADIO_LRV_M (el mismo límite que el LRV). Sentado en el LRV: el giro mueve solo la vista, hasta ±100° del rumbo; el avance lo
  * gestiona la misión (game/luna.ts) y llega por actualizarLuna.
  */
 function moverEnLuna(dx: number, dy: number, dLateral: number): void {
@@ -535,9 +535,9 @@ function moverEnLuna(dx: number, dy: number, dLateral: number): void {
   apartar(LM.x, LM.z, RADIO_OBSTACULO_LM_M);
   if (lrvLuna) apartar(lrvLuna.position.x, lrvLuna.position.z, RADIO_OBSTACULO_LRV_M);
   const radio = Math.hypot(posicion.x - LM.x, posicion.z - LM.z);
-  if (radio > RADIO_A_PIE_M) {
-    posicion.x = LM.x + ((posicion.x - LM.x) / radio) * RADIO_A_PIE_M;
-    posicion.z = LM.z + ((posicion.z - LM.z) / radio) * RADIO_A_PIE_M;
+  if (radio > RADIO_LRV_M) {
+    posicion.x = LM.x + ((posicion.x - LM.x) / radio) * RADIO_LRV_M;
+    posicion.z = LM.z + ((posicion.z - LM.z) / radio) * RADIO_LRV_M;
   }
   posicion.y = alturaLuna(posicion.x, posicion.z) + ALTURA_OJOS;
   actualizarCamara();
@@ -657,7 +657,13 @@ function actualizarLuna(estado: {
     actualizarCamara();
   } else if (sentadoLRV && lrvLuna) {
     // Se acaba de bajar: de pie junto al asiento del comandante (a la izquierda), mirando hacia donde miraba.
-    posicion.set(estado.x, 0, estado.z).addScaledVector(new THREE.Vector3(-Math.cos(rad), 0, -Math.sin(rad)), DISTANCIA_BAJADA_LRV_M);
+    // Si ese punto quedara fuera de RADIO_LRV_M (el LRV puede estar en el borde), se prueba el otro lado y, si no,
+    // un paso hacia el LM: así no se empuja al jugador de vuelta al bajarse.
+    const izquierda = new THREE.Vector3(-Math.cos(rad), 0, -Math.sin(rad)).multiplyScalar(DISTANCIA_BAJADA_LRV_M);
+    const hacia = new THREE.Vector3(LM.x - estado.x, 0, LM.z - estado.z).normalize().multiplyScalar(DISTANCIA_BAJADA_LRV_M);
+    const dentro = (d: THREE.Vector3): boolean => Math.hypot(estado.x + d.x - LM.x, estado.z + d.z - LM.z) <= RADIO_LRV_M;
+    const lado = [izquierda, izquierda.clone().negate()].find(dentro) ?? hacia;
+    posicion.set(estado.x + lado.x, 0, estado.z + lado.z);
     posicion.y = alturaLuna(posicion.x, posicion.z) + ALTURA_OJOS;
     // Ya a pie: moverEnLuna aparta al jugador del LM si hiciera falta y lo deja dentro del radio a pie.
     sentadoLRV = false;
