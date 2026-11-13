@@ -56,10 +56,11 @@ export const FASES_DESPLIEGUE_LRV: readonly { readonly fase: FaseDespliegueLRV; 
 export const DURACION_DESPLIEGUE_LRV_S = FASES_DESPLIEGUE_LRV.reduce((suma, f) => suma + f.duracionS, 0);
 
 /**
- * Bahía del LRV: cuadrante suroeste del LM ("The entire assembly is mounted on the southwest quadrant of the LM",
- * ALSJ). Con el LM mirando al oeste (sitioApollo17.ts), es la bahía de delante a la izquierda. Azimut desde el LM (°).
+ * Bahía del LRV: azimut desde el LM (°) hacia la llegada del jugador. Se define en sitioApollo17.ts, junto al frente
+ * del LM que se deriva de él.
  */
-export const AZIMUT_BAHIA_LRV = 225;
+export { AZIMUT_BAHIA_LRV } from './sitioApollo17';
+
 
 /** Ángulos de giro del chasis central desde su posición guardada (°), según el ALSJ. */
 export const GIRO_LIBERACION_GRADOS = 4;

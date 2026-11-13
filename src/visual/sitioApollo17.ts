@@ -34,13 +34,6 @@ export function azimutEntre(a: PuntoSuelo, b: PuntoSuelo): number {
 }
 
 /**
- * LM Challenger. Sitio del ALSJ: 20.1653° N, 30.7658° E.
- * Frente (escotilla, plataforma y escalera de la pata 1) hacia el oeste: el LM descendió de este a oeste con el Sol
- * a la espalda, como en las demás misiones Apollo. // VERIFICAR: guiñada exacta del LM tras el aterrizaje.
- */
-export const LM = { x: 0, z: 0, azimutFrente: 270 } as const;
-
-/**
  * LRV estacionado junto al LM, recién desplegado (la escena es 1 h después del inicio de la EVA-1).
  * // VERIFICAR: no hay una posición publicada para este momento; se coloca a ~9 m del LM, fuera de las patas.
  */
@@ -49,6 +42,27 @@ const POSICION_LRV: PuntoSuelo = { x: 7, z: 5 };
 /** Llegada del jugador: a ~13 m del LRV y del LM, mirando casi de frente al LRV (azimut 198°) con el LM a la vista. */
 export const LLEGADA = { x: 11, z: -7, azimutMirada: 205 } as const;
 
+/** Origen de la escena: centro del LM. */
+const ORIGEN_LM = { x: 0, z: 0 } as const;
+
+/**
+ * Azimut (°) desde el LM hacia la llegada del jugador. La bahía del LRV mira hacia aquí (el LRV sale hacia el
+ * jugador). Decisión de juego: se sacrifica la orientación del LM tras el aterrizaje (ver LM).
+ */
+export const AZIMUT_BAHIA_LRV = azimutEntre(ORIGEN_LM, LLEGADA);
+
+/** La bahía de equipos está a este ángulo del frente del LM, hacia la izquierda (en Apollo 17: frente 270°, bahía 225°). */
+const DESVIO_BAHIA_RESPECTO_FRENTE_LM = 45;
+
+/**
+ * LM Challenger. Sitio del ALSJ: 20.1653° N, 30.7658° E.
+ * El frente (escotilla, plataforma y escalera de la pata 1) se deriva de la bahía, que apunta a la llegada del
+ * jugador: el frente queda a DESVIO_BAHIA_RESPECTO_FRENTE_LM grados de la bahía. Original del ALSJ: frente al oeste
+ * (270°), bahía a 225°. // VERIFICAR: la orientación real del LM tras el aterrizaje; el juego la cambia a propósito.
+ */
+export const LM = { x: 0, z: 0, azimutFrente: AZIMUT_BAHIA_LRV + DESVIO_BAHIA_RESPECTO_FRENTE_LM } as const;
+
+/**
 /**
  * Estación 1. Real: a 1.11 km del transmisor SEP con rumbo de vuelta 346° (navegador del LRV, ALSJ), es decir,
  * hacia el azimut ~166°, y a ~150 m del borde de Steno. Allí tomaron muestras en un cráter fresco de ~20 m de
