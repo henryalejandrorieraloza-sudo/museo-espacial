@@ -490,3 +490,18 @@
   text-align: center;
   text-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
 }
+
+/* Línea entre las dos mitades de la vista dividida (escena del mando de la presentación del LRV). */
+.presentacion-division {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+.presentacion-division[hidden] {
+  display: none;
+}

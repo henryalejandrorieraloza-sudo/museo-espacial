@@ -49,6 +49,10 @@ export type Resalte =
   | 'antenaBaja'
   | 'baterias'
   | 'mylar'
+  | 'interruptor'
+  | 'navegacion'
+  | 'trazoCorto'
+  | 'trazoLargo'
   | 'panelPotencia'
   | 'panelDireccion'
   | 'panelHabilitar'
@@ -78,6 +82,8 @@ export interface Marca {
   sinContorno?: boolean;
   /** Desplazamiento del rótulo en pantalla (px) respecto al centro de la pieza. Por defecto, encima. */
   rotuloPx?: readonly [number, number];
+  /** En la vista dividida, en qué mitad está la pieza (por defecto, pantalla completa). */
+  vista?: 'izquierda' | 'derecha';
 }
 
 /** Inclinación de la palanca del mando en T en el instante `t`: −1…1 adelante (+) o atrás (−), y a la derecha (+). */
@@ -85,6 +91,8 @@ export interface PoseMando {
   t: number;
   adelante: number;
   lado: number;
+  /** Interruptor de marcha atrás del mando: 0 = sin activar, 1 = activado. Por defecto, 0. */
+  interruptor?: number;
 }
 
 export interface Tramo {
@@ -96,8 +104,14 @@ export interface Tramo {
   marcas: readonly Marca[];
   /** Tarjeta del peso en la Tierra y en la Luna, de `desde` a `hasta` (s del tramo). */
   tarjetaPeso?: readonly [number, number];
-  /** Movimiento de la palanca del mando en T. */
+  /** Movimiento de la palanca del mando en T (y del interruptor de marcha atrás). */
   mando?: readonly PoseMando[];
+  /** El LRV se mueve según el mando (`movimientoEn`): adelante avanza, a un lado gira, atrás frena o, con el interruptor, retrocede. */
+  conduccion?: boolean;
+  /** Vista dividida: cámara de la mitad izquierda y de la derecha. Con `conduccion`, la izquierda sigue al LRV y la derecha va con él. */
+  division?: { izquierda: readonly Toma[]; derecha: readonly Toma[] };
+  /** Trazos sobre el terreno (escena de distancias): cada uno se dibuja entre `[desde, hasta]` (s del tramo). */
+  trazos?: { corto: readonly [number, number]; largo: readonly [number, number] };
   /** El LRV avanza `metros` hacia delante entre `desde` y `hasta` (s del tramo), con ease-in-out. */
   avance?: { desde: number; hasta: number; metros: number };
   /** Las tomas son relativas a la posición del LRV mientras avanza (la cámara lo sigue). */
@@ -115,13 +129,18 @@ export const CAMPO_VISION = 40;
 // Puntos del LRV que se usan en las tomas (ejes del LRV, m). Salen de las medidas de visual/lrv.ts.
 const CENTRO: V3 = [0, 0.6, 0];
 const RUEDA_DI: V3 = [-0.915, 0.41, -1.143];
-const ASIENTOS: V3 = [-0.05, 0.72, 0.22];
 const CONSOLA_Y_MANDO: V3 = [0, 0.96, -0.42];
 const CAMARA_TV: V3 = [0.1, 1.2, -1.46];
 const BATERIAS: V3 = [0, 0.55, -0.95];
 const MYLAR: V3 = [0.05, 0.92, -1.42];
 const MANDO: V3 = [0, 0.86, -0.07];
 const PANEL: V3 = [0, 0.95, -0.56];
+
+/** Distancias de la escena "Distancias" (km). Fuentes: NSSDC (NASA), ver el comentario del guion. */
+export const DISTANCIA_LRV_KM = 36;
+export const DISTANCIA_A_PIE_KM = 3.45;
+/** Centro de los trazos en el terreno (ejes del LRV, m): lejos del LRV y de los cráteres. */
+export const CENTRO_TRAZOS: V3 = [0, 0, 220];
 
 /**
  * Metros que avanza el LRV en la escena de cierre. Con el perfil de `avanceEn` (smoothstep, pico 1.5 veces la media)
@@ -131,7 +150,12 @@ export const AVANCE_CIERRE_M = 14;
 
 /**
  * Guion de la presentación, en orden. Las capturas de referencia de Henry (tomas de cámara, no imágenes del proyecto)
- * se citan como "ref 46" para la captura_46.png.
+ * se citan como "ref 46" para la captura_46.png. Objetivo: unos 70 s en total, con fundidos de 0.5 s entre escenas.
+ *
+ * Cifras (verificadas en NASA; ver SPEC §8.6):
+ * - 36 km: NSSDC, 35.9 km conducidos por el LRV del Apolo 17 (SP-4029: 35.7 km).
+ * - ~3.45 km: NSSDC, recorrido a pie de la EVA-2 del Apolo 14, la más larga de las misiones sin vehículo (Apolo 11:
+ *   unos 250 m). Solo se usa para la proporción del trazo corto; el rótulo no lleva cifra.
  */
 export const GUION: readonly EscenaPresentacion[] = [
   {
@@ -140,37 +164,66 @@ export const GUION: readonly EscenaPresentacion[] = [
     tramos: [
       {
         narracion: 'pres_intro',
-        minS: 8,
+        minS: 7,
         tomas: [
           { t: 0, az: -35, el: 40, dist: 22, mira: CENTRO },
-          { t: 4, az: -42, el: 16, dist: 7.5, mira: CENTRO },
-          { t: 8, az: -48, el: 13, dist: 6.6, mira: CENTRO },
+          { t: 3.5, az: -42, el: 16, dist: 7.5, mira: CENTRO },
+          { t: 7, az: -48, el: 13, dist: 6.6, mira: CENTRO },
         ],
-        marcas: [{ resalte: 'lrv', rotulo: 'rot_lrv', desde: 4.2, hasta: 7.6, sinContorno: true, rotuloPx: [0, -150] }],
+        marcas: [{ resalte: 'lrv', rotulo: 'rot_lrv', desde: 4.2, hasta: 6.8, sinContorno: true, rotuloPx: [0, -150] }],
       },
     ],
   },
   {
-    // 2. Chasis: 3/4 frontal (ref 46) y giro lento alrededor del LRV.
+    // 2. Peso: la tarjeta de la Tierra y la Luna (antes, el último tramo de "ruedas y asientos").
+    id: 'peso',
+    tramos: [
+      {
+        narracion: 'pres_peso',
+        minS: 4.5,
+        tomas: [{ t: 3, az: -50, el: 20, dist: 6.8, mira: CENTRO }],
+        marcas: [],
+        tarjetaPeso: [0.3, Infinity],
+      },
+    ],
+  },
+  {
+    // 3. Distancias: por qué existe el LRV. Dos trazos sobre el mismo terreno, visto desde arriba (ref 1 y 2): el corto,
+    // a pie (rótulo "Caminando"), y el largo, que se dibuja más rápido ("Con el LRV: 36 km").
+    id: 'distancias',
+    tramos: [
+      {
+        narracion: 'pres_distancias',
+        minS: 6,
+        tomas: [{ t: 0, az: 180, el: 55, dist: 150, mira: CENTRO_TRAZOS }],
+        trazos: { corto: [0.3, 2.1], largo: [2.6, 5.2] },
+        marcas: [
+          { resalte: 'trazoCorto', rotulo: 'rot_caminando', desde: 1.8, hasta: Infinity, sinContorno: true, rotuloPx: [0, -34] },
+          { resalte: 'trazoLargo', rotulo: 'rot_con_lrv', desde: 4.6, hasta: Infinity, sinContorno: true, rotuloPx: [0, -34] },
+        ],
+      },
+    ],
+  },
+  {
+    // 4. Chasis: 3/4 frontal (ref 46) y giro lento alrededor del LRV, de −40° a −130°.
     id: 'chasis',
     tramos: [
       {
         narracion: 'pres_chasis',
-        minS: 8.5,
+        minS: 6,
         tomas: [
           { t: 0, az: -40, el: 16, dist: 6.6, mira: [0, 0.6, 0] },
-          { t: 2.8, az: -55, el: 14, dist: 6.0, mira: [0, 0.6, 0] },
-          { t: 5.6, az: -95, el: 18, dist: 6.0, mira: [0, 0.6, 0] },
-          { t: 8.5, az: -130, el: 22, dist: 6.3, mira: [0, 0.6, 0] },
+          { t: 2, az: -55, el: 14, dist: 6.0, mira: [0, 0.6, 0] },
+          { t: 4, az: -95, el: 18, dist: 6.0, mira: [0, 0.6, 0] },
+          { t: 6, az: -130, el: 22, dist: 6.3, mira: [0, 0.6, 0] },
         ],
         marcas: [{ resalte: 'chasis', rotulo: 'rot_chasis', desde: 0.8, hasta: Infinity, rotuloPx: [0, -90] }],
       },
     ],
   },
   {
-    // 3. Ruedas y asientos: 3/4 de la rueda (ref 07, 08), malla (ref 10), chevrones (ref 11, 12), marco interior
-    // (ref 14), asientos de lado (ref 48) y la tarjeta del peso (ref 44).
-    id: 'ruedas_asientos',
+    // 5. Ruedas: 3/4 de la rueda (ref 07, 08), malla (ref 10), chevrones (ref 11, 12), marco interior (ref 14).
+    id: 'ruedas',
     tramos: [
       {
         narracion: 'pres_ruedas',
@@ -188,140 +241,134 @@ export const GUION: readonly EscenaPresentacion[] = [
           { resalte: 'marcoInterior', rotulo: 'rot_marco', desde: 7.2, hasta: Infinity, rotuloPx: [200, 60] },
         ],
       },
-      {
-        narracion: 'pres_asientos',
-        minS: 3.5,
-        tomas: [{ t: 3, az: -98, el: 24, dist: 3.8, mira: ASIENTOS }],
-        marcas: [{ resalte: 'asientos', rotulo: 'rot_asientos', desde: 1.2, hasta: Infinity, rotuloPx: [0, -150] }],
-      },
-      {
-        narracion: 'pres_peso',
-        minS: 4,
-        tomas: [{ t: 3, az: -50, el: 20, dist: 6.8, mira: CENTRO }],
-        marcas: [],
-        tarjetaPeso: [0.3, Infinity],
-      },
     ],
   },
   {
-    // 4. Electrónica y comunicaciones: consola y mando desde detrás de los asientos (ref 49), cámara de TV (ref 50) y
-    // antenas (ref 51), con la de alta ganancia apuntando a la Tierra.
+    // 6. Electrónica y navegación: consola y mando desde detrás de los asientos (ref 49), la navegación en la misma
+    // toma, cámara de TV (ref 50) y antenas (ref 51), con la de alta ganancia apuntando a la Tierra.
     id: 'electronica',
     tramos: [
       {
         narracion: 'pres_consola',
-        minS: 5.5,
+        minS: 3,
         tomas: [
           { t: 0, az: -150, el: 34, dist: 2.4, mira: CONSOLA_Y_MANDO },
-          { t: 3, az: -162, el: 32, dist: 1.9, mira: CONSOLA_Y_MANDO },
-          { t: 5.5, az: -168, el: 30, dist: 1.8, mira: CONSOLA_Y_MANDO },
+          { t: 2, az: -162, el: 32, dist: 1.9, mira: CONSOLA_Y_MANDO },
+          { t: 3, az: -168, el: 30, dist: 1.8, mira: CONSOLA_Y_MANDO },
         ],
         marcas: [
-          { resalte: 'consola', rotulo: 'rot_consola', desde: 0.6, hasta: Infinity, rotuloPx: [0, -150] },
+          { resalte: 'consola', rotulo: 'rot_consola', desde: 0.4, hasta: Infinity, rotuloPx: [0, -150] },
           { resalte: 'mando', rotulo: 'rot_mando', desde: 2.2, hasta: Infinity, rotuloPx: [150, 40] },
         ],
       },
       {
+        // Misma toma que el tramo anterior: solo cambia lo resaltado.
+        narracion: 'pres_navegacion',
+        minS: 4,
+        tomas: [],
+        marcas: [{ resalte: 'navegacion', rotulo: 'rot_navegacion', desde: 0.4, hasta: Infinity, rotuloPx: [0, -110] }],
+      },
+      {
         narracion: 'pres_comunicaciones',
-        minS: 8.5,
+        minS: 4.8,
         tomas: [
-          { t: 2.5, az: -32, el: 22, dist: 1.9, mira: CAMARA_TV },
-          { t: 4, az: -32, el: 22, dist: 1.8, mira: CAMARA_TV },
-          { t: 6.5, az: -150, el: 6, dist: 4.6, mira: [-0.1, 1.55, -1.3], fov: 50 },
-          { t: 8.5, az: -156, el: 6, dist: 4.4, mira: [-0.1, 1.55, -1.3], fov: 50 },
+          { t: 2, az: -32, el: 22, dist: 1.8, mira: CAMARA_TV },
+          { t: 4, az: -150, el: 6, dist: 4.6, mira: [-0.1, 1.55, -1.3], fov: 50 },
+          { t: 5, az: -156, el: 6, dist: 4.4, mira: [-0.1, 1.55, -1.3], fov: 50 },
         ],
         marcas: [
-          { resalte: 'camaraTV', rotulo: 'rot_camara', desde: 1.6, hasta: 4.2, rotuloPx: [0, -120] },
-          { resalte: 'antenaAlta', rotulo: 'rot_antena_alta', desde: 6.0, hasta: Infinity, rotuloPx: [0, -130] },
-          { resalte: 'antenaBaja', rotulo: 'rot_antena_baja', desde: 6.3, hasta: Infinity, rotuloPx: [0, -90] },
+          { resalte: 'camaraTV', rotulo: 'rot_camara', desde: 0.8, hasta: 2.6, rotuloPx: [0, -120] },
+          { resalte: 'antenaAlta', rotulo: 'rot_antena_alta', desde: 3.4, hasta: Infinity, rotuloPx: [0, -130] },
+          { resalte: 'antenaBaja', rotulo: 'rot_antena_baja', desde: 3.7, hasta: Infinity, rotuloPx: [0, -90] },
         ],
       },
     ],
   },
   {
-    // 5. Energía: vista desde arriba de la sección delantera, con las baterías resaltadas (ref 39), y el Mylar (ref 53).
+    // 7. Energía: vista desde arriba de la sección delantera, con las baterías resaltadas (ref 39), y el Mylar (ref 53).
     // En el LRV las baterías iban en el chasis delantero (NSSDC), no en la plataforma trasera.
     id: 'energia',
     tramos: [
       {
-        narracion: 'pres_baterias',
-        minS: 5,
+        narracion: 'pres_energia',
+        minS: 6.5,
         tomas: [
           { t: 0, az: 80, el: 52, dist: 2.7, mira: BATERIAS },
-          { t: 3, az: 92, el: 62, dist: 2.2, mira: BATERIAS },
-          { t: 5, az: 96, el: 64, dist: 2.1, mira: BATERIAS },
+          { t: 2, az: 92, el: 62, dist: 2.2, mira: BATERIAS },
+          { t: 4.3, az: -38, el: 14, dist: 1.7, mira: MYLAR },
+          { t: 6.3, az: -44, el: 14, dist: 1.6, mira: MYLAR },
         ],
-        marcas: [{ resalte: 'baterias', rotulo: 'rot_baterias', desde: 0.8, hasta: Infinity, rotuloPx: [0, -120] }],
-      },
-      {
-        narracion: 'pres_mylar',
-        minS: 5,
-        tomas: [
-          { t: 3, az: -38, el: 14, dist: 1.7, mira: MYLAR },
-          { t: 5, az: -44, el: 14, dist: 1.6, mira: MYLAR },
+        marcas: [
+          { resalte: 'baterias', rotulo: 'rot_baterias', desde: 0.6, hasta: 2.6, rotuloPx: [0, -120] },
+          { resalte: 'mylar', rotulo: 'rot_mylar', desde: 4.6, hasta: Infinity, rotuloPx: [-200, 0] },
         ],
-        marcas: [{ resalte: 'mylar', rotulo: 'rot_mylar', desde: 1.8, hasta: Infinity, rotuloPx: [-200, 0] }],
       },
     ],
   },
   {
-    // 6. Propulsión: vista cenital (ref 25 a 34, la mitad izquierda) y acercamiento al mando en T (ref 24, 33) y al
-    // panel con los interruptores de tracción y dirección.
-    id: 'propulsion',
+    // 8. Mando y movimiento, en vista dividida como en las referencias (ref 3 a 7): a la izquierda, el LRV visto desde
+    // arriba, que se mueve según el mando; a la derecha, el primer plano del mando, que se ve moverse. Después, el panel.
+    id: 'mando',
     tramos: [
       {
-        narracion: 'pres_mando',
-        minS: 5,
-        tomas: [
-          { t: 0, az: 180, el: 87, dist: 7.5, mira: [0, 0.5, 0] },
-          { t: 2, az: 180, el: 87, dist: 7, mira: [0, 0.5, 0] },
-          { t: 5, az: -150, el: 42, dist: 0.95, mira: MANDO },
-        ],
-        marcas: [{ resalte: 'mando', rotulo: 'rot_mando', desde: 3.3, hasta: Infinity, rotuloPx: [0, -130] }],
-      },
-      {
         narracion: 'pres_mando_movimientos',
-        minS: 8,
-        tomas: [
-          { t: 0, az: -150, el: 42, dist: 0.95, mira: MANDO },
-          { t: 8, az: -145, el: 41, dist: 0.95, mira: MANDO },
-        ],
+        minS: 10,
+        // Cámara izquierda: cenital, sigue al LRV sin girar. Derecha: primer plano del mando, va con el LRV.
+        tomas: [],
+        division: {
+          izquierda: [{ t: 0, az: 180, el: 87, dist: 7, mira: [0, 0.5, 0] }],
+          derecha: [
+            { t: 0, az: -150, el: 28, dist: 0.78, mira: MANDO },
+            { t: 10, az: -142, el: 26, dist: 0.78, mira: MANDO },
+          ],
+        },
+        conduccion: true,
+        // Adelante (0.5–2.2 s), a un lado (2.5–4.0), atrás sin interruptor = frena (4.3–6.0) y, desde 6.2, interruptor
+        // (clic a los 6.4 s) y atrás = marcha atrás. A un lado se inclina también un poco hacia delante: el LRV gira rodando.
         mando: [
           { t: 0.3, adelante: 0, lado: 0 },
           { t: 0.9, adelante: 1, lado: 0 },
-          { t: 1.8, adelante: 1, lado: 0 },
-          { t: 2.4, adelante: 0, lado: 0 },
-          { t: 2.9, adelante: 0, lado: 1 },
-          { t: 3.7, adelante: 0, lado: 1 },
+          { t: 1.9, adelante: 1, lado: 0 },
+          { t: 2.4, adelante: 0.6, lado: 0 },
+          { t: 2.9, adelante: 0.6, lado: 1 },
+          { t: 3.7, adelante: 0.6, lado: 1 },
           { t: 4.2, adelante: 0, lado: 0 },
           { t: 4.7, adelante: -1, lado: 0 },
-          { t: 5.6, adelante: -1, lado: 0 },
+          { t: 5.7, adelante: -1, lado: 0 },
           { t: 6.2, adelante: 0, lado: 0 },
+          { t: 6.4, adelante: 0, lado: 0, interruptor: 0 },
+          { t: 6.7, adelante: 0, lado: 0, interruptor: 1 },
+          { t: 7.4, adelante: 0, lado: 0, interruptor: 1 },
+          { t: 7.9, adelante: -1, lado: 0, interruptor: 1 },
+          { t: 9.2, adelante: -1, lado: 0, interruptor: 1 },
+          { t: 9.8, adelante: 0, lado: 0, interruptor: 1 },
         ],
         marcas: [
-          { resalte: 'mando', rotulo: 'rot_adelante', desde: 0.5, hasta: 2.2, rotuloPx: [0, -130] },
-          { resalte: 'mando', rotulo: 'rot_lado', desde: 2.5, hasta: 4.0, rotuloPx: [0, -130] },
-          { resalte: 'mando', rotulo: 'rot_atras', desde: 4.3, hasta: 6.0, rotuloPx: [0, -130] },
-          { resalte: 'mando', rotulo: 'rot_marcha_atras', desde: 6.2, hasta: Infinity, rotuloPx: [0, -130], sinContorno: true },
+          { resalte: 'mando', rotulo: 'rot_adelante', desde: 0.5, hasta: 2.2, rotuloPx: [0, -150], vista: 'derecha' },
+          { resalte: 'mando', rotulo: 'rot_lado', desde: 2.5, hasta: 4.0, rotuloPx: [0, -150], vista: 'derecha' },
+          { resalte: 'mando', rotulo: 'rot_atras', desde: 4.3, hasta: 6.0, rotuloPx: [0, -150], vista: 'derecha' },
+          { resalte: 'interruptor', rotulo: null, desde: 6.0, hasta: 7.8, vista: 'derecha' },
+          { resalte: 'mando', rotulo: 'rot_marcha_atras', desde: 6.2, hasta: Infinity, rotuloPx: [0, -150], sinContorno: true, vista: 'derecha' },
         ],
       },
       {
+        // Panel de control, sin voz: con las filas de interruptores como en las referencias (ref 5 y 7).
         narracion: null,
-        minS: 3.5,
+        minS: 2.8,
         tomas: [
-          { t: 2.5, az: 180, el: 26, dist: 0.8, mira: PANEL },
-          { t: 3.5, az: 177, el: 26, dist: 0.78, mira: PANEL },
+          { t: 2.2, az: 180, el: 26, dist: 0.8, mira: PANEL },
+          { t: 2.8, az: 177, el: 26, dist: 0.78, mira: PANEL },
         ],
         marcas: [
-          { resalte: 'panelPotencia', rotulo: 'rot_potencia', desde: 1.6, hasta: Infinity, rotuloPx: [-140, 70] },
-          { resalte: 'panelDireccion', rotulo: 'rot_direccion', desde: 2.0, hasta: Infinity, rotuloPx: [0, 110] },
-          { resalte: 'panelHabilitar', rotulo: 'rot_habilitar', desde: 2.4, hasta: Infinity, rotuloPx: [150, 70] },
+          { resalte: 'panelPotencia', rotulo: 'rot_potencia', desde: 1.2, hasta: Infinity, rotuloPx: [-60, 52] },
+          { resalte: 'panelDireccion', rotulo: 'rot_direccion', desde: 1.5, hasta: Infinity, rotuloPx: [0, 100] },
+          { resalte: 'panelHabilitar', rotulo: 'rot_habilitar', desde: 1.8, hasta: Infinity, rotuloPx: [70, 52] },
         ],
       },
     ],
   },
   {
-    // 7. Cierre: el LRV avanza por el terreno (ref 19, 20) hasta el borde del cráter Shorty, con la zona del suelo
+    // 9. Cierre: el LRV avanza por el terreno (ref 19, 20) hasta el borde del cráter Shorty, con la zona del suelo
     // naranja marcada.
     id: 'cierre',
     tramos: [
@@ -541,18 +588,78 @@ export function opacidadMarca(m: Marca, t: number): number {
   return suavizar(Math.min(1, entrada, salida));
 }
 
-/** Inclinación de la palanca del mando en `t` (interpolada con ease-in-out entre poses). */
-export function mandoEn(poses: readonly PoseMando[] | undefined, t: number): { adelante: number; lado: number } {
-  if (!poses || poses.length === 0) return { adelante: 0, lado: 0 };
-  if (t <= poses[0].t) return poses[0];
+/** Inclinación de la palanca del mando en `t` y estado del interruptor de marcha atrás (interpolados con ease-in-out entre poses). */
+export function mandoEn(poses: readonly PoseMando[] | undefined, t: number): { adelante: number; lado: number; interruptor: number } {
+  if (!poses || poses.length === 0) return { adelante: 0, lado: 0, interruptor: 0 };
+  const completa = (p: PoseMando): { adelante: number; lado: number; interruptor: number } => ({
+    adelante: p.adelante,
+    lado: p.lado,
+    interruptor: p.interruptor ?? 0,
+  });
+  if (t <= poses[0].t) return completa(poses[0]);
   for (let i = 1; i < poses.length; i++) {
     const b = poses[i];
     if (t > b.t) continue;
-    const a = poses[i - 1];
-    const u = suavizar((t - a.t) / Math.max(1e-6, b.t - a.t));
-    return { adelante: a.adelante + (b.adelante - a.adelante) * u, lado: a.lado + (b.lado - a.lado) * u };
+    const a = completa(poses[i - 1]);
+    const c = completa(b);
+    const u = suavizar((t - poses[i - 1].t) / Math.max(1e-6, b.t - poses[i - 1].t));
+    return {
+      adelante: a.adelante + (c.adelante - a.adelante) * u,
+      lado: a.lado + (c.lado - a.lado) * u,
+      interruptor: a.interruptor + (c.interruptor - a.interruptor) * u,
+    };
   }
-  return poses[poses.length - 1];
+  return completa(poses[poses.length - 1]);
+}
+
+/** Velocidad máxima hacia delante en la escena del mando (m/s): por debajo del máximo de diseño del LRV (2.7 m/s). */
+export const VELOCIDAD_ADELANTE_MS = 1.6;
+/** Velocidad máxima de marcha atrás (m/s): se va más despacio. */
+export const VELOCIDAD_ATRAS_MS = 0.9;
+export const ACELERACION_MS2 = 1.1;
+export const FRENADA_MS2 = 3;
+/** Radio de giro mínimo del LRV: 3.1 m (NSSDC, con dirección en las cuatro ruedas). */
+export const RADIO_GIRO_M = 3.1;
+/** Ángulo de dirección de las ruedas con el mando del todo a un lado (°). */
+export const DIRECCION_MAX_GRADOS = 20;
+
+/** Estado del LRV en la escena del mando: posición (m, ejes del LRV en su salida), rumbo (rad, + = a la izquierda) y velocidad (m/s, − = marcha atrás). */
+export interface MovimientoLRV {
+  x: number;
+  z: number;
+  rumbo: number;
+  v: number;
+  /** Dirección de las ruedas (°, + = derecha). */
+  direccionGrados: number;
+}
+
+/**
+ * Dónde está el LRV en `t` si lo conduce el mando de `poses`: adelante acelera, a un lado gira (con el radio de giro del
+ * LRV), atrás sin el interruptor frena y atrás con el interruptor va marcha atrás. Se integra desde 0 a pasos fijos,
+ * así el resultado depende solo de `t` (no de cuántos fotogramas haya habido).
+ */
+export function movimientoEn(poses: readonly PoseMando[] | undefined, t: number, paso = 1 / 60): MovimientoLRV {
+  let x = 0;
+  let z = 0;
+  let rumbo = 0;
+  let v = 0;
+  const fin = Math.max(0, t);
+  for (let tk = 0; tk < fin; tk += paso) {
+    const dt = Math.min(paso, fin - tk);
+    const m = mandoEn(poses, tk + dt / 2);
+    let objetivo = 0;
+    if (m.adelante > 0) objetivo = m.adelante * VELOCIDAD_ADELANTE_MS;
+    else if (m.adelante < 0 && m.interruptor > 0.5) objetivo = m.adelante * VELOCIDAD_ATRAS_MS;
+    const frenando = Math.abs(objetivo) < Math.abs(v) || objetivo * v < 0;
+    const tasa = (frenando ? FRENADA_MS2 : ACELERACION_MS2) * dt;
+    v += Math.min(tasa, Math.max(-tasa, objetivo - v));
+    // Hacia la derecha el rumbo baja (el frente es −Z y un giro positivo lo lleva hacia −X).
+    rumbo -= (v * m.lado * dt) / RADIO_GIRO_M;
+    x -= Math.sin(rumbo) * v * dt;
+    z -= Math.cos(rumbo) * v * dt;
+  }
+  const m = mandoEn(poses, fin);
+  return { x, z, rumbo, v, direccionGrados: m.lado * DIRECCION_MAX_GRADOS };
 }
 
 /** Metros recorridos por el LRV en `t`: arranca y frena suave (smoothstep) entre `desde` y `hasta`. */

@@ -20,6 +20,8 @@ export interface PresentacionUi {
   rotulos(lista: readonly RotuloUi[]): void;
   /** Opacidad de la tarjeta del peso (0 la oculta). */
   peso(opacidad: number): void;
+  /** Línea que separa las dos mitades de la vista dividida. */
+  division(visible: boolean): void;
   ayuda(texto: string | null): void;
   /** Mensaje final ("Estás listo para la misión"). null lo oculta. */
   listo(texto: string | null): void;
@@ -40,6 +42,10 @@ export function crearPresentacionUi(): PresentacionUi {
   const ayuda = requireEl('presentacionAyuda');
   const listo = requireEl('presentacionListo');
   const rotulos: HTMLDivElement[] = [];
+  const linea = document.createElement('div');
+  linea.className = 'presentacion-division';
+  linea.hidden = true;
+  raiz.appendChild(linea);
   let visible = false;
   let alSaltar: (() => void) | null = null;
   let alSubtitulos: (() => void) | null = null;
@@ -84,6 +90,7 @@ export function crearPresentacionUi(): PresentacionUi {
         for (const r of rotulos) r.hidden = true;
         peso.hidden = true;
         listo.hidden = true;
+        linea.hidden = true;
       }
     },
     fundido(opacidad) {
@@ -107,11 +114,15 @@ export function crearPresentacionUi(): PresentacionUi {
         // Dentro de la pantalla, con margen: el rótulo nunca se sale por un borde.
         const ancho = window.innerWidth;
         const alto = window.innerHeight;
-        const x = Math.min(ancho - 24, Math.max(24, r.x));
+        const medio = div.offsetWidth / 2 + 8;
+        const x = Math.min(ancho - medio, Math.max(medio, r.x));
         const y = Math.min(alto - 120, Math.max(56, r.y));
         div.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
         div.style.opacity = r.opacidad.toFixed(3);
       });
+    },
+    division(v) {
+      linea.hidden = !v;
     },
     peso(opacidad) {
       peso.hidden = opacidad <= 0.001;

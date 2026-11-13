@@ -394,6 +394,7 @@ function eventosPresentacion(sesion: Sesion, p: PresentacionLRV, eventos: readon
       }
     } else if (evento.tipo === 'listo') {
       presUi.rotulos([]);
+      presUi.division(false);
       presUi.peso(0);
       presUi.ayuda(null);
       presUi.fundido(OSCURO_LISTO);
@@ -431,6 +432,7 @@ function actualizarPresentacion(sesion: Sesion, ahoraS: number): void {
     rotulos.push({ texto: t(m.rotulo), x: pos.x + dx, y: pos.y + dy, opacidad: opacidadMarca(m, tiempo) });
   });
   presUi.rotulos(rotulos);
+  presUi.division(!!tramo.division);
   const peso = tramo.tarjetaPeso;
   presUi.peso(peso ? opacidadMarca({ resalte: 'lrv', rotulo: null, desde: peso[0], hasta: peso[1] }, tiempo) : 0);
   presUi.fundido(p.fundido);

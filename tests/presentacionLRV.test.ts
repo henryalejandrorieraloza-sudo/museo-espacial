@@ -5,12 +5,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  DISTANCIA_A_PIE_KM,
+  DISTANCIA_LRV_KM,
   GUION,
   MARGEN_VOZ_S,
   PRIMERA_ESCENA_SALTABLE,
   PresentacionLRV,
   SEGUNDOS_LISTO,
   duracionMinimaS,
+  mandoEn,
+  movimientoEn,
   poseEn,
   type EventoPresentacion,
 } from '../src/game/presentacionLRV.ts';
@@ -39,16 +43,57 @@ function recorrer(p: PresentacionLRV, opciones: { vozS?: number | null; dt?: num
   return { eventos, s };
 }
 
-test('el orden de las escenas es el pedido: introducción, chasis, ruedas y asientos, electrónica, energía, propulsión y cierre', () => {
+test('el orden de las escenas es el pedido: introducción, peso, distancias, chasis, ruedas, electrónica, energía, mando y cierre', () => {
   assert.deepEqual(
     GUION.map((e) => e.id),
-    ['introduccion', 'chasis', 'ruedas_asientos', 'electronica', 'energia', 'propulsion', 'cierre'],
+    ['introduccion', 'peso', 'distancias', 'chasis', 'ruedas', 'electronica', 'energia', 'mando', 'cierre'],
   );
 });
 
-test('la animación dura entre 60 y 90 s', () => {
+test('la animación dura unos 70 s (entre 65 y 85 s con fundidos)', () => {
   const d = duracionMinimaS();
-  assert.ok(d >= 60 && d <= 90, `duración mínima ${d} s`);
+  assert.ok(d >= 65 && d <= 85, `duración mínima ${d} s`);
+});
+
+test('no hay asientos en la presentación', () => {
+  for (const escena of GUION) for (const tramo of escena.tramos) for (const m of tramo.marcas) assert.notEqual(m.resalte, 'asientos');
+  assert.equal(es.pres_asientos, undefined);
+});
+
+test('los trazos de distancias guardan la proporción 3.45 km / 36 km y el largo se dibuja más rápido', () => {
+  const tramo = GUION.find((e) => e.id === 'distancias')!.tramos[0];
+  assert.ok(tramo.trazos);
+  const [cd, ch] = tramo.trazos!.corto;
+  const [ld, lh] = tramo.trazos!.largo;
+  assert.ok(ld >= ch - 0.5, 'el largo empieza cuando termina el corto');
+  // Velocidad relativa: largo (36 km) en lh-ld s frente a corto (3.45 km) en ch-cd s.
+  assert.ok(DISTANCIA_LRV_KM / (lh - ld) > DISTANCIA_A_PIE_KM / (ch - cd));
+  assert.match(es.rot_con_lrv, /36 km/);
+});
+
+test('mando: interruptor y movimiento del LRV (adelante avanza, a un lado gira, atrás frena, interruptor + atrás retrocede)', () => {
+  const tramo = GUION.find((e) => e.id === 'mando')!.tramos[0];
+  const poses = tramo.mando!;
+  // Tras empujar adelante, el LRV ha avanzado (z negativo) y va rápido.
+  const a = movimientoEn(poses, 2.2);
+  assert.ok(a.z < -1 && a.v > 1);
+  // A un lado: el rumbo cambia hacia la derecha (negativo) mientras sigue avanzando.
+  const g0 = movimientoEn(poses, 2.5);
+  const g1 = movimientoEn(poses, 4);
+  assert.ok(g1.rumbo < g0.rumbo - 0.1 && g1.z < g0.z);
+  // Atrás sin interruptor frena: la velocidad baja a cero y no retrocede.
+  const f = movimientoEn(poses, 6.1);
+  assert.ok(f.v >= 0 && f.v < 0.05);
+  assert.equal(mandoEn(poses, 5.5).interruptor, 0);
+  // Con el interruptor activado, atrás es marcha atrás.
+  assert.ok(mandoEn(poses, 7.2).interruptor > 0.9);
+  const r0 = movimientoEn(poses, 8);
+  const r1 = movimientoEn(poses, 9.4);
+  assert.ok(r1.v < 0 && r1.z > r0.z);
+  // Es determinista: no depende del paso.
+  assert.ok(Math.abs(movimientoEn(poses, 9, 1 / 30).z - movimientoEn(poses, 9, 1 / 120).z) < 0.05);
+  // Marcas de la marcha atrás en la mitad derecha.
+  assert.ok(tramo.marcas.some((m) => m.rotulo === 'rot_marcha_atras' && m.vista === 'derecha' && m.desde === 6.2));
 });
 
 test('todas las frases y rótulos existen en español y en inglés', () => {
@@ -69,9 +114,13 @@ test('todas las frases y rótulos existen en español y en inglés', () => {
 test('las cifras y el mando en T dicen lo mismo que la fuente', () => {
   assert.match(es.pres_peso, /460 libras/);
   assert.match(es.pres_peso, /76/);
+  assert.match(es.pres_peso, /masa no cambia/);
   assert.match(es.pres_intro, /Apolo 15, 16 y 17/);
   // El mando en T: hacia atrás frena; la marcha atrás va con un interruptor (NSSDC).
-  assert.match(es.pres_mando_movimientos, /hacia atrás frena/);
+  assert.match(es.pres_mando_movimientos, /hacia atrás para frenar/);
+  assert.match(es.pres_mando_movimientos, /interruptor/);
+  assert.match(es.pres_navegacion, /giroscopio/);
+  assert.match(es.rot_navegacion, /Giroscopio y odómetro/);
 });
 
 test('cada movimiento de cámara dura de 2 a 4 s (los ajustes lentos, de pocos grados o centímetros, aparte)', () => {

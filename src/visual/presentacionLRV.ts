@@ -1,13 +1,21 @@
 import * as THREE from 'three';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import {
   CAMPO_VISION,
+  CENTRO_TRAZOS,
+  DISTANCIA_A_PIE_KM,
+  DISTANCIA_LRV_KM,
   avanceEn,
   mandoEn,
+  movimientoEn,
   opacidadMarca,
   poseEn,
+  suavizar,
+  type MovimientoLRV,
   type Resalte,
   type Toma,
   type Tramo,
@@ -61,7 +69,7 @@ const GROSOR_CONTORNO_PX = 2.6;
 /** Ángulo (°) a partir del cual una arista entre dos caras se dibuja en el contorno. */
 const ANGULO_ARISTA = 32;
 /** Inclinación máxima de la palanca del mando en T en la animación (rad). // VERIFICAR: recorrido real del mando. */
-const INCLINACION_MANDO = THREE.MathUtils.degToRad(16);
+const INCLINACION_MANDO = THREE.MathUtils.degToRad(22);
 /** Diámetro del marco de tope dentro de cada rueda: 64.8 cm (NSSDC). // VERIFICAR: su forma (aquí, dos aros con riostras). */
 const RADIO_MARCO_INTERIOR = 0.324;
 /** Sombras: caja de ±LADO_SOMBRA_M alrededor del LRV. */
@@ -323,12 +331,162 @@ function crearHuellas(finZ: number): { malla: THREE.Mesh; mostrarHasta(z: number
   };
 }
 
-/** Coloca el LRV sobre el suelo de la presentación (como colocarLRV en lunaEscena.ts), en ejes del LRV. */
-function apoyarLRV(lrv: THREE.Object3D, z: number): void {
-  const alturas = RUEDAS_LRV.map(([rx, rz]) => alturaPresentacion(rx, z + rz));
+/**
+ * Coloca el LRV sobre el suelo de la presentación (como colocarLRV en lunaEscena.ts), en ejes del LRV: en (x, z) y con
+ * el rumbo `rumbo` (rad, + = hacia la izquierda), apoyado en las cuatro ruedas.
+ */
+function apoyarLRV(lrv: THREE.Object3D, x: number, z: number, rumbo = 0): void {
+  const c = Math.cos(rumbo);
+  const sn = Math.sin(rumbo);
+  const alturas = RUEDAS_LRV.map(([rx, rz]) => alturaPresentacion(x + rx * c + rz * sn, z - rx * sn + rz * c));
   const [di, dd, ti, td] = alturas;
-  lrv.position.set(0, (di + dd + ti + td) / 4, z);
-  lrv.rotation.set(Math.atan2((di + dd - ti - td) / 2, BATALLA_LRV), 0, Math.atan2((dd + td - di - ti) / 2, VIA_LRV), 'YXZ');
+  lrv.position.set(x, (di + dd + ti + td) / 4, z);
+  lrv.rotation.set(Math.atan2((di + dd - ti - td) / 2, BATALLA_LRV), rumbo, Math.atan2((dd + td - di - ti) / 2, VIA_LRV), 'YXZ');
+}
+
+/** Huellas de las ruedas mientras el LRV se mueve a mano (escena del mando): una cinta por lado, que crece al avanzar. */
+const MAX_PUNTOS_HUELLA = 1400;
+const SEPARACION_HUELLA_M = 0.2;
+function crearHuellasDinamicas(): { grupo: THREE.Group; reiniciar(): void; anadir(x: number, z: number, rumbo: number): void } {
+  const grupo = new THREE.Group();
+  grupo.name = 'huellas_dinamicas';
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x4e4c48,
+    transparent: true,
+    opacity: 0.7,
+    roughness: 1,
+    metalness: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2,
+  });
+  const medio = ANCHO_RUEDA_LRV / 2;
+  interface Cinta {
+    lado: number;
+    pos: Float32Array;
+    geo: THREE.BufferGeometry;
+    n: number;
+  }
+  const cintas: Cinta[] = [-1, 1].map((lado) => {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(MAX_PUNTOS_HUELLA * 2 * 3);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    const indices: number[] = [];
+    for (let k = 0; k < MAX_PUNTOS_HUELLA - 1; k++) {
+      const a = k * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+    geo.setIndex(indices);
+    geo.setDrawRange(0, 0);
+    const malla = new THREE.Mesh(geo, material);
+    malla.frustumCulled = false;
+    malla.receiveShadow = true;
+    grupo.add(malla);
+    return { lado, pos, geo, n: 0 };
+  });
+  let ultimo: [number, number] | null = null;
+  const poner = (x: number, z: number, rumbo: number): void => {
+    const c = Math.cos(rumbo);
+    const sn = Math.sin(rumbo);
+    for (const cinta of cintas) {
+      if (cinta.n >= MAX_PUNTOS_HUELLA) continue;
+      // Centro de la rueda de ese lado y eje lateral (la derecha del LRV).
+      const cx = x + cinta.lado * (VIA_LRV / 2) * c;
+      const cz = z - cinta.lado * (VIA_LRV / 2) * sn;
+      for (const s of [-1, 1]) {
+        const px = cx + s * medio * c;
+        const pz = cz - s * medio * sn;
+        const k = (cinta.n * 2 + (s < 0 ? 0 : 1)) * 3;
+        cinta.pos[k] = px;
+        cinta.pos[k + 1] = alturaPresentacion(px, pz) + 0.02;
+        cinta.pos[k + 2] = pz;
+      }
+      cinta.n++;
+      cinta.geo.setDrawRange(0, Math.max(0, cinta.n - 1) * 6);
+      cinta.geo.attributes.position.needsUpdate = true;
+    }
+    ultimo = [x, z];
+  };
+  const reiniciar = (): void => {
+    for (const cinta of cintas) {
+      cinta.n = 0;
+      cinta.geo.setDrawRange(0, 0);
+    }
+    ultimo = null;
+    // El LRV llegó conduciendo: ya hay huellas rectas detrás de él.
+    for (let z = 12; z >= 0; z -= SEPARACION_HUELLA_M) poner(0, z, 0);
+    ultimo = [0, 0];
+  };
+  reiniciar();
+  return {
+    grupo,
+    reiniciar,
+    anadir(x, z, rumbo) {
+      if (ultimo && Math.hypot(x - ultimo[0], z - ultimo[1]) < SEPARACION_HUELLA_M) return;
+      poner(x, z, rumbo);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Trazos de la escena de distancias
+// ---------------------------------------------------------------------------
+
+/** Largo del trazo del LRV (m de la escena): el del recorrido a pie sale de la proporción de las distancias reales. */
+const LARGO_TRAZO_LRV_M = 330;
+const LARGO_TRAZO_A_PIE_M = (LARGO_TRAZO_LRV_M * DISTANCIA_A_PIE_KM) / DISTANCIA_LRV_KM;
+const COLOR_TRAZO_A_PIE = 0xff7a59;
+/** Forma de los dos recorridos (x, z), esquemática: salen del módulo, dan sus vueltas y no se cruzan con nada real. */
+const FORMA_LARGA: readonly (readonly [number, number])[] = [
+  [0, 0], [22, -4], [48, -18], [72, -34], [95, -30], [104, -10], [90, 6], [62, 8], [34, 2], [8, 0],
+  [-18, 4], [-48, 9], [-84, 0], [-110, -12], [-122, -26], [-100, -32], [-70, -18], [-40, -10],
+];
+const FORMA_CORTA: readonly (readonly [number, number])[] = [
+  [0, 0], [8, -3], [15, -11], [13, -20], [4, -22], [-5, -15], [-3, -6], [2, -2],
+];
+
+/** Puntos (x, z) de una forma, escalada para que mida `largoM` de largo. Va desde el origen. */
+function puntosTrazo(forma: readonly (readonly [number, number])[], largoM: number): THREE.Vector2[] {
+  const curva = new THREE.CatmullRomCurve3(forma.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
+  const f = largoM / curva.getLength();
+  return curva.getSpacedPoints(Math.ceil(largoM * 1.5)).map((p) => new THREE.Vector2(p.x * f, p.z * f));
+}
+
+interface Trazo {
+  linea: Line2;
+  material: LineMaterial;
+  /** Número de segmentos del trazo. */
+  segmentos: number;
+  /** Punto más lejano del origen (ejes del LRV), donde va el rótulo. */
+  extremo: THREE.Vector3;
+  geometria: LineGeometry;
+}
+
+function crearTrazo(forma: readonly (readonly [number, number])[], largoM: number, color: THREE.ColorRepresentation): Trazo {
+  const puntos = puntosTrazo(forma, largoM);
+  const posiciones: number[] = [];
+  let extremo = new THREE.Vector3();
+  let lejos = -1;
+  for (const q of puntos) {
+    const x = CENTRO_TRAZOS[0] + q.x;
+    const z = CENTRO_TRAZOS[2] + q.y;
+    const y = alturaPresentacion(x, z) + 1.2;
+    posiciones.push(x, y, z);
+    if (q.length() > lejos) {
+      lejos = q.length();
+      extremo = new THREE.Vector3(x, y, z);
+    }
+  }
+  const geometria = new LineGeometry();
+  geometria.setPositions(posiciones);
+  const material = new LineMaterial({ color, linewidth: 4.5, transparent: true, depthWrite: false });
+  const linea = new Line2(geometria, material);
+  linea.frustumCulled = false;
+  linea.visible = false;
+  linea.renderOrder = 15;
+  return { linea, material, segmentos: puntos.length - 1, extremo, geometria };
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +598,9 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
   escena.name = 'presentacion_lrv';
   const camara = new THREE.PerspectiveCamera(CAMPO_VISION, 16 / 9, 0.04, LEJANO_CAMARA_LUNA_M);
   escena.add(camara);
+  // Segunda cámara para la vista dividida (escena del mando): la mitad derecha de la pantalla.
+  const camaraDer = new THREE.PerspectiveCamera(CAMPO_VISION, 1, 0.04, LEJANO_CAMARA_LUNA_M);
+  escena.add(camaraDer);
 
   const mundo = new THREE.Group();
   mundo.name = 'mundo_presentacion';
@@ -472,9 +633,14 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
   (lrv.userData.plegado as PlegadoLRV).aplicar(POSE_DESPLEGADO);
   const ruedas = lrv.userData.ruedas as RuedasLRV;
   const palanca = lrv.getObjectByName('mando_T');
+  const palancaInterruptor = lrv.getObjectByName('mando_interruptor');
   const huellas = crearHuellas(-16.5);
-  mundo.add(crearSueloPresentacion(), crearRocasPresentacion(), crearSueloNaranja(), huellas.malla, lrv);
-  apoyarLRV(lrv, 0);
+  const huellasMando = crearHuellasDinamicas();
+  huellasMando.grupo.visible = false;
+  const trazoCorto = crearTrazo(FORMA_CORTA, LARGO_TRAZO_A_PIE_M, COLOR_TRAZO_A_PIE);
+  const trazoLargo = crearTrazo(FORMA_LARGA, LARGO_TRAZO_LRV_M, COLOR_CONTORNO);
+  mundo.add(crearSueloPresentacion(), crearRocasPresentacion(), crearSueloNaranja(), huellas.malla, huellasMando.grupo, trazoCorto.linea, trazoLargo.linea, lrv);
+  apoyarLRV(lrv, 0, 0);
 
   // Contornos de las piezas registradas (lrv.ts): cuelgan del grupo de su lote, así siguen pivotes y ruedas.
   const contornos = new Map<Resalte, Contorno[]>();
@@ -496,6 +662,7 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
     panelHabilitar: { resalte: 'panelHabilitar', rayosX: true },
     baterias: { resalte: 'baterias', rayosX: true },
     mylar: { resalte: 'mylar', rayosX: false },
+    interruptor: { resalte: 'interruptor', rayosX: true },
     camaraTV: { resalte: 'camaraTV', rayosX: true },
     antenaAlta: { resalte: 'antenaAlta', rayosX: true },
     antenaBaja: { resalte: 'antenaBaja', rayosX: true },
@@ -559,6 +726,26 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
     c.centro.set(SUELO_NARANJA.x, alturaPresentacion(SUELO_NARANJA.x, SUELO_NARANJA.z) + 0.3, SUELO_NARANJA.z);
     anadir('sueloNaranja', c, mundo);
   }
+  // Navegación: el recuadro de los instrumentos de rumbo y de distancia en el panel de la consola (la esfera de rumbo y
+  // los medidores; ver consolaPiezas en lrv.ts), en ejes del LRV.
+  {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(0, 1.05, -0.63), new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3, 0, 0)), new THREE.Vector3(1, 1, 1));
+    const esquinas = [new THREE.Vector3(-0.18, 0.0, 0.045), new THREE.Vector3(0.13, 0.0, 0.045), new THREE.Vector3(0.13, 0.15, 0.045), new THREE.Vector3(-0.18, 0.15, 0.045)].map((v) => v.applyMatrix4(m));
+    const puntos: THREE.Vector3[] = [];
+    for (let k = 0; k < 4; k++) puntos.push(esquinas[k], esquinas[(k + 1) % 4]);
+    const c = contornoDeLineas(puntos, true);
+    // Cuelga del contenido del pivote de la consola (que anula el desplazamiento del pivote): coordenadas del LRV.
+    anadir('navegacion', c, lrv.getObjectByName('consola')?.children[0] ?? lrv);
+  }
+  // Rótulos de los trazos: sin contorno, solo el punto donde van.
+  for (const [resalte, trazo] of [
+    ['trazoCorto', trazoCorto],
+    ['trazoLargo', trazoLargo],
+  ] as const) {
+    const c = contornoDeLineas([new THREE.Vector3(), new THREE.Vector3()], false);
+    c.centro.copy(trazo.extremo);
+    anadir(resalte, c, mundo);
+  }
   // LRV entero (solo para el rótulo de la introducción): el centro de lo alto del LRV.
   {
     const c = contornoDeLineas([new THREE.Vector3(), new THREE.Vector3()], false);
@@ -567,6 +754,8 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
   }
 
   const composer = crearPostprocesoLuna(renderer, escena, camara);
+  let composerDer: ReturnType<typeof crearPostprocesoLuna> | null = null;
+  let dividida = false;
   let ancho = 1;
   let alto = 1;
   let posePrevia: Toma | null = null;
@@ -578,26 +767,35 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
   const _m = new THREE.Vector3();
   const _adelante = new THREE.Vector3();
 
-  const colocarCamara = (pose: Toma): void => {
-    const az = THREE.MathUtils.degToRad(pose.az);
+  /**
+   * Coloca una cámara según una toma. `sigue`: posición (x, z) y rumbo (rad) del LRV al que va pegada la toma: la
+   * posición mueve el punto de mira y el rumbo gira la cámara con él (0 = solo lo sigue, sin girar).
+   */
+  const colocarCamara = (cam: THREE.PerspectiveCamera, pose: Toma, sx = 0, sz = 0, rumbo = 0): void => {
+    const c = Math.cos(rumbo);
+    const sn = Math.sin(rumbo);
+    const az = THREE.MathUtils.degToRad(pose.az) - rumbo;
     const el = THREE.MathUtils.degToRad(pose.el);
     // La altura del punto de mira es sobre el suelo que hay debajo (el borde de Shorty levanta el terreno).
-    _m.set(pose.mira[0], pose.mira[1] + alturaPresentacion(pose.mira[0], pose.mira[2]), pose.mira[2]);
+    const mx = pose.mira[0] * c + pose.mira[2] * sn + sx;
+    const mz = -pose.mira[0] * sn + pose.mira[2] * c + sz;
+    _m.set(mx, pose.mira[1] + alturaPresentacion(mx, mz), mz);
     _p.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).multiplyScalar(pose.dist).add(_m);
     // La cámara no baja del suelo (10 cm por encima, como mínimo).
     _p.y = Math.max(_p.y, alturaPresentacion(_p.x, _p.z) + 0.1);
     mundo.localToWorld(_p);
     mundo.localToWorld(_m);
-    camara.position.copy(_p);
+    cam.position.copy(_p);
     // Mirando casi en vertical, "arriba" en pantalla es el frente del LRV.
-    if (pose.el > 80) camara.up.copy(_adelante.set(0, 0, -1).transformDirection(mundo.matrixWorld));
-    else camara.up.set(0, 1, 0);
-    camara.lookAt(_m);
+    if (pose.el > 80) cam.up.copy(_adelante.set(0, 0, -1).transformDirection(mundo.matrixWorld));
+    else cam.up.set(0, 1, 0);
+    cam.lookAt(_m);
     const fov = pose.fov ?? CAMPO_VISION;
-    if (camara.fov !== fov) {
-      camara.fov = fov;
-      camara.updateProjectionMatrix();
+    if (cam.fov !== fov) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
     }
+    cam.updateMatrixWorld();
   };
 
   const sombraSigue = (): void => {
@@ -607,44 +805,109 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
     sol.target.updateMatrixWorld();
   };
 
-  const proyectar = (c: Contorno): PosicionMarca => {
+  /** Posición en pantalla de un contorno, vista desde `cam`, que ocupa un rectángulo de la pantalla (ox, ancho de la vista). */
+  const proyectar = (c: Contorno, cam: THREE.PerspectiveCamera, ox: number, anchoVista: number): PosicionMarca => {
     c.objeto.parent?.updateWorldMatrix(true, false);
     _p.copy(c.centro);
     c.objeto.parent?.localToWorld(_p);
-    _p.project(camara);
-    return { x: ((_p.x + 1) / 2) * ancho, y: ((1 - _p.y) / 2) * alto, enPantalla: _p.z < 1 && _p.z > -1 };
+    _p.project(cam);
+    return { x: ox + ((_p.x + 1) / 2) * anchoVista, y: ((1 - _p.y) / 2) * alto, enPantalla: _p.z < 1 && _p.z > -1 };
   };
 
   const ocultarContornos = (): void => {
     for (const lista of contornos.values()) for (const c of lista) c.objeto.visible = false;
   };
 
+  /** Tamaños de las cámaras, de los pasos de render y de los contornos según haya o no vista dividida. */
+  const aplicarTamano = (): void => {
+    const anchoVista = dividida ? Math.max(1, Math.floor(ancho / 2)) : ancho;
+    camara.aspect = anchoVista / alto;
+    camara.updateProjectionMatrix();
+    composer.ajustar(anchoVista, alto);
+    if (dividida) {
+      camaraDer.aspect = anchoVista / alto;
+      camaraDer.updateProjectionMatrix();
+      composerDer ??= crearPostprocesoLuna(renderer, escena, camaraDer);
+      composerDer.ajustar(anchoVista, alto);
+    }
+    const pixeles = Math.min(window.devicePixelRatio, PIXELES_MAXIMOS);
+    for (const lista of contornos.values()) for (const c of lista) c.lineas.resolution.set(anchoVista * pixeles, alto * pixeles);
+    for (const m of [trazoCorto.material, trazoLargo.material]) m.resolution.set(anchoVista * pixeles, alto * pixeles);
+  };
+
+  const dibujarTrazo = (trazo: Trazo, intervalo: readonly [number, number], t: number): void => {
+    const u = suavizar((t - intervalo[0]) / Math.max(1e-6, intervalo[1] - intervalo[0]));
+    const n = Math.floor(u * trazo.segmentos);
+    trazo.linea.visible = n > 0;
+    trazo.geometria.instanceCount = n;
+  };
+
   return {
     actualizar({ tramo, t, dtS }) {
-      if (tramo !== tramoPrevio) {
+      const nuevoTramo = tramo !== tramoPrevio;
+      if (nuevoTramo) {
         posePrevia = ultimaPose;
         tramoPrevio = tramo;
+        huellasMando.reiniciar();
+      }
+      const quiereDividir = !!tramo.division;
+      if (quiereDividir !== dividida) {
+        dividida = quiereDividir;
+        aplicarTamano();
       }
       mundo.updateMatrixWorld(true);
 
-      // LRV: avance (escena de cierre) con las ruedas rodando, o quieto en su sitio.
+      // LRV: avance (escena de cierre) o conducido con el mando (escena del mando), con las ruedas rodando; si no, quieto.
       const metros = avanceEn(tramo, t);
-      const dz = tramo.avance ? metros - avancePrevio : 0;
+      let dz = tramo.avance ? metros - avancePrevio : 0;
       avancePrevio = tramo.avance ? metros : 0;
-      apoyarLRV(lrv, -metros);
-      ruedas.actualizar(0, dz, Math.max(dtS, 1e-3));
-      huellas.mostrarHasta(-metros + RUEDAS_LRV[0][1]);
+      let mov: MovimientoLRV | null = null;
+      if (tramo.conduccion) {
+        mov = movimientoEn(tramo.mando, t);
+        apoyarLRV(lrv, mov.x, mov.z, mov.rumbo);
+        dz = mov.v * dtS;
+        huellasMando.anadir(mov.x, mov.z, mov.rumbo);
+      } else {
+        apoyarLRV(lrv, 0, -metros);
+      }
+      ruedas.actualizar(mov?.direccionGrados ?? 0, dz, Math.max(dtS, 1e-3));
+      huellas.mostrarHasta(tramo.conduccion || tramo.trazos ? 1e6 : -metros + RUEDAS_LRV[0][1]);
+      huellasMando.grupo.visible = !!tramo.conduccion;
+      lrv.visible = !tramo.trazos;
       sombraSigue();
 
-      // Palanca del mando en T: adelante gira la parte de arriba hacia −Z; a la derecha, hacia +X.
+      // Trazos de la escena de distancias (el del LRV se dibuja más rápido: es unas diez veces más largo).
+      trazoCorto.linea.visible = false;
+      trazoLargo.linea.visible = false;
+      if (tramo.trazos) {
+        dibujarTrazo(trazoCorto, tramo.trazos.corto, t);
+        dibujarTrazo(trazoLargo, tramo.trazos.largo, t);
+      }
+
+      // Palanca del mando en T: adelante gira la parte de arriba hacia −Z; a la derecha, hacia +X. El interruptor de
+      // marcha atrás se abate al activarlo.
       const mando = mandoEn(tramo.mando, t);
       if (palanca) palanca.rotation.set(-mando.adelante * INCLINACION_MANDO, 0, -mando.lado * INCLINACION_MANDO);
+      if (palancaInterruptor) palancaInterruptor.rotation.x = THREE.MathUtils.lerp(0.45, -0.55, mando.interruptor);
 
-      const pose = poseEn(tramo.tomas, t, posePrevia);
+      // Cámaras.
+      let pose: Toma;
+      let camaraMarcas: THREE.PerspectiveCamera = camara;
+      if (tramo.division) {
+        const izq = poseEn(tramo.division.izquierda, t, null);
+        const der = poseEn(tramo.division.derecha, t, null);
+        const sx = mov?.x ?? 0;
+        const sz = mov?.z ?? 0;
+        colocarCamara(camara, izq, sx, sz, 0);
+        colocarCamara(camaraDer, der, sx, sz, mov?.rumbo ?? 0);
+        pose = der;
+        camaraMarcas = camara;
+      } else {
+        pose = poseEn(tramo.tomas, t, posePrevia);
+        colocarCamara(camara, pose, 0, tramo.camaraSigueLRV ? -metros : 0, 0);
+      }
       ultimaPose = pose;
-      colocarCamara(tramo.camaraSigueLRV ? { ...pose, mira: [pose.mira[0], pose.mira[1], pose.mira[2] - metros] } : pose);
       cielo.position.copy(camara.position);
-      camara.updateMatrixWorld();
 
       // Resaltes: cada pieza con la opacidad máxima de sus marcas con contorno.
       const opacidad = new Map<Resalte, number>();
@@ -659,31 +922,53 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
           c.lineas.opacity = a;
         }
       }
+      const mitad = Math.floor(ancho / 2);
       return tramo.marcas.map((m) => {
         const c = contornos.get(m.resalte)?.[0];
-        return c ? proyectar(c) : { x: 0, y: 0, enPantalla: false };
+        if (!c) return { x: 0, y: 0, enPantalla: false };
+        if (!tramo.division) return proyectar(c, camaraMarcas, 0, ancho);
+        return m.vista === 'derecha' ? proyectar(c, camaraDer, ancho - mitad, mitad) : proyectar(c, camara, 0, mitad);
       });
     },
     render() {
+      if (!dividida || !composerDer) {
+        composer.render();
+        return;
+      }
+      // Vista dividida: cada mitad se dibuja con su cámara en su rectángulo de la pantalla.
+      const mitad = Math.floor(ancho / 2);
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, ancho, alto);
+      renderer.clear();
+      renderer.setScissorTest(true);
+      renderer.setViewport(0, 0, mitad, alto);
+      renderer.setScissor(0, 0, mitad, alto);
       composer.render();
+      renderer.setViewport(ancho - mitad, 0, mitad, alto);
+      renderer.setScissor(ancho - mitad, 0, mitad, alto);
+      composerDer.render();
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, ancho, alto);
     },
     ajustar(nuevoAncho, nuevoAlto) {
       ancho = Math.max(1, nuevoAncho);
       alto = Math.max(1, nuevoAlto);
-      camara.aspect = ancho / alto;
-      camara.updateProjectionMatrix();
-      composer.ajustar(ancho, alto);
-      const pixeles = Math.min(window.devicePixelRatio, PIXELES_MAXIMOS);
-      for (const lista of contornos.values()) for (const c of lista) c.lineas.resolution.set(ancho * pixeles, alto * pixeles);
+      aplicarTamano();
     },
     reiniciar() {
       posePrevia = null;
       ultimaPose = null;
       tramoPrevio = null;
       avancePrevio = 0;
+      if (dividida) {
+        dividida = false;
+        aplicarTamano();
+      }
       ruedas.reiniciar();
       palanca?.rotation.set(0, 0, 0);
-      apoyarLRV(lrv, 0);
+      palancaInterruptor?.rotation.set(0.45, 0, 0);
+      apoyarLRV(lrv, 0, 0);
+      lrv.visible = true;
       ocultarContornos();
     },
   };

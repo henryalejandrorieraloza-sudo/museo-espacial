@@ -626,6 +626,10 @@ function mandos(l: Lote, palanca: Lote, consola: Lote): void {
     palanca.pieza(tuboEntre(base, cima, 0.016, 8, false), COLOR_LRV.blanco);
     palanca.pieza(tuboEntre([-0.075, cima[1], cima[2]], [0.075, cima[1], cima[2]], 0.018, 8), COLOR_LRV.blanco);
     palanca.pieza(new THREE.BoxGeometry(0.02, 0.015, 0.02), COLOR_LRV.negro, { p: [0, cima[1] + 0.02, cima[2]] });
+    // Placa del interruptor de marcha atrás, en el tubo y por detrás.
+    const y = base[1] + 0.72 * (cima[1] - base[1]);
+    const z = base[2] + 0.72 * (cima[2] - base[2]) + 0.022;
+    palanca.pieza(new THREE.BoxGeometry(0.04, 0.05, 0.008), COLOR_LRV.negro, { p: [0, y, z - 0.004], r: [0.2, 0, 0] });
   });
   parte('consola', () => consolaPiezas(consola));
 }
@@ -998,6 +1002,21 @@ function construirLRV(haciaTierraLocal: THREE.Vector3): THREE.Group {
   const pivMando = pivoteEn(PIVOTE_MANDO_LRV, 'mando_T');
   pivMando.contenido.add(construirEmpolvado(palanca));
   grupo.add(pivMando.pivote);
+  // Interruptor de marcha atrás en el tubo del mando, por detrás (hacia el conductor): una placa fija y una pequeña
+  // palanca que se abate al activarlo. // VERIFICAR: posición y forma reales del interruptor.
+  {
+    const base = BASE_MANDO;
+    const cima: V3 = [0, Y_ASIENTO + 0.32, Z_ASIENTO - 0.24];
+    const punto: V3 = [0, base[1] + 0.72 * (cima[1] - base[1]), base[2] + 0.72 * (cima[2] - base[2]) + 0.022];
+    const interruptor = nuevoLote();
+    parte('interruptor', () => {
+      interruptor.pieza(new THREE.BoxGeometry(0.014, 0.034, 0.012), COLOR_LRV.gris, { p: [punto[0], punto[1] + 0.012, punto[2] + 0.006], r: [0.2, 0, 0] });
+      interruptor.pieza(new THREE.BoxGeometry(0.01, 0.012, 0.01), COLOR_LRV.blanco, { p: [punto[0], punto[1] + 0.03, punto[2] + 0.01], r: [0.2, 0, 0] });
+    });
+    const piv = pivoteEn(punto, 'mando_interruptor');
+    piv.contenido.add(construirEmpolvado(interruptor));
+    pivMando.contenido.add(piv.pivote);
+  }
   const pivConsola = pivoteEn(BASE_CONSOLA, 'consola');
   pivConsola.contenido.add(construirEmpolvado(consola));
   grupo.add(pivConsola.pivote);
