@@ -72,7 +72,6 @@ let modoControl: ModoControl = 'camara';
 const FRASES_LUNA: Partial<Record<EstadoLuna, ClaveTexto>> = {
   sentado_en_LRV: 'luna_sentado_en_LRV',
   golpeando: 'luna_golpeando',
-  muestra_recogida: 'luna_muestra_recogida',
 };
 
 /**
@@ -99,7 +98,7 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   luna_LRV_desplegado: 'luna_LRV_desplegado_teclado',
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
   luna_golpeando: 'luna_golpeando_teclado',
-  luna_muestra_recogida: 'luna_muestra_recogida_teclado',
+  luna_mision_salida: 'luna_mision_salida_teclado',
   luna_bajado: 'luna_bajado_teclado',
   luna_bajado_muestra: 'luna_bajado_muestra_teclado',
 };
@@ -547,10 +546,12 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
   // A pie, el jugador camina y mira como en el museo; sentado, la caminata mueve el LRV y el giro solo la vista.
   if (mision !== null) {
     const aPie = mision.aPie;
+    // Misión cumplida: se puede mirar alrededor, pero no caminar (ni de lado).
+    const puedeCaminar = aPie && !mision.bloqueada;
     // A pie en la Luna, el avance tiene el tope de la Luna (luna.ts); el museo no lo usa.
-    const avancePie = aPie ? metrosAPieLuna(lectura.avanceM, lectura.dtS) : 0;
+    const avancePie = puedeCaminar ? metrosAPieLuna(lectura.avanceM, lectura.dtS) : 0;
     if (lectura.conMovimiento && !sesion.museo.enTransicion) {
-      visual.museo.moverCamara(lectura.giroGrados, avancePie, lectura.cabeceoGrados, aPie ? lectura.lateralM : 0);
+      visual.museo.moverCamara(lectura.giroGrados, avancePie, lectura.cabeceoGrados, puedeCaminar ? lectura.lateralM : 0);
     }
     aplicarLuna(sesion, {
       ahoraS,
@@ -635,7 +636,7 @@ function actualizarDespliegue(sesion: Sesion, lectura: LecturaEntrada): void {
  * del despliegue. Al recoger, el mentor cuenta el suelo y la escena lo desvanece y hunde.
  */
 function actualizarSueloNaranja(sesion: Sesion, lectura: LecturaEntrada): void {
-  const { anillo, ui, voz } = sesion;
+  const { anillo } = sesion;
   if (mision === null || sueloNaranja === null || despliegue === null) return;
   const previo = ultimoSueloS;
   ultimoSueloS = lectura.ahoraS;
@@ -661,9 +662,23 @@ function actualizarSueloNaranja(sesion: Sesion, lectura: LecturaEntrada): void {
     } else if (evento.tipo === 'recogido') {
       sueloRecogidoEnSesion = true;
       anillo.mostrar(null);
-      decirFrase(voz, ui, 'luna_suelo_recogido');
+      celebrarMision(sesion);
     }
   }
+}
+
+/**
+ * Misión cumplida: la muestra ya está en la bolsa. El mentor dice "Misión cumplida", explica por qué importó el
+ * suelo y el papel del LRV, y dice cómo volver al museo. Desde ahí el jugador se queda quieto (MisionLuna.bloquear).
+ * Las frases van en cola: se dicen en orden aunque la anterior siga sonando.
+ */
+function celebrarMision(sesion: Sesion): void {
+  if (mision === null || mision.bloqueada) return;
+  mision.bloquear();
+  const { voz, ui } = sesion;
+  decirFrase(voz, ui, 'luna_mision_cumplida');
+  decirFrase(voz, ui, 'luna_suelo_recogido');
+  decirFrase(voz, ui, 'luna_mision_salida');
 }
 
 /** Avanza la misión lunar un fotograma, actualiza la escena y reacciona a los eventos (voz, volver). */
@@ -683,7 +698,10 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
   for (const evento of eventos) {
     if (evento.tipo === 'estado') {
       const clave = FRASES_LUNA[evento.estado];
-      if (evento.estado === 'sentado_en_LRV') {
+      // Muestra por el golpe con el LRV: misma celebración que recoger el suelo con E.
+      if (evento.estado === 'muestra_recogida') {
+        celebrarMision(sesion);
+      } else if (evento.estado === 'sentado_en_LRV') {
         // La primera vez de la sesión se explican los controles; después, solo "anda más". Hasta que termine la frase,
         // caminar no mueve el LRV.
         const clave = yaDichas.has('luna_sentado_en_LRV') ? 'luna_sentado_otra' : 'luna_sentado_en_LRV';

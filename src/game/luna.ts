@@ -184,6 +184,11 @@ export class MisionLuna {
   private conMuestra: boolean;
   /** Velocidad actual del LRV (m/s, negativa al retroceder). Cambia con LRV_ACCEL y LRV_BRAKE. */
   private velocidadLRV = 0;
+  /**
+   * Misión cumplida: el jugador ya recogió la muestra y se queda donde está. No puede andar, conducir, subirse ni
+   * bajarse; sí puede mirar alrededor y aplaudir para volver al museo.
+   */
+  private bloqueadaMision = false;
 
   /**
    * `estadoInicial` por defecto es `entrando_museo`: la escena se abre con el aplauso de la vitrina
@@ -224,6 +229,17 @@ export class MisionLuna {
     return this.estadoActual === 'entrando_museo' || this.estadoActual === 'a_pie';
   }
 
+  /** Misión cumplida: el jugador ya no puede moverse ni subirse ni bajarse del LRV (ver `bloquear`). */
+  get bloqueada(): boolean {
+    return this.bloqueadaMision;
+  }
+
+  /** Bloquea la misión tras recoger la muestra: el jugador se queda quieto hasta volver al museo. */
+  bloquear(): void {
+    this.bloqueadaMision = true;
+    this.velocidadLRV = 0;
+  }
+
   distanciaRoca(): number {
     return Math.hypot(this.x - POSICION_ROCA.x, this.z - POSICION_ROCA.z);
   }
@@ -252,7 +268,7 @@ export class MisionLuna {
     // El aplauso sienta al jugador si está junto al LRV, o vuelve al museo en cualquier otro estado (SPEC 8.3 y 8.4).
     // Bajado del LRV con la muestra ya recogida, el aplauso vuelve al museo esté donde esté.
     if (entrada.aplauso) {
-      if (this.aPie && !(this.estadoActual === 'a_pie' && this.conMuestra)) {
+      if (this.aPie && !this.bloqueadaMision && !(this.estadoActual === 'a_pie' && this.conMuestra)) {
         if (entrada.lrvDesplegado === false) {
           // Plegado o desplegándose, el LRV no está donde lo espera la misión ni se puede conducir.
           eventos.push({ tipo: 'lrvPlegado' });
@@ -269,13 +285,16 @@ export class MisionLuna {
     }
 
     // Bajarse: el LRV se detiene donde está (no avanza en este fotograma) y conserva la muestra.
-    if (entrada.bajarse && PUEDE_BAJARSE.includes(this.estadoActual)) {
+    if (entrada.bajarse && !this.bloqueadaMision && PUEDE_BAJARSE.includes(this.estadoActual)) {
       this.finAgarreS = null;
       this.velocidadLRV = 0;
       ir('a_pie');
       eventos.push({ tipo: 'bajado', conMuestra: this.conMuestra });
       return eventos;
     }
+
+    // Misión cumplida: no hay conducción ni golpe. El LRV y el jugador se quedan quietos; solo cuenta el aplauso.
+    if (this.bloqueadaMision) return eventos;
 
     // Sentado (también parado), el volante mueve las ruedas. Sin manos, se quedan en el último ángulo (SPEC 6).
     if (!this.aPie && entrada.volanteGrados !== null) {
