@@ -5,16 +5,16 @@ import { EXPOSICION, crearAmbienteMuseo, crearPostproceso, type AmbienteMuseo } 
 import { ALTURA_PEDESTAL, LADO_VITRINA, RADIO_CAMINABLE, RADIO_PROYECTOR, crearRotonda, crearVitrinaArtefacto } from './arquitectura';
 import { ESCENAS, MODELOS, type ConfigModelo } from './config';
 import type { PosturaCaminata } from '../game/balanceo';
-import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, colocarLRV, crearEscenaLuna, crearPostprocesoLuna, ojosEnLRV } from './lunaEscena';
+import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, aplicarRecogidaSueloNaranja, colocarLRV, crearEscenaLuna, crearPostprocesoLuna, ojosEnLRV } from './lunaEscena';
 import type { RuedasLRV } from './lrv';
 import { crearMentor, type EstadoMentor, type GestoMentor } from './mentor';
-import { alturaLuna } from './lunaTerreno';
+import { alturaLuna, crearHundimientoSuelo } from './lunaTerreno';
 import { DURACION_DESPLIEGUE_LRV_S } from './despliegueApollo17';
 import { crearDespliegueLRV, type DespliegueVisualLRV } from './despliegueLRV';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
 import { ARQ } from './paleta';
 import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
-import { LLEGADA, LM, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M } from './sitioApollo17';
+import { LLEGADA, LM, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M, ROCA_ESTACION1 } from './sitioApollo17';
 import { crearPresentacionVisual, type EstadoPresentacionVisual, type PosicionMarca, type PresentacionVisual } from './presentacionLRV';
 
 // Toda la parte visual del museo (Three.js). La lógica de juego solo llama a `visual.museo`.
@@ -223,6 +223,11 @@ let ruedasLRV: RuedasLRV | null = null;
 let posicionPreviaLRV: { x: number; z: number } | null = null;
 /** Animación del despliegue del LRV desde la bahía del LM (despliegueLRV.ts). */
 let despliegueLRV: DespliegueVisualLRV | null = null;
+/** Suelo naranja de la estación 1 (roca_placeholder) y la función que hunde el terreno bajo él (lunaTerreno.ts). */
+let rocaLuna: THREE.Object3D | null = null;
+let hundirSueloLuna: ((progreso: number) => void) | null = null;
+/** Último progreso de la recogida aplicado a la escena (-1 = sin aplicar): evita reescribir la malla cada fotograma. */
+let progresoRecogidaLuna = -1;
 /** El LRV ya está desplegado: hasta entonces lo coloca la animación, no la misión. */
 let lrvDesplegado = true;
 /** Render de la Luna (dos pasadas y bloom). */
@@ -345,6 +350,11 @@ async function iniciar(container: HTMLElement): Promise<void> {
     if (obj) obj.visible = false;
   }
   haloRoca = nodos.get('escena_luna')?.getObjectByName('halo_roca') ?? null;
+  // Suelo naranja: la mancha y los fragmentos (roca_placeholder) y el terreno que se hunde al recoger la muestra.
+  rocaLuna = nodos.get('escena_luna')?.getObjectByName('roca_placeholder') ?? null;
+  const terrenoLuna = nodos.get('escena_luna')?.getObjectByName('terreno_luna');
+  hundirSueloLuna = terrenoLuna instanceof THREE.Mesh ? crearHundimientoSuelo(terrenoLuna, ROCA_ESTACION1.x, ROCA_ESTACION1.z) : null;
+  progresoRecogidaLuna = -1;
   lrvLuna = nodos.get('escena_luna')?.getObjectByName('lrv_placeholder') ?? null;
   ruedasLRV = (lrvLuna?.userData.ruedas as RuedasLRV | undefined) ?? null;
   despliegueLRV = lrvLuna ? crearDespliegueLRV(lrvLuna) : null;
@@ -731,6 +741,18 @@ function poseDespliegueLRV(tiempoS: number, dtS: number): void {
   if (lrvDesplegado) posicionPreviaLRV = null;
 }
 
+/**
+ * Recogida de la muestra del suelo naranja (game/sueloNaranja.ts): `progreso` 0 = intacto, 1 = retirado y hundido.
+ * Solo toca la escena cuando cambia el progreso.
+ */
+function recogerSueloNaranja(progreso: number): void {
+  const p = THREE.MathUtils.clamp(progreso, 0, 1);
+  if (p === progresoRecogidaLuna) return;
+  progresoRecogidaLuna = p;
+  hundirSueloLuna?.(p);
+  if (rocaLuna) aplicarRecogidaSueloNaranja(rocaLuna, p);
+}
+
 /** Coloca las manos del avatar según las manos detectadas en este fotograma (SPEC 5.5). */
 function actualizarManos(manos: ManoDetectada[], w: number, h: number, escala: number, opciones: OpcionesManos): void {
   if (!camara) return;
@@ -785,6 +807,7 @@ export const visual = {
     iniciar,
     actualizarLuna,
     poseDespliegueLRV,
+    recogerSueloNaranja,
     actualizarManos,
     ocultarManos,
     mostrarVitrina,

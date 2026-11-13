@@ -12,16 +12,14 @@ export interface JuegoUi {
   /** True si hay un subtítulo en pantalla ahora mismo. */
   subtitulosVisibles(): boolean;
   /** Indicación “Aplaude para entrar”. null la oculta. No depende del temporizador de los subtítulos. */
-  indicarEntrar(texto: string | null): void;
   mostrarMision(titulo: string): void;
   ocultarMision(): void;
 }
 
-/** Overlay DOM sobre la escena: avisos, subtítulos, indicación de entrar y la pantalla temporal de misión. */
+/** Overlay DOM sobre la escena: avisos, subtítulos, y la pantalla temporal de misión. */
 export function crearUi(onVolver: () => void): JuegoUi {
   const aviso = requireEl('aviso');
   const subtitulos = requireEl('subtitulos');
-  const entrar = requireEl('entrar');
   const mision = requireEl('mision');
   const misionTitulo = requireEl('misionTitulo');
   const volver = requireEl<HTMLButtonElement>('volver');
@@ -38,10 +36,6 @@ export function crearUi(onVolver: () => void): JuegoUi {
     aviso(texto) {
       aviso.textContent = texto ?? '';
       aviso.hidden = texto === null;
-    },
-    indicarEntrar(texto) {
-      entrar.textContent = texto ?? '';
-      entrar.hidden = texto === null;
     },
     subtitulos(texto) {
       window.clearTimeout(temporizadorSubtitulos);

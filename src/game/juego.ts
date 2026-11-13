@@ -21,6 +21,7 @@ import { cargarControl, cargarOpciones, guardarControl, guardarOpciones, type Mo
 import { Museo, type EventoMuseo } from './museo';
 import { MisionLuna, metrosAPieLuna, type EntradaLuna, type EstadoLuna } from './luna';
 import { DespliegueLRV } from './despliegueLRV';
+import { SueloNaranja } from './sueloNaranja';
 import { BalanceoCaminata, type EntradaBalanceo } from './balanceo';
 import type { FaseDespliegueLRV } from '../visual/despliegueApollo17';
 import { crearAnillo, type AnilloUi } from '../ui/anillo';
@@ -33,6 +34,23 @@ let mision: MisionLuna | null = null;
 let despliegue: DespliegueLRV | null = null;
 /** Instante (s) de la última vuelta del despliegue: la animación avanza con el reloj, haya o no fotograma nuevo. */
 let ultimoDespliegueS: number | null = null;
+/** Suelo naranja de la estación 1 de la misión lunar activa (game/sueloNaranja.ts). */
+let sueloNaranja: SueloNaranja | null = null;
+/** Instante (s) de la última vuelta del suelo naranja, para su reloj (igual que el despliegue). */
+let ultimoSueloS: number | null = null;
+/**
+ * La muestra del suelo naranja ya se recogió en esta sesión de la página: al volver a la misión el suelo sigue
+ * hundido y sin halo ni avisos. Se pierde al recargar la página.
+ */
+let sueloRecogidoEnSesion = false;
+/** La voz ya dijo que hay que mantener E para desplegar el LRV: hasta entonces, E no despliega. */
+let instruccionDesplegarDicha = false;
+/** Frases que solo se dicen una vez en la sesión de la página (ver decirUnaVez). */
+const yaDichas = new Set<ClaveTexto>();
+/** La voz ya dijo "Aprieta espacio para subirte" en esta visita: hasta entonces, el aplauso no sube al LRV. */
+let subidaLista = false;
+/** La voz ya explicó cómo conducir en esta visita: hasta entonces, caminar no mueve el LRV. */
+let conduccionLista = false;
 /** Tiempo máximo (s) que avanza el despliegue en una vuelta, para no saltar tras una pausa. */
 const DT_MAX_DESPLIEGUE_S = 0.1;
 
@@ -53,7 +71,6 @@ let modoControl: ModoControl = 'camara';
 /** Frase de voz de cada estado de la misión. `entrando_museo` se dice al abrir la escena, no aquí. */
 const FRASES_LUNA: Partial<Record<EstadoLuna, ClaveTexto>> = {
   sentado_en_LRV: 'luna_sentado_en_LRV',
-  cerca_de_roca: 'luna_cerca_de_roca',
   golpeando: 'luna_golpeando',
   muestra_recogida: 'luna_muestra_recogida',
 };
@@ -80,7 +97,6 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   luna_entrando_museo: 'luna_entrando_museo_teclado',
   luna_lejos_LRV: 'luna_lejos_LRV_teclado',
   luna_LRV_desplegado: 'luna_LRV_desplegado_teclado',
-  luna_sentado_en_LRV: 'luna_sentado_en_LRV_teclado',
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
   luna_golpeando: 'luna_golpeando_teclado',
   luna_muestra_recogida: 'luna_muestra_recogida_teclado',
@@ -114,35 +130,55 @@ let habla: Habla | null = null;
 /** El mentor está hablando ahora mismo (lo dice la sincronía de la voz). */
 let mentorHablando = false;
 /** Textos de pantalla que se calculan al mostrarlos: se guarda su clave para volver a leerlos al cambiar de idioma. */
-let claveEntrar: ClaveTexto | null = null;
 let claveMision: ClaveTexto | null = null;
 
 /** Explica `clave` con voz y subtítulos. Sin voz, el subtítulo sale igual. No corta la anterior: `voz.hablar` la reemplaza. */
+/** Tiempo (ms) que el subtítulo sigue en pantalla después de que termina la voz. */
+const RETRASO_QUITAR_SUBTITULOS_MS = 1200;
+
 function hablar(voz: Voz, ui: JuegoUi, clave: ClaveTexto, alTerminar?: () => void, completo = false): void {
   const h: Habla = { clave, alTerminar, completo, frase: -1 };
   habla = h;
+  // Al terminar la voz, el subtítulo se quita con un poco de retraso, salvo que ya haya empezado otra explicación.
+  const alAcabar = (): void => {
+    window.setTimeout(() => {
+      if (habla !== h) return;
+      habla = null;
+      ui.subtitulos(null);
+    }, RETRASO_QUITAR_SUBTITULOS_MS);
+    alTerminar?.();
+  };
   if (completo) {
     ui.subtitulos(texto(clave));
-    voz.hablar(textoGuion(clave), alTerminar);
+    voz.hablar(textoGuion(clave), alAcabar);
     return;
   }
-  voz.hablar(textoGuion(clave), alTerminar, (frase) => {
+  voz.hablar(textoGuion(clave), alAcabar, (frase) => {
     h.frase++;
     ui.subtitulos(frase);
   });
 }
 
+/** Dice una frase solo la primera vez de la sesión; si ya se dijo, sigue con `alTerminar` de inmediato. */
+function decirUnaVez(sesion: Sesion, clave: ClaveTexto, alTerminar?: () => void): void {
+  if (yaDichas.has(clave)) {
+    alTerminar?.();
+    return;
+  }
+  yaDichas.add(clave);
+  decirFrase(sesion.voz, sesion.ui, clave, alTerminar);
+}
+
 /** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. */
-function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto): void {
+function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto, alTerminar?: () => void): void {
   voz.cancelar();
-  hablar(voz, ui, clave);
+  hablar(voz, ui, clave, alTerminar);
 }
 
 /** Vuelve a leer en el idioma nuevo todo lo que ya está en pantalla. */
 function releerTextos(sesion: Sesion): void {
   const { ui, voz } = sesion;
   requireEl('ayuda').textContent = texto('ayuda');
-  if (claveEntrar) ui.indicarEntrar(texto(claveEntrar));
   if (claveMision) ui.mostrarMision(t(claveMision));
   if (!habla) return;
   if (mentorHablando) {
@@ -184,21 +220,13 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
       case 'vitrinaSeleccionada':
         // El mentor explica la vitrina frase a frase; cada frase va como subtítulo al empezar.
         // Al terminar la última (no antes) se habilita entrar (SPEC 7.2).
-        ui.indicarEntrar(null);
-        claveEntrar = null;
         hablar(voz, ui, evento.id, () => museo.terminoVoz(evento.id));
-        break;
-      case 'listoParaEntrar':
-        claveEntrar = 'entrar_aplauso';
-        ui.indicarEntrar(texto('entrar_aplauso'));
         break;
       case 'vitrinaDeseleccionada':
         // Sin vitrina seleccionada no hay explicación ni entrada: se corta la voz y los textos.
         voz.cancelar();
         habla = null;
         ui.subtitulos(null);
-        ui.indicarEntrar(null);
-        claveEntrar = null;
         break;
       case 'presentacionAbierta':
         // La animación del LRV entre la vitrina y la misión (game/presentacionLRV.ts). Sin entradas del museo; Enter
@@ -206,8 +234,6 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         voz.cancelar();
         habla = null;
         ui.subtitulos(null);
-        ui.indicarEntrar(null);
-        claveEntrar = null;
         requireEl('ayuda').hidden = true;
         presentacion = new PresentacionLRV();
         ultimaPresentacionS = null;
@@ -227,19 +253,24 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         voz.cancelar();
         habla = null;
         ui.subtitulos(null);
-        ui.indicarEntrar(null);
-        claveEntrar = null;
         if (evento.mision === 'luna') {
           // Misión lunar (SPEC 8): sin cartel de "en construcción". El primer aplauso dentro sienta al jugador.
           mision = new MisionLuna();
           // El LRV llega plegado en la bahía del LM: hay que mantener E para desplegarlo.
           despliegue = new DespliegueLRV();
           ultimoDespliegueS = null;
+          sueloNaranja = new SueloNaranja(sueloRecogidoEnSesion);
+          ultimoSueloS = null;
+          visual.museo.recogerSueloNaranja(sueloRecogidoEnSesion ? 1 : 0);
           listoPendiente = false;
-          claveEntrar = 'luna_mantener_E';
-          ui.indicarEntrar(texto(claveEntrar));
+          // E no despliega nada hasta que la voz y los subtítulos hayan dicho cómo hacerlo.
+          instruccionDesplegarDicha = false;
+          subidaLista = false;
+          conduccionLista = false;
           cursorUi.mostrar(false);
-          decirFrase(voz, ui, 'luna_entrando_museo');
+          decirFrase(voz, ui, 'luna_entrando_museo', () => {
+            instruccionDesplegarDicha = true;
+          });
         } else {
           claveMision = 'escena_marte_construccion';
           ui.mostrarMision(t(claveMision));
@@ -249,11 +280,8 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         // Se quita el texto de la escena y el mentor da su conclusión (voz y subtítulos).
         mision = null;
         despliegue = null;
+        sueloNaranja = null;
         anillo.mostrar(null);
-        if (claveEntrar === 'luna_mantener_E') {
-          claveEntrar = null;
-          ui.indicarEntrar(null);
-        }
         ui.ocultarMision();
         claveMision = null;
         hablar(voz, ui, 'regreso_museo', undefined, true);
@@ -339,6 +367,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     actualizarBalanceo(balanceo, sesion, lectura);
     dibujarManos(sesion, lectura);
     actualizarDespliegue(sesion, lectura);
+    actualizarSueloNaranja(sesion, lectura);
     actualizarPresentacion(sesion, ahoraS);
     if (lectura.listo && lectura.hayDatos) aplicarLectura(sesion, lectura);
     requestAnimationFrame(bucle);
@@ -369,11 +398,19 @@ function narrarPresentacion(sesion: Sesion, clave: ClaveTexto, alTerminar: () =>
   voz.cancelar();
   frasePresentacion = null;
   ui.subtitulos(null);
-  voz.hablar(tGuion(clave), alTerminar, (frase) => {
-    if (!conSubtitulos) return;
-    frasePresentacion = frase;
-    ui.subtitulos(opciones.subtitulosPresentacion ? frase : null);
-  });
+  voz.hablar(
+    tGuion(clave),
+    () => {
+      // Al terminar la voz, la última frase deja de ser subtítulo: pulsar C después no la muestra muda.
+      frasePresentacion = null;
+      alTerminar();
+    },
+    (frase) => {
+      if (!conSubtitulos) return;
+      frasePresentacion = frase;
+      ui.subtitulos(opciones.subtitulosPresentacion ? frase : null);
+    },
+  );
 }
 
 /** Reacciona a los eventos de la presentación: frase de cada tramo, "Estás listo" y paso a la misión. */
@@ -488,13 +525,16 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
     aplicarLuna(sesion, {
       ahoraS,
       dtS: lectura.dtS,
-      aplauso: lectura.aplauso,
-      metros: aPie ? 0 : lectura.avanceM,
+      // A pie con el LRV ya desplegado, el aplauso no sube hasta que la voz diga cómo hacerlo.
+      aplauso: lectura.aplauso && (!aPie || subidaLista || despliegue?.desplegado !== true),
+      // Sentado, caminar mueve el LRV solo cuando la voz ya explicó cómo conducir.
+      metros: aPie || !conduccionLista ? 0 : lectura.avanceM,
       jugador: visual.museo.posicionJugador(),
       volanteGrados: lectura.volanteGrados,
       velocidadGolpeHombrosS: lectura.golpeHombrosS,
       agarreNuevo: lectura.agarreNuevo,
-      bajarse: lectura.bajarse,
+      // Mientras suena la explicación de los controles (la primera vez al subirte), B no baja del LRV.
+      bajarse: lectura.bajarse && !(mentorHablando && habla?.clave === 'luna_sentado_en_LRV'),
       lrvDesplegado: despliegue?.desplegado ?? true,
     });
     return;
@@ -533,17 +573,17 @@ function actualizarDespliegue(sesion: Sesion, lectura: LecturaEntrada): void {
   const enTransicion = sesion.museo.enTransicion;
   const dtS = previo === null || enTransicion ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, lectura.ahoraS - previo));
   const estadoPrevio = despliegue.estado;
-  const eventos = despliegue.actualizar(dtS, lectura.listo && lectura.desplegarMantenido && !enTransicion);
-  anillo.mostrar(despliegue.estado === 'plegado' && despliegue.anillo > 0 ? despliegue.anillo : null);
+  const eventos = despliegue.actualizar(dtS, lectura.listo && lectura.desplegarMantenido && !enTransicion && instruccionDesplegarDicha);
+  // Solo mientras se pliega (y en el fotograma en que se completa, para ocultarlo): después, el anillo es de la recogida.
+  if (estadoPrevio === 'plegado' || despliegue.estado === 'plegado') {
+    anillo.mostrar(despliegue.estado === 'plegado' && despliegue.anillo > 0 ? despliegue.anillo : null);
+  }
   // Plegado, la pose no cambia (entrarEscena ya lo dejó en la bahía); después de terminar, la lleva la misión.
   if (estadoPrevio === 'desplegando' || despliegue.estado === 'desplegando') {
     visual.museo.poseDespliegueLRV(despliegue.tiempoS, dtS);
   }
   for (const evento of eventos) {
-    if (evento.tipo === 'iniciado') {
-      claveEntrar = null;
-      ui.indicarEntrar(null);
-    } else if (evento.tipo === 'fase') {
+    if (evento.tipo === 'fase') {
       const clave = FRASES_DESPLIEGUE[evento.fase];
       if (clave) decirFrase(voz, ui, clave);
     } else if (evento.tipo === 'terminado') {
@@ -552,7 +592,47 @@ function actualizarDespliegue(sesion: Sesion, lectura: LecturaEntrada): void {
   }
   if (listoPendiente && !mentorHablando) {
     listoPendiente = false;
-    decirFrase(voz, ui, 'luna_LRV_desplegado');
+    // Hasta que la voz diga "Aprieta espacio para subirte", el aplauso no sube al LRV.
+    decirFrase(voz, ui, 'luna_LRV_desplegado', () => {
+      subidaLista = true;
+    });
+  }
+}
+
+/**
+ * Suelo naranja de la estación 1 (game/sueloNaranja.ts), en cada vuelta del bucle como el despliegue. Con el LRV
+ * desplegado: avisa al acercarse (voz y subtítulos, dos frases) y, a pie dentro de la zona, mantener E llena el anillo
+ * del despliegue. Al recoger, el mentor cuenta el suelo y la escena lo desvanece y hunde.
+ */
+function actualizarSueloNaranja(sesion: Sesion, lectura: LecturaEntrada): void {
+  const { anillo, ui, voz } = sesion;
+  if (mision === null || sueloNaranja === null || despliegue === null) return;
+  const previo = ultimoSueloS;
+  ultimoSueloS = lectura.ahoraS;
+  const enTransicion = sesion.museo.enTransicion;
+  const dtS = previo === null || enTransicion ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, lectura.ahoraS - previo));
+  const aPie = mision.aPie;
+  const eventos = sueloNaranja.update({
+    dtS,
+    jugador: visual.museo.posicionJugador(),
+    lrv: mision.posicion,
+    aPie,
+    manteniendoE: lectura.listo && lectura.desplegarMantenido && !enTransicion,
+    activo: despliegue.desplegado,
+  });
+  // Con el LRV plegado, el anillo lo lleva el despliegue: aquí solo se dibuja después de desplegar.
+  if (despliegue.desplegado) anillo.mostrar(sueloNaranja.anilloProgreso > 0 ? sueloNaranja.anilloProgreso : null);
+  visual.museo.recogerSueloNaranja(sueloNaranja.hundimiento);
+  for (const evento of eventos) {
+    if (evento.tipo === 'cercania') {
+      decirUnaVez(sesion, 'luna_suelo_junto', () => decirUnaVez(sesion, 'luna_suelo_bajate'));
+    } else if (evento.tipo === 'puedeRecoger') {
+      decirUnaVez(sesion, 'luna_suelo_manten');
+    } else if (evento.tipo === 'recogido') {
+      sueloRecogidoEnSesion = true;
+      anillo.mostrar(null);
+      decirFrase(voz, ui, 'luna_suelo_recogido');
+    }
   }
 }
 
@@ -567,16 +647,30 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
     direccionGrados: mision.direccionGrados,
     dtS: entrada.dtS,
     sentado: !mision.aPie,
-    haloVisible: mision.haloVisible,
+    // El halo azul marca el suelo naranja: desaparece al recoger la muestra (y al volver a la misión, sigue oculto).
+    haloVisible: mision.haloVisible && !(sueloNaranja?.recogidoYa ?? false),
   });
   for (const evento of eventos) {
     if (evento.tipo === 'estado') {
       const clave = FRASES_LUNA[evento.estado];
-      if (clave) decirFrase(sesion.voz, sesion.ui, clave);
+      if (evento.estado === 'sentado_en_LRV') {
+        // La primera vez de la sesión se explican los controles; después, solo "anda más". Hasta que termine la frase,
+        // caminar no mueve el LRV.
+        const clave = yaDichas.has('luna_sentado_en_LRV') ? 'luna_sentado_otra' : 'luna_sentado_en_LRV';
+        yaDichas.add('luna_sentado_en_LRV');
+        decirFrase(sesion.voz, sesion.ui, clave, () => {
+          conduccionLista = true;
+        });
+      } else if (clave) {
+        decirFrase(sesion.voz, sesion.ui, clave);
+      }
     } else if (evento.tipo === 'golpeFallido') {
       decirFrase(sesion.voz, sesion.ui, 'luna_golpe_fallido');
     } else if (evento.tipo === 'bajado') {
-      decirFrase(sesion.voz, sesion.ui, evento.conMuestra ? 'luna_bajado_muestra' : 'luna_bajado');
+      // La primera bajada de la sesión dice que te bajaste; las siguientes, solo que estás afuera.
+      const clave = yaDichas.has('luna_te_bajaste') ? 'luna_afuera' : 'luna_te_bajaste';
+      yaDichas.add('luna_te_bajaste');
+      decirFrase(sesion.voz, sesion.ui, clave);
     } else if (evento.tipo === 'lejosDelLRV') {
       decirFrase(sesion.voz, sesion.ui, 'luna_lejos_LRV');
     } else if (evento.tipo === 'lrvPlegado') {

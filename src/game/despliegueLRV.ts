@@ -10,6 +10,16 @@ export const SEGUNDOS_MANTENER_DESPLEGAR = 3;
 /** Tiempo (s) en que el anillo lleno se vacía al soltar E antes de tiempo. */
 export const SEGUNDOS_VACIAR_ANILLO = 0.35;
 
+/**
+ * Anillo de "mantener E" (despliegue del LRV y recogida de muestras, game/sueloNaranja.ts). Sube con
+ * SEGUNDOS_MANTENER_DESPLEGAR mientras `manteniendo`; si no, baja en SEGUNDOS_VACIAR_ANILLO. Devuelve el nuevo progreso (0–1).
+ */
+export function avanzarAnilloMantener(progreso: number, dtS: number, manteniendo: boolean): number {
+  const dt = Math.max(0, dtS);
+  if (manteniendo) return Math.min(1, progreso + dt / SEGUNDOS_MANTENER_DESPLEGAR);
+  return Math.max(0, progreso - dt / SEGUNDOS_VACIAR_ANILLO);
+}
+
 export type EstadoDespliegue = 'plegado' | 'desplegando' | 'desplegado';
 
 export type EventoDespliegue =
@@ -54,11 +64,7 @@ export class DespliegueLRV {
     const dt = Math.max(0, dtS);
     const eventos: EventoDespliegue[] = [];
     if (this.estadoActual === 'plegado') {
-      if (manteniendo) {
-        this.progresoAnillo = Math.min(1, this.progresoAnillo + dt / SEGUNDOS_MANTENER_DESPLEGAR);
-      } else {
-        this.progresoAnillo = Math.max(0, this.progresoAnillo - dt / SEGUNDOS_VACIAR_ANILLO);
-      }
+      this.progresoAnillo = avanzarAnilloMantener(this.progresoAnillo, dt, manteniendo);
       if (this.progresoAnillo < 1) return eventos;
       // Anillo completo: se bloquea E y empieza la animación en el siguiente fotograma.
       this.progresoAnillo = 0;

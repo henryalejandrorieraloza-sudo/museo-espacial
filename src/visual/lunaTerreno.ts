@@ -473,6 +473,62 @@ export function crearSuelo(): THREE.Group {
   return grupo;
 }
 
+/** Radio (m) de la depresión que deja la muestra recogida: un poco más que la mancha naranja (2.1 m). */
+export const RADIO_HUNDIMIENTO_M = 3.2;
+/** Profundidad (m) en el centro de la depresión. Estimación de partida, a ojo. */
+export const PROFUNDIDAD_HUNDIMIENTO_M = 0.3;
+
+/**
+ * Desnivel (0–1) de la depresión a (dx, dz) del centro: 1 en el centro y 0 en el borde, con pendiente nula en el borde
+ * (C¹), así que el hundimiento no tiene escalón. Fuera del radio vale 0.
+ */
+export function desnivelHundimiento(dx: number, dz: number): number {
+  const u2 = (dx * dx + dz * dz) / (RADIO_HUNDIMIENTO_M * RADIO_HUNDIMIENTO_M);
+  return u2 < 1 ? (1 - u2) * (1 - u2) : 0;
+}
+
+/**
+ * Prepara el hundimiento del suelo alrededor de (cx, cz) en la malla del terreno. Devuelve una función que, con
+ * `progreso` (0 = suelo intacto, 1 = hundido del todo), mueve solo los vértices dentro del radio y ajusta sus normales
+ * para que el sombreado siga la cuenca. Los vértices y sus normales base se guardan al preparar.
+ */
+export function crearHundimientoSuelo(malla: THREE.Mesh, cx: number, cz: number): (progreso: number) => void {
+  const geo = malla.geometry;
+  const posicion = geo.getAttribute('position') as THREE.BufferAttribute;
+  const normal = geo.getAttribute('normal') as THREE.BufferAttribute;
+  const dentro: number[] = [];
+  for (let i = 0; i < posicion.count; i++) {
+    if (Math.hypot(posicion.getX(i) - cx, posicion.getZ(i) - cz) < RADIO_HUNDIMIENTO_M) dentro.push(i);
+  }
+  const alturaBase = dentro.map((i) => posicion.getY(i));
+  const normalBase = dentro.map((i) => [normal.getX(i), normal.getY(i), normal.getZ(i)]);
+  let ultimo = -1;
+  const R2 = RADIO_HUNDIMIENTO_M * RADIO_HUNDIMIENTO_M;
+
+  return (progreso: number): void => {
+    const p = THREE.MathUtils.clamp(progreso, 0, 1);
+    if (p === ultimo) return;
+    ultimo = p;
+    // Caída suave: smoothstep en el tiempo para que empiece y acabe sin tirón.
+    const f = p * p * (3 - 2 * p);
+    dentro.forEach((i, k) => {
+      const dx = posicion.getX(i) - cx;
+      const dz = posicion.getZ(i) - cz;
+      const u2 = (dx * dx + dz * dz) / R2;
+      const w = u2 < 1 ? (1 - u2) * (1 - u2) : 0;
+      posicion.setY(i, alturaBase[k] - PROFUNDIDAD_HUNDIMIENTO_M * f * w);
+      // Pendiente del desnivel: ∂Δy/∂x = 4·D·f·dx·(1−u²)/R². La normal base se corrige restándole esa pendiente.
+      const pendienteX = (4 * PROFUNDIDAD_HUNDIMIENTO_M * f * dx * (u2 < 1 ? 1 - u2 : 0)) / R2;
+      const pendienteZ = (4 * PROFUNDIDAD_HUNDIMIENTO_M * f * dz * (u2 < 1 ? 1 - u2 : 0)) / R2;
+      const [nx, ny, nz] = normalBase[k];
+      const longitud = Math.hypot(nx - pendienteX, ny, nz - pendienteZ);
+      normal.setXYZ(i, (nx - pendienteX) / longitud, ny / longitud, (nz - pendienteZ) / longitud);
+    });
+    posicion.needsUpdate = true;
+    normal.needsUpdate = true;
+  };
+}
+
 /** Ruido con crestas (0–1): líneas afiladas donde el ruido de valor cruza 0.5. Da espolones y aristas. */
 function crestas(x: number, z: number): number {
   return 1 - Math.abs(2 * ruido2(x, z) - 1);

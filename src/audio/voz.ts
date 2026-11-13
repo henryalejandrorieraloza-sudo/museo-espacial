@@ -16,6 +16,12 @@ export const CARACTERES_POR_SEGUNDO = 15;
 /** Velocidad y tono de la síntesis del navegador (1 = normal). */
 export const RITMO_VOZ = 0.95;
 export const TONO_VOZ = 0.92;
+/** Tiempo máximo (ms) que se espera a que el navegador cargue la lista de voces antes de hablar. */
+const ESPERA_VOCES_MS = 1500;
+/** Pausa (ms) entre cancelar la voz anterior y lanzar la nueva: Chrome puede perder una frase si no hay pausa. */
+const RETRASO_TRAS_CANCELAR_MS = 80;
+/** Si una frase no empieza en este tiempo (ms), se cancela y se pide otra vez una sola vez. */
+const ESPERA_INICIO_FRASE_MS = 1500;
 /** Margen (ms) que se da a una frase con voz antes de darla por perdida si nunca llega su evento de fin. */
 const MARGEN_VIGILANCIA_MS = 5000;
 
@@ -187,7 +193,9 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
           if (elegida) utterance.voice = elegida;
           frases.push(utterance);
           let conEventosDePalabra = false;
+          let comenzada = false;
           utterance.onstart = () => {
+            comenzada = true;
             // Si en 0.7 s no ha llegado ningún evento de palabra, este navegador no los envía: se estima.
             temporizadoresCue.push(
               window.setTimeout(() => {
@@ -202,13 +210,27 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
           };
           utterance.onend = terminarFrase;
           // Un error no debe dejar el flujo parado: la frase sigue con el temporizador de respaldo.
-          utterance.onerror = () => {
+          utterance.onerror = (e) => {
+            if (!hecha && id === vigente) console.warn('Voz: error de síntesis, sigue el temporizador:', e.error, frase.texto);
             if (!hecha && id === vigente) {
               programarEstimados(0);
               programar(duracionRespaldoMs(frase.texto), terminarFrase);
             }
           };
           sintesis.speak(utterance);
+          // Si la frase no ha empezado a sonar, se cancela y se pide otra vez una sola vez.
+          temporizadoresCue.push(
+            window.setTimeout(() => {
+              if (id !== vigente || hecha || comenzada) return;
+              console.warn('Voz: la frase no empezó, se vuelve a pedir:', frase.texto);
+              try {
+                sintesis.cancel();
+                sintesis.speak(utterance);
+              } catch {
+                // Sin reintento: queda el temporizador de respaldo.
+              }
+            }, ESPERA_INICIO_FRASE_MS),
+          );
           // Vigilancia: si el navegador nunca envía el evento de fin, la frase avanza igualmente.
           programar(duracionRespaldoMs(frase.texto) + MARGEN_VIGILANCIA_MS, terminarFrase);
         } catch {
@@ -224,7 +246,30 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
         } catch {
           // Nada que cancelar si el navegador no tiene voz.
         }
-        siguiente();
+        // Chrome carga la lista de voces tras la primera consulta: sin esperarla, la explicación saldría con
+        // subtítulos y sin voz. Si la lista tarda más de ESPERA_VOCES_MS, se sigue igualmente (SPEC 7.2).
+        // Chrome puede descartar una frase lanzada justo después de cancel(): se deja un instante.
+        window.setTimeout(() => {
+          if (id !== vigente) return;
+          esperarVoces(() => {
+            if (id === vigente) siguiente();
+          });
+        }, RETRASO_TRAS_CANCELAR_MS);
+      };
+
+      /** Llama a `cont` cuando hay voces, o al cabo de ESPERA_VOCES_MS si no llegan. */
+      const esperarVoces = (cont: () => void): void => {
+        if (!sintesis || hayVoces()) return cont();
+        let hecho = false;
+        const listo = (): void => {
+          if (hecho) return;
+          hecho = true;
+          window.clearTimeout(corte);
+          sintesis.removeEventListener?.('voiceschanged', listo);
+          cont();
+        };
+        const corte = window.setTimeout(listo, ESPERA_VOCES_MS);
+        sintesis.addEventListener?.('voiceschanged', listo);
       };
 
       // Audio grabado, si existe para este texto; si falla (carga, formato, bloqueo), sigue con la síntesis.

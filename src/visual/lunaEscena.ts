@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import type { Postproceso } from './ambiente';
 import { CAPA_LEJOS, DIRECCION_SOL, DIRECCION_TIERRA, crearCielo } from './cielo';
 import { BATALLA_LRV, OJOS_COMANDANTE, RUEDAS_LRV, VIA_LRV, crearLRVLuna } from './lrv';
-import { alturaLuna, crearMacizos, crearSuelo } from './lunaTerreno';
+import { PROFUNDIDAD_HUNDIMIENTO_M, alturaLuna, crearMacizos, crearSuelo, desnivelHundimiento } from './lunaTerreno';
 import { crearModuloLunar } from './moduloLunar';
 import { SUELO_LUNA, geometriaRoca, tinte } from './paleta';
 import { crearMaterialRoca } from './regolito';
@@ -53,7 +53,7 @@ export const PIXELES_MAXIMOS = 1.25;
 /** Halo azul celeste (SPEC 10): color y brillo constantes, sin iluminación ni bloom (no ilumina nada alrededor). */
 export const COLOR_HALO = 0x87ceeb;
 export const BRILLO_HALO = 1.3;
-const RADIO_HALO = 0.75;
+const RADIO_HALO = 2.8;
 /** Sombras: caja de ±LADO_SOMBRA_M alrededor del jugador, con mapa de TAMANO_MAPA_SOMBRA píxeles. */
 const LADO_SOMBRA_M = 36;
 const TAMANO_MAPA_SOMBRA = 2048;
@@ -165,6 +165,9 @@ function crearSueloNaranjaConHalo(): THREE.Group {
     fragmento.position.set(x, alturaLuna(cx + x, cz + z) - y0 + tam * 0.3, z);
     fragmento.scale.set(tam, tam * (0.55 + azar() * 0.35), tam * (0.8 + azar() * 0.4));
     fragmento.rotation.set(azar() * 3, azar() * 3, azar() * 3);
+    // Escala y altura de reposo, para retirar el fragmento al recoger la muestra (aplicarRecogidaSueloNaranja).
+    fragmento.userData.escala = fragmento.scale.clone();
+    fragmento.userData.alturaBase = fragmento.position.y;
     fragmento.castShadow = true;
     fragmento.receiveShadow = true;
     grupo.add(fragmento);
@@ -179,6 +182,28 @@ function crearSueloNaranjaConHalo(): THREE.Group {
   grupo.add(halo);
   grupo.position.set(cx, y0, cz);
   return grupo;
+}
+
+/**
+ * Recogida de la muestra (game/sueloNaranja.ts): la mancha naranja se desvanece y los fragmentos se encogen y se
+ * hunden con la depresión del terreno (lunaTerreno.ts). `progreso`: 0 = suelo intacto, 1 = retirado del todo.
+ */
+export function aplicarRecogidaSueloNaranja(roca: THREE.Object3D, progreso: number): void {
+  const p = THREE.MathUtils.clamp(progreso, 0, 1);
+  roca.traverse((obj) => {
+    if (obj.name === 'suelo_naranja' && obj instanceof THREE.Mesh) {
+      const material = obj.material as THREE.MeshStandardMaterial;
+      material.opacity = 1 - p;
+      obj.visible = p < 1;
+      return;
+    }
+    const escala = obj.userData.escala as THREE.Vector3 | undefined;
+    if (!escala || !(obj instanceof THREE.Mesh)) return;
+    obj.scale.copy(escala).multiplyScalar(1 - p);
+    const alturaBase = obj.userData.alturaBase as number;
+    obj.position.y = alturaBase - PROFUNDIDAD_HUNDIMIENTO_M * desnivelHundimiento(obj.position.x, obj.position.z) * p;
+    obj.visible = p < 1;
+  });
 }
 
 const _e = new THREE.Euler();
