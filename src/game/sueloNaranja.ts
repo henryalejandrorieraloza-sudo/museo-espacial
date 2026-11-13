@@ -3,14 +3,19 @@
 // E mantenida, y recibe los eventos y el progreso del anillo y del hundimiento.
 
 import { ROCA_ESTACION1 } from '../visual/sitioApollo17.ts';
-import { DISTANCIA_SUBIR_M } from './luna';
 import { avanzarAnilloMantener } from './despliegueLRV';
 
 /**
- * Distancia (m) al centro del suelo naranja a la que se avisa de que el LRV está cerca. Valor elegido por Henry:
- * "mediano a muy cerca". La mancha tiene unos 2.1 m de radio. Es el único sitio donde se define.
+ * Distancia (m) al centro del suelo naranja a la que se avisa de que el LRV está cerca. Subida de 4 a 6 m a petición
+ * de Henry (avisa desde más lejos). La mancha tiene unos 2.1 m de radio. Es el único sitio donde se define.
  */
-export const ORANGE_SOIL_TRIGGER_DISTANCE = 4;
+export const ORANGE_SOIL_TRIGGER_DISTANCE = 6;
+
+/**
+ * Distancia (m) del jugador a pie al centro del LRV para recoger la muestra con E. Más grande que la de subirse
+ * (DISTANCIA_SUBIR_M en luna.ts, que no cambia): así la zona de recogida es más amplia.
+ */
+export const DISTANCIA_RECOGER_MUESTRA_M = 5;
 
 /** Tiempo (s) que dura el hundimiento del suelo tras recoger la muestra. Estimación de partida, a ojo. */
 export const DURACION_HUNDIMIENTO_SUELO_S = 2.5;
@@ -91,15 +96,16 @@ export class SueloNaranja {
       eventos.push({ tipo: 'cercania' });
     }
 
-    // A pie y cerca del suelo: primer aviso para mantener E. Recoger además exige estar junto al LRV (la misma
-    // distancia que para subirse).
+    // A pie y cerca del suelo: primer aviso para mantener E. Recoger además exige estar junto al LRV, dentro de
+    // DISTANCIA_RECOGER_MUESTRA_M.
     const aPieCerca = entrada.aPie && distanciaA(entrada.jugador) < ORANGE_SOIL_TRIGGER_DISTANCE;
     if (aPieCerca && !this.avisadoRecoger) {
       this.avisadoRecoger = true;
       eventos.push({ tipo: 'puedeRecoger' });
     }
     const junto =
-      aPieCerca && Math.hypot(entrada.jugador.x - entrada.lrv.x, entrada.jugador.z - entrada.lrv.z) <= DISTANCIA_SUBIR_M;
+      aPieCerca &&
+      Math.hypot(entrada.jugador.x - entrada.lrv.x, entrada.jugador.z - entrada.lrv.z) <= DISTANCIA_RECOGER_MUESTRA_M;
 
     // Mismo anillo que el despliegue: mantener E lo llena; soltarla antes lo vacía sin recoger nada.
     this.anillo = avanzarAnilloMantener(this.anillo, dt, junto && entrada.manteniendoE);

@@ -169,10 +169,34 @@ function decirUnaVez(sesion: Sesion, clave: ClaveTexto, alTerminar?: () => void)
   decirFrase(sesion.voz, sesion.ui, clave, alTerminar);
 }
 
-/** Dice una frase de voz con subtítulo. Corta la anterior para que no se pisen. */
-function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto, alTerminar?: () => void): void {
+/**
+ * Frases de la misión que esperan a que el mentor termine la anterior: nunca se corta una frase a medias. Se vacía
+ * al salir de la misión o al cambiar de escena (así no suenan frases de una escena ya cerrada).
+ */
+const colaFrases: Array<() => void> = [];
+
+/** Dice una frase de voz con subtítulo. Si el mentor aún habla, la espera en cola y no corta la anterior. */
+function decirFrase(voz: Voz, ui: JuegoUi, clave: ClaveTexto, alTerminar?: () => void, completo = false): void {
+  if (mentorHablando || colaFrases.length > 0) {
+    colaFrases.push(() => decirAhora(voz, ui, clave, alTerminar, completo));
+    return;
+  }
+  decirAhora(voz, ui, clave, alTerminar, completo);
+}
+
+/** Dice la frase ya, sin esperar. Al terminar, arranca la siguiente de la cola (si la hay). */
+function decirAhora(voz: Voz, ui: JuegoUi, clave: ClaveTexto, alTerminar?: () => void, completo = false): void {
   voz.cancelar();
-  hablar(voz, ui, clave, alTerminar);
+  hablar(
+    voz,
+    ui,
+    clave,
+    () => {
+      alTerminar?.();
+      colaFrases.shift()?.();
+    },
+    completo,
+  );
 }
 
 /** Vuelve a leer en el idioma nuevo todo lo que ya está en pantalla. */
@@ -224,6 +248,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         break;
       case 'vitrinaDeseleccionada':
         // Sin vitrina seleccionada no hay explicación ni entrada: se corta la voz y los textos.
+        colaFrases.length = 0;
         voz.cancelar();
         habla = null;
         ui.subtitulos(null);
@@ -235,6 +260,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         habla = null;
         ui.subtitulos(null);
         requireEl('ayuda').hidden = true;
+        colaFrases.length = 0;
         presentacion = new PresentacionLRV();
         ultimaPresentacionS = null;
         frasePresentacion = null;
@@ -250,6 +276,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         presentacion = null;
         presUi.mostrar(false);
         requireEl('ayuda').hidden = false;
+        colaFrases.length = 0;
         voz.cancelar();
         habla = null;
         ui.subtitulos(null);
@@ -284,7 +311,9 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         anillo.mostrar(null);
         ui.ocultarMision();
         claveMision = null;
-        hablar(voz, ui, 'regreso_museo', undefined, true);
+        // Si el mentor aún habla de la misión, termina esa frase y luego da la conclusión.
+        colaFrases.length = 0;
+        decirFrase(voz, ui, 'regreso_museo', undefined, true);
         break;
     }
   });
@@ -395,6 +424,7 @@ interface Sesion {
 function narrarPresentacion(sesion: Sesion, clave: ClaveTexto, alTerminar: () => void, conSubtitulos = true): void {
   const { voz, ui, opciones } = sesion;
   habla = null;
+  colaFrases.length = 0;
   voz.cancelar();
   frasePresentacion = null;
   ui.subtitulos(null);
