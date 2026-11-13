@@ -28,6 +28,20 @@ const X_ASIENTO = 0.31;
 const Y_ASIENTO = 0.62;
 const Z_ASIENTO = 0.15;
 
+/** Bisagras entre la sección central del chasis y las secciones delantera y trasera (|z|, m). */
+const Z_BISAGRA = 0.62;
+/**
+ * Altura del eje de plegado de cada sección sobre el bastidor (m). En el modelo las secciones se pliegan 180° sobre
+ * la central; con el eje un poco por encima del bastidor, la delantera queda encima de los asientos plegados y la
+ * trasera encima de la delantera, sin atravesarse. // VERIFICAR: geometría real de las bisagras (Boeing).
+ */
+const ALTURA_PLIEGUE_DELANTERO = 0.2;
+const ALTURA_PLIEGUE_TRASERO = 0.34;
+/** Bisagra delantera de la sección central, en ejes del LRV: es el punto sobre el que gira al salir de la bahía. */
+export const BISAGRA_DELANTERA_LRV: V3 = [0, Y_BASTIDOR, -Z_BISAGRA];
+/** Base del poste de la consola, sobre la que gira al bajarla. */
+const BASE_CONSOLA: V3 = [0, Y_BASTIDOR + 0.02, -0.56];
+
 /** Posición de los ojos del comandante sentado, en ejes del LRV (m). */
 export const OJOS_COMANDANTE: V3 = [-X_ASIENTO, Y_ASIENTO + 0.82, Z_ASIENTO + 0.08];
 /** Centros de las cuatro ruedas (x, z), para apoyar el LRV en el suelo. */
@@ -215,9 +229,10 @@ function crearAnimacionRuedas(ruedas: RuedaModelo[]): RuedasLRV {
 /**
  * Guardabarros de fibra de vidrio con resina epoxi sobre cada rueda, con las extensiones delante y detrás y un
  * borde de refuerzo (NSSDC: "Dust guards were mounted above the wheels"; Smithsonian, "Extension, Fender, Lunar
- * Roving Vehicle, Apollo 17").
+ * Roving Vehicle, Apollo 17"). La parte fija va en `l`; cada extensión, en su lote, porque corre sobre la parte
+ * fija al desplegar el LRV (ALSJ: "a second portion is mounted on rails over the fixed piece").
  */
-function guardabarros(l: Lote, x: number, z: number): void {
+function guardabarros(l: Lote, extDelante: Lote, extDetras: Lote, x: number, z: number): void {
   const radio = RADIO_RUEDA + 0.075;
   const ancho = ANCHO_RUEDA + 0.08;
   // Guardabarros fijo (de −1.0 a 1.0 rad) y extensiones (hasta ±1.45 rad), en tramos que siguen el arco.
@@ -233,11 +248,13 @@ function guardabarros(l: Lote, x: number, z: number): void {
       const largo = 2 * radio * Math.sin(paso / 2) + 0.006;
       const extension = Math.abs(a) > 1.0;
       const r = extension ? radio + 0.006 : radio;
+      // Por delante de la rueda (−Z) el ángulo es negativo.
+      const lote = extension ? (a < 0 ? extDelante : extDetras) : l;
       const centro: V3 = [x, RADIO_RUEDA + Math.cos(a) * r, z + Math.sin(a) * r];
-      l.pieza(new THREE.BoxGeometry(extension ? ancho - 0.01 : ancho, 0.01, largo), HIST.guardabarros, { p: centro, r: [a, 0, 0], v: 0.05 });
+      lote.pieza(new THREE.BoxGeometry(extension ? ancho - 0.01 : ancho, 0.01, largo), HIST.guardabarros, { p: centro, r: [a, 0, 0], v: 0.05 });
       // Borde de refuerzo a cada lado.
       for (const s of [-1, 1]) {
-        l.pieza(new THREE.BoxGeometry(0.012, 0.03, largo), HIST.guardabarros, {
+        lote.pieza(new THREE.BoxGeometry(0.012, 0.03, largo), HIST.guardabarros, {
           p: [x + (s * ancho) / 2, RADIO_RUEDA + Math.cos(a) * (r - 0.012), z + Math.sin(a) * (r - 0.012)],
           r: [a, 0, 0],
         });
@@ -265,14 +282,32 @@ function suspension(l: Lote, x: number, z: number): void {
   l.pieza(tuboEntre([lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR - 0.05, z - 0.3], [lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR - 0.05, z + 0.3], 0.025, 6), HIST.plateado);
 }
 
+/** Lotes de las tres secciones del chasis: cada una se pliega por separado. */
+interface Secciones {
+  delantera: Lote;
+  centro: Lote;
+  trasera: Lote;
+}
+
+/** Sección del chasis a la que pertenece una pieza a la altura `z` (las bisagras son de la central). */
+function seccionEn(s: Secciones, z: number): Lote {
+  if (z < -Z_BISAGRA - 1e-6) return s.delantera;
+  if (z > Z_BISAGRA + 1e-6) return s.trasera;
+  return s.centro;
+}
+
 /**
  * Bastidor de tubo de aluminio en tres secciones (delantera, central y trasera) unidas por bisagras: el LRV viajaba
  * plegado en el LM. Travesaños y suelo de paneles con nervios en la sección central.
  */
-function bastidor(l: Lote): void {
+function bastidor(s: Secciones): void {
+  const l = s.centro;
   const w = MEDIO_ANCHO_BASTIDOR;
   for (const x of [-w, w]) {
-    l.pieza(tuboEntre([x, Y_BASTIDOR, Z_FRENTE], [x, Y_BASTIDOR, Z_COLA], 0.026, 8), HIST.aluminio);
+    // Larguero inferior en tres tramos, uno por sección.
+    s.delantera.pieza(tuboEntre([x, Y_BASTIDOR, Z_FRENTE], [x, Y_BASTIDOR, -Z_BISAGRA], 0.026, 8), HIST.aluminio);
+    l.pieza(tuboEntre([x, Y_BASTIDOR, -Z_BISAGRA], [x, Y_BASTIDOR, Z_BISAGRA], 0.026, 8), HIST.aluminio);
+    s.trasera.pieza(tuboEntre([x, Y_BASTIDOR, Z_BISAGRA], [x, Y_BASTIDOR, Z_COLA], 0.026, 8), HIST.aluminio);
     l.pieza(tuboEntre([x, Y_BASTIDOR + 0.12, -0.62], [x, Y_BASTIDOR + 0.12, 0.62], 0.02, 8), HIST.aluminio);
     for (const z of [-0.62, -0.31, 0, 0.31, 0.62]) l.pieza(tuboEntre([x, Y_BASTIDOR, z], [x, Y_BASTIDOR + 0.12, z], 0.014, 6), HIST.aluminio);
     // Diagonales de la sección central.
@@ -288,8 +323,8 @@ function bastidor(l: Lote): void {
       l.pieza(cajaBiselada(0.05, 0.06, 0.09, 0.006), HIST.aluminio, { p: [x, Y_BASTIDOR + 0.03, z] });
     }
   }
-  for (const z of [Z_FRENTE, -1.05, -0.62, 0, 0.62, 1.05, Z_COLA]) {
-    l.pieza(tuboEntre([-w, Y_BASTIDOR, z], [w, Y_BASTIDOR, z], 0.02, 8), HIST.aluminio);
+  for (const z of [Z_FRENTE, -1.05, -Z_BISAGRA, 0, Z_BISAGRA, 1.05, Z_COLA]) {
+    seccionEn(s, z).pieza(tuboEntre([-w, Y_BASTIDOR, z], [w, Y_BASTIDOR, z], 0.02, 8), HIST.aluminio);
   }
   // Suelo de la sección central, de paneles de aluminio con nervios.
   l.pieza(cajaBiselada(2 * w - 0.04, 0.02, 1.2, 0.005), HIST.aluminio, { p: [0, Y_BASTIDOR + 0.02, 0], v: 0.05 });
@@ -303,10 +338,12 @@ function bastidor(l: Lote): void {
 
 /**
  * Dos asientos plegables de tubo de aluminio con cintas de nailon (NSSDC: "two side-by-side foldable seats made of
- * tubular aluminum with nylon webbing"), cinturón, reposapiés y el reposabrazos central.
+ * tubular aluminum with nylon webbing"), cinturón, reposapiés y el reposabrazos central. Cada asiento y cada
+ * reposapiés va en su lote (`asiento[i]`, `reposapies[i]`, izquierda primero), porque viajaban plegados.
  */
-function asientos(l: Lote): void {
-  for (const x of [-X_ASIENTO, X_ASIENTO]) {
+function asientos(centro: Lote, asiento: readonly Lote[], reposapies: readonly Lote[]): void {
+  [-X_ASIENTO, X_ASIENTO].forEach((x, i) => {
+    const l = asiento[i];
     // Cintas del asiento y del respaldo, tejidas: longitudinales y transversales, con el marco visible entre ellas.
     for (let k = 0; k < 5; k++) {
       const u = -0.18 + k * 0.09;
@@ -337,18 +374,22 @@ function asientos(l: Lote): void {
     l.pieza(new THREE.BoxGeometry(0.05, 0.006, 0.44), HIST.antena, { p: [x, Y_ASIENTO + 0.02, Z_ASIENTO], r: [0, 0.6, 0] });
     l.pieza(cajaBiselada(0.06, 0.012, 0.04, 0.003), HIST.plateado, { p: [x, Y_ASIENTO + 0.026, Z_ASIENTO], r: [0, 0.6, 0] });
     // Reposapiés delante del asiento, en la parte delantera de la sección central.
-    l.pieza(cajaBiselada(0.34, 0.015, 0.16, 0.005), HIST.aluminio, { p: [x, Y_BASTIDOR + 0.1, -0.5], r: [0.45, 0, 0] });
+    const pie = reposapies[i];
+    pie.pieza(cajaBiselada(0.34, 0.015, 0.16, 0.005), HIST.aluminio, { p: [x, Y_BASTIDOR + 0.1, -0.5], r: [0.45, 0, 0] });
     for (const s of [-1, 1]) {
-      l.pieza(tuboEntre([x + s * 0.16, Y_BASTIDOR + 0.03, -0.44], [x + s * 0.16, Y_BASTIDOR + 0.1, -0.5], 0.008, 5), HIST.aluminio);
+      pie.pieza(tuboEntre([x + s * 0.16, Y_BASTIDOR + 0.03, -0.44], [x + s * 0.16, Y_BASTIDOR + 0.1, -0.5], 0.008, 5), HIST.aluminio);
     }
-  }
+  });
   // Reposabrazos central.
-  l.pieza(cajaBiselada(0.08, 0.05, 0.4, 0.01), HIST.asiento, { p: [0, Y_ASIENTO + 0.15, Z_ASIENTO + 0.05] });
-  l.pieza(tuboEntre([0, Y_BASTIDOR + 0.12, Z_ASIENTO + 0.05], [0, Y_ASIENTO + 0.13, Z_ASIENTO + 0.05], 0.014, 6), HIST.aluminio);
+  centro.pieza(cajaBiselada(0.08, 0.05, 0.4, 0.01), HIST.asiento, { p: [0, Y_ASIENTO + 0.15, Z_ASIENTO + 0.05] });
+  centro.pieza(tuboEntre([0, Y_BASTIDOR + 0.12, Z_ASIENTO + 0.05], [0, Y_ASIENTO + 0.13, Z_ASIENTO + 0.05], 0.014, 6), HIST.aluminio);
 }
 
-/** Mando en T entre los asientos (a la derecha del comandante) y consola de control y presentación. */
-function mandos(l: Lote): void {
+/**
+ * Mando en T entre los asientos (a la derecha del comandante), en `l`, y consola de control y presentación, en
+ * `consola` (gira sobre su base al desplegar el LRV).
+ */
+function mandos(l: Lote, consola: Lote): void {
   // Mando en T: base con fuelle, palanca vertical y empuñadura transversal, delante del reposabrazos.
   const base: V3 = [0, Y_ASIENTO + 0.1, Z_ASIENTO - 0.2];
   const cima: V3 = [0, Y_ASIENTO + 0.32, Z_ASIENTO - 0.24];
@@ -360,7 +401,8 @@ function mandos(l: Lote): void {
     l.pieza(new THREE.CylinderGeometry(0.02, 0.02, 0.035, 8), HIST.consola, { p: [s * 0.06, cima[1], cima[2]], r: [0, 0, Math.PI / 2] });
   }
   // Consola sobre un poste, inclinada hacia el conductor.
-  l.pieza(tuboEntre([0, Y_BASTIDOR + 0.02, -0.56], [0, 0.98, -0.62], 0.022, 8), HIST.aluminio);
+  l = consola;
+  l.pieza(tuboEntre(BASE_CONSOLA, [0, 0.98, -0.62], 0.022, 8), HIST.aluminio);
   l.en([0, 1.05, -0.63], [-0.3, 0, 0], () => {
     l.pieza(cajaBiselada(0.4, 0.3, 0.06, 0.012), HIST.consola);
     l.pieza(cajaBiselada(0.42, 0.32, 0.02, 0.006), HIST.aluminio, { p: [0, 0, -0.035] });
@@ -398,10 +440,12 @@ function cable(l: Lote, a: V3, b: V3, comba: number, color: number = HIST.negro)
 }
 
 /**
- * Sección delantera: baterías, electrónica, LCRU, cámara de TV y antenas. Sección trasera: portaherramientas.
- * Las mantas térmicas (MLI) van forradas de beta cloth blanco (HIST.mantaLRV).
+ * Sección delantera: baterías y electrónica (en `l`, viajaban en el LRV plegado), y LCRU, cámara de TV y antenas
+ * (en `carga.delantera`). Sección trasera: portaherramientas (geopallet, en `carga.trasera`). La carga se montó
+ * después del despliegue (ALSJ, "Loading the Rover"). Las mantas térmicas (MLI) van forradas de beta cloth blanco
+ * (HIST.mantaLRV).
  */
-function equipos(l: Lote, haciaTierraLocal: THREE.Vector3): void {
+function equipos(l: Lote, carga: { delantera: Lote; trasera: Lote }, haciaTierraLocal: THREE.Vector3): void {
   const y = Y_BASTIDOR + 0.02;
   // Dos baterías de plata-zinc con su manta térmica, bajo sus cubiertas antipolvo. // VERIFICAR: color de las cubiertas.
   for (const x of [-0.28, 0.28]) {
@@ -415,6 +459,8 @@ function equipos(l: Lote, haciaTierraLocal: THREE.Vector3): void {
   // Electrónica de mando (DCE) y unidad de procesado de señales (SPU), con su manta térmica.
   l.pieza(cajaBiselada(0.9, 0.12, 0.3, 0.015), HIST.mantaLRV, { p: [0, y + 0.07, -1.3], v: 0.05 });
   l.pieza(cajaBiselada(0.3, 0.02, 0.2, 0.004), HIST.plateado, { p: [-0.25, y + 0.14, -1.3] });
+  // Lo que sigue se montó en la Luna, después del despliegue.
+  l = carga.delantera;
   // Unidad de comunicaciones (LCRU) delante, con manta térmica y espejos de radiador arriba.
   l.pieza(cajaBiselada(0.48, 0.3, 0.28, 0.02), HIST.mantaLRV, { p: [0, y + 0.3, -1.38], v: 0.05 });
   l.pieza(cajaBiselada(0.4, 0.012, 0.22, 0.004), HIST.plateado, { p: [0, y + 0.456, -1.38] });
@@ -465,7 +511,8 @@ function equipos(l: Lote, haciaTierraLocal: THREE.Vector3): void {
   cable(l, [0.15, y + 0.42, -1.25], [0.3, y + 0.62, -1.32], 0.04);
   cable(l, [0.05, y + 0.45, -1.3], [0.03, 1.12, -1.4], 0.03);
   cable(l, [0.02, 0.95, -0.6], [0.1, y + 0.14, -1.15], 0.08);
-  // Portaherramientas trasero: bandeja con bolsas de muestras y herramientas (pinzas, pala y rastrillo).
+  // Portaherramientas trasero (geopallet): bandeja con bolsas de muestras y herramientas (pinzas, pala y rastrillo).
+  l = carga.trasera;
   l.pieza(cajaBiselada(0.95, 0.28, 0.5, 0.02), HIST.aluminio, { p: [0, y + 0.18, 1.18] });
   for (const dx of [-0.3, 0, 0.3]) {
     l.pieza(new THREE.BoxGeometry(0.012, 0.26, 0.505), HIST.plateado, { p: [dx, y + 0.18, 1.18] });
@@ -534,24 +581,207 @@ function empolvar(raiz: THREE.Object3D, uniforme: number | null): void {
   });
 }
 
-/** Construye el LRV. `haciaTierraLocal`: dirección de la Tierra en ejes del LRV, para su antena de alta ganancia. */
+/**
+ * Cuánto está plegada cada parte del LRV: 0 = como en la superficie, listo para conducir; 1 = como viajaba en la
+ * bahía del LM. La carga es al revés: 0 = sin montar (oculta), 1 = montada.
+ */
+export interface PosePlegadoLRV {
+  /** Secciones del chasis: 1 = plegadas 180° sobre la central (ALSJ: "folded back onto ... the center section"). */
+  delantera: number;
+  trasera: number;
+  /** Ruedas, con su suspensión y guardabarros: 1 = plegadas contra su sección ("the wheels ... are folded onto those"). */
+  ruedasDelanteras: number;
+  ruedasTraseras: number;
+  /** Extensiones de los guardabarros: 1 = recogidas sobre la parte fija. */
+  guardabarros: number;
+  /** Asientos: 1 = plegados planos sobre el chasis ("folded flat onto the chassis, held down with Velcro"). */
+  asientos: number;
+  /** Consola: 1 = recogida. */
+  consola: number;
+  /** Reposapiés: 1 = abatidos sobre el suelo del chasis. */
+  reposapies: number;
+  /** LCRU, cámara de TV y antenas (sección delantera), y geopallet (sección trasera). */
+  cargaDelantera: number;
+  cargaTrasera: number;
+}
+
+/** El LRV listo para conducir, con todo montado: es como lo usa la misión. */
+export const POSE_DESPLEGADO: Readonly<PosePlegadoLRV> = {
+  delantera: 0,
+  trasera: 0,
+  ruedasDelanteras: 0,
+  ruedasTraseras: 0,
+  guardabarros: 0,
+  asientos: 0,
+  consola: 0,
+  reposapies: 0,
+  cargaDelantera: 1,
+  cargaTrasera: 1,
+};
+
+/** El LRV como viajaba en la bahía del LM. */
+export const POSE_PLEGADO: Readonly<PosePlegadoLRV> = {
+  delantera: 1,
+  trasera: 1,
+  ruedasDelanteras: 1,
+  ruedasTraseras: 1,
+  guardabarros: 1,
+  asientos: 1,
+  consola: 1,
+  reposapies: 1,
+  cargaDelantera: 0,
+  cargaTrasera: 0,
+};
+
+/** Plegado del LRV. Se guarda en `userData.plegado` del grupo del LRV. */
+export interface PlegadoLRV {
+  aplicar(pose: Readonly<PosePlegadoLRV>): void;
+}
+
+/** Giro de las extensiones de los guardabarros al recogerlas (rad, alrededor del eje de la rueda). */
+const GIRO_EXTENSION_RECOGIDA = 0.45;
+/** Altura que conservan los asientos plegados (fracción de la desplegada). */
+const ESCALA_ASIENTO_PLEGADO = 0.08;
+/**
+ * Giro de la consola recogida (rad, hacia atrás sobre los asientos). // VERIFICAR: el ALSJ dice que viajaba en ángulo
+ * recto con el chasis central, entre las secciones plegadas; en este modelo se abate hacia atrás para no atravesar
+ * la sección delantera plegada.
+ */
+const GIRO_CONSOLA_RECOGIDA = 1.35;
+/** Giro de los reposapiés abatidos (rad, hacia delante). */
+const GIRO_REPOSAPIES_ABATIDO = -0.95;
+/** La carga aparece bajando desde esta altura (m) mientras se monta. */
+const ALTURA_MONTAJE_CARGA = 0.45;
+
+/**
+ * Pivote en `punto` (ejes del LRV) cuyo contenido se construye también en ejes del LRV: girado a 0, todo queda
+ * exactamente donde estaba.
+ */
+function pivoteEn(punto: V3, nombre: string): { pivote: THREE.Group; contenido: THREE.Group } {
+  const pivote = new THREE.Group();
+  pivote.name = nombre;
+  pivote.position.set(...punto);
+  const contenido = new THREE.Group();
+  contenido.position.set(-punto[0], -punto[1], -punto[2]);
+  pivote.add(contenido);
+  return { pivote, contenido };
+}
+
+/** Construye un lote y lo empolva en ejes del LRV (antes de colgarlo de un pivote). */
+function construirEmpolvado(l: Lote): THREE.Group {
+  const g = l.construir();
+  empolvar(g, null);
+  return g;
+}
+
+/**
+ * Construye el LRV. `haciaTierraLocal`: dirección de la Tierra en ejes del LRV, para su antena de alta ganancia.
+ * Las piezas que se movían al desplegarlo cuelgan de pivotes (`userData.plegado`); a POSE_DESPLEGADO el modelo es
+ * el mismo que se conduce.
+ */
 export function crearLRVLuna(haciaTierraLocal: THREE.Vector3): THREE.Group {
-  const l = new Lote(false);
-  bastidor(l);
-  // Los guardabarros van fijos al bastidor. // VERIFICAR: si en el LRV giraban con la rueda.
+  const secciones: Secciones = { delantera: new Lote(false), centro: new Lote(false), trasera: new Lote(false) };
+  const carga = { delantera: new Lote(false), trasera: new Lote(false) };
+  const consola = new Lote(false);
+  const asiento = [new Lote(false), new Lote(false)];
+  const reposapies = [new Lote(false), new Lote(false)];
+  bastidor(secciones);
+  asientos(secciones.centro, asiento, reposapies);
+  mandos(secciones.centro, consola);
+  equipos(secciones.delantera, carga, haciaTierraLocal);
+
+  const grupo = new THREE.Group();
+  grupo.add(construirEmpolvado(secciones.centro));
+  const pivConsola = pivoteEn(BASE_CONSOLA, 'consola');
+  pivConsola.contenido.add(construirEmpolvado(consola));
+  grupo.add(pivConsola.pivote);
+  const pivAsientos = [-X_ASIENTO, X_ASIENTO].map((x, i) => {
+    const p = pivoteEn([x, Y_BASTIDOR + 0.12, Z_ASIENTO], i === 0 ? 'asiento_comandante' : 'asiento_piloto');
+    p.contenido.add(construirEmpolvado(asiento[i]));
+    grupo.add(p.pivote);
+    return p.pivote;
+  });
+  const pivReposapies = [-X_ASIENTO, X_ASIENTO].map((x, i) => {
+    const p = pivoteEn([x, Y_BASTIDOR + 0.03, -0.44], `reposapies_${i === 0 ? 'izquierdo' : 'derecho'}`);
+    p.contenido.add(construirEmpolvado(reposapies[i]));
+    grupo.add(p.pivote);
+    return p.pivote;
+  });
+
+  // Secciones delantera y trasera, con su carga (que se monta al final y aparece bajando).
+  const delantera = pivoteEn([0, Y_BASTIDOR + ALTURA_PLIEGUE_DELANTERO, -Z_BISAGRA], 'seccion_delantera');
+  const trasera = pivoteEn([0, Y_BASTIDOR + ALTURA_PLIEGUE_TRASERO, Z_BISAGRA], 'seccion_trasera');
+  delantera.contenido.add(construirEmpolvado(secciones.delantera));
+  trasera.contenido.add(construirEmpolvado(secciones.trasera));
+  const cargaDelantera = new THREE.Group();
+  cargaDelantera.name = 'carga_delantera';
+  cargaDelantera.add(construirEmpolvado(carga.delantera));
+  delantera.contenido.add(cargaDelantera);
+  const cargaTrasera = new THREE.Group();
+  cargaTrasera.name = 'carga_trasera';
+  cargaTrasera.add(construirEmpolvado(carga.trasera));
+  trasera.contenido.add(cargaTrasera);
+  grupo.add(delantera.pivote, trasera.pivote);
+
+  // Cada rueda va aparte (no en el lote) para poder girarla y hacerla rodar. Con su suspensión y su guardabarros,
+  // se pliega sobre el larguero de su sección. Los guardabarros van fijos al bastidor.
+  // // VERIFICAR: si en el LRV giraban con la rueda.
+  const ruedas: RuedaModelo[] = [];
+  const pliegues: { pivote: THREE.Group; lado: number; delantera: boolean }[] = [];
+  const extensiones: { pivote: THREE.Group; signo: number }[] = [];
   for (const [x, z] of RUEDAS_LRV) {
-    guardabarros(l, x, z);
-    suspension(l, x, z);
+    const lado = Math.sign(x);
+    const esDelantera = z < 0;
+    const nombre = `pliegue_rueda_${esDelantera ? 'delantera' : 'trasera'}_${lado < 0 ? 'izquierda' : 'derecha'}`;
+    const pliegue = pivoteEn([lado * MEDIO_ANCHO_BASTIDOR, Y_BASTIDOR, z], nombre);
+    const brazo = new Lote(false);
+    const extDelante = new Lote(false);
+    const extDetras = new Lote(false);
+    guardabarros(brazo, extDelante, extDetras, x, z);
+    suspension(brazo, x, z);
+    pliegue.contenido.add(construirEmpolvado(brazo));
+    for (const [lote, signo] of [
+      [extDelante, 1],
+      [extDetras, -1],
+    ] as const) {
+      const ext = pivoteEn([x, RADIO_RUEDA, z], `${nombre}_extension`);
+      ext.contenido.add(construirEmpolvado(lote));
+      pliegue.contenido.add(ext.pivote);
+      extensiones.push({ pivote: ext.pivote, signo });
+    }
+    const rueda = crearRueda(x, z);
+    pliegue.contenido.add(rueda.pivote);
+    ruedas.push(rueda);
+    (esDelantera ? delantera : trasera).contenido.add(pliegue.pivote);
+    pliegues.push({ pivote: pliegue.pivote, lado, delantera: esDelantera });
   }
-  asientos(l);
-  mandos(l);
-  equipos(l, haciaTierraLocal);
-  const grupo = l.construir();
-  empolvar(grupo, null);
-  // Cada rueda va aparte (no en el lote) para poder girarla y hacerla rodar.
-  const ruedas = RUEDAS_LRV.map(([x, z]) => crearRueda(x, z));
-  for (const r of ruedas) grupo.add(r.pivote);
   grupo.userData.ruedas = crearAnimacionRuedas(ruedas);
+
+  const plegado: PlegadoLRV = {
+    aplicar(p) {
+      // La delantera se pliega hacia arriba y atrás (−Z → +Y → +Z): giro positivo en X. La trasera, al revés.
+      delantera.pivote.rotation.x = Math.PI * p.delantera;
+      trasera.pivote.rotation.x = -Math.PI * p.trasera;
+      // Cada rueda gira sobre su larguero hacia abajo y hacia dentro, bajo su sección: con la sección plegada sobre
+      // la central, las ruedas quedan por fuera, hacia el LM ("with the wheels inward toward the spacecraft").
+      for (const r of pliegues) {
+        const f = r.delantera ? p.ruedasDelanteras : p.ruedasTraseras;
+        r.pivote.rotation.z = -r.lado * (Math.PI / 2) * f;
+      }
+      for (const e of extensiones) e.pivote.rotation.x = e.signo * GIRO_EXTENSION_RECOGIDA * p.guardabarros;
+      for (const a of pivAsientos) a.scale.y = THREE.MathUtils.lerp(1, ESCALA_ASIENTO_PLEGADO, p.asientos);
+      pivConsola.pivote.rotation.x = GIRO_CONSOLA_RECOGIDA * p.consola;
+      for (const r of pivReposapies) r.rotation.x = GIRO_REPOSAPIES_ABATIDO * p.reposapies;
+      for (const [g, f] of [
+        [cargaDelantera, p.cargaDelantera],
+        [cargaTrasera, p.cargaTrasera],
+      ] as const) {
+        g.visible = f > 0;
+        g.position.y = ALTURA_MONTAJE_CARGA * (1 - f);
+      }
+    },
+  };
+  grupo.userData.plegado = plegado;
   grupo.traverse((o) => {
     o.castShadow = true;
     o.receiveShadow = true;

@@ -96,6 +96,11 @@ export interface EntradaLuna {
   agarreNuevo: boolean;
   /** Bajarse del LRV en este fotograma (tecla B o pellizco sostenido con las dos manos). Opcional: false. */
   bajarse?: boolean;
+  /**
+   * El LRV ya está desplegado (game/despliegueLRV.ts). Mientras no lo está, sigue plegado o se está desplegando y
+   * no se puede subir a él ni conducirlo. Opcional: true.
+   */
+  lrvDesplegado?: boolean;
   /** Posición del jugador a pie (m). Solo cuenta antes de subirse al LRV. */
   jugador: { x: number; z: number };
 }
@@ -107,6 +112,8 @@ export type EventoLuna =
   | { tipo: 'muestraRecogida' }
   /** Aplauso a pie lejos del LRV: no se sube. */
   | { tipo: 'lejosDelLRV' }
+  /** Aplauso a pie con el LRV aún sin desplegar: no se sube. */
+  | { tipo: 'lrvPlegado' }
   /** El jugador se bajó del LRV. `conMuestra`: ya había recogido la muestra. */
   | { tipo: 'bajado'; conMuestra: boolean }
   /** El jugador pidió volver al museo (aplauso). */
@@ -246,7 +253,10 @@ export class MisionLuna {
     // Bajado del LRV con la muestra ya recogida, el aplauso vuelve al museo esté donde esté.
     if (entrada.aplauso) {
       if (this.aPie && !(this.estadoActual === 'a_pie' && this.conMuestra)) {
-        if (this.distanciaJugador(entrada.jugador) <= DISTANCIA_SUBIR_M) {
+        if (entrada.lrvDesplegado === false) {
+          // Plegado o desplegándose, el LRV no está donde lo espera la misión ni se puede conducir.
+          eventos.push({ tipo: 'lrvPlegado' });
+        } else if (this.distanciaJugador(entrada.jugador) <= DISTANCIA_SUBIR_M) {
           ir(this.conMuestra ? 'muestra_recogida' : 'sentado_en_LRV');
         } else {
           eventos.push({ tipo: 'lejosDelLRV' });

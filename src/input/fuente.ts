@@ -58,6 +58,8 @@ export interface LecturaEntrada {
   volanteGrados: number | null;
   /** Bajarse del LRV en este fotograma: tecla B, o pellizco sostenido con las dos manos (misión lunar). */
   bajarse: boolean;
+  /** Tecla E mantenida: con el LRV plegado, llena el anillo de desplegarlo (misión lunar). */
+  desplegarMantenido: boolean;
   /** Manos para el avatar: dibujarlas, ocultarlas o dejarlas como están (null). */
   manos: ManosFotograma | 'ocultar' | null;
 }
@@ -90,6 +92,7 @@ export function lecturaVacia(ahoraS: number): LecturaEntrada {
     golpeHombrosS: 0,
     volanteGrados: null,
     bajarse: false,
+    desplegarMantenido: false,
     manos: null,
   };
 }

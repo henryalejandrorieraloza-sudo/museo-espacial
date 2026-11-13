@@ -60,6 +60,8 @@ export class FuenteCamara implements FuenteEntrada {
   private readonly pellizcosAgarre: Partial<Record<'Left' | 'Right', boolean>> = {};
   /** Barra espaciadora: respaldo del aplauso (SPEC 4). Se consume en la siguiente lectura. */
   private espacioPendiente = false;
+  /** Tecla E mantenida: desplegar el LRV en la misión lunar. Aún no tiene gesto propio. */
+  private eMantenida = false;
   private pausada = false;
   private aviso: string | null;
   /** Último fotograma procesado, para la captura de depuración (tecla P, solo en desarrollo). */
@@ -76,6 +78,16 @@ export class FuenteCamara implements FuenteEntrada {
       if (ev.code !== 'Space' || this.pausada || enCampoDeTexto(ev.target)) return;
       ev.preventDefault();
       if (!ev.repeat) this.espacioPendiente = true;
+    });
+    window.addEventListener('keydown', (ev) => {
+      if (ev.code === 'KeyE' && !this.pausada && !enCampoDeTexto(ev.target)) this.eMantenida = true;
+    });
+    window.addEventListener('keyup', (ev) => {
+      if (ev.code === 'KeyE') this.eMantenida = false;
+    });
+    // Al perder el foco no llega el keyup.
+    window.addEventListener('blur', () => {
+      this.eMantenida = false;
     });
     // Captura de depuración: P descarga el frame actual como JSON. Solo en desarrollo.
     if (import.meta.env.DEV) {
@@ -102,14 +114,21 @@ export class FuenteCamara implements FuenteEntrada {
 
   pausar(pausada: boolean): void {
     this.pausada = pausada;
-    if (pausada) this.espacioPendiente = false;
+    if (pausada) {
+      this.espacioPendiente = false;
+      this.eMantenida = false;
+    }
   }
 
   leer(ahoraS: number): LecturaEntrada {
     const espacio = this.espacioPendiente;
     this.espacioPendiente = false;
     const frame = this.tracker.detect(this.video, ahoraS * 1000);
-    if (frame) return this.procesarFotograma(frame, ahoraS, espacio);
+    if (frame) {
+      const conFotograma = this.procesarFotograma(frame, ahoraS, espacio);
+      conFotograma.desplegarMantenido = this.eMantenida;
+      return conFotograma;
+    }
 
     // Sin fotograma nuevo el movimiento está congelado, pero la barra espaciadora debe funcionar.
     const viejo = ahoraS - this.ultimoDatoS > FRESCO_S;
@@ -120,6 +139,7 @@ export class FuenteCamara implements FuenteEntrada {
     lectura.hayDatos = espacio && lectura.listo;
     lectura.aplauso = lectura.hayDatos;
     lectura.manos = viejo ? 'ocultar' : null;
+    lectura.desplegarMantenido = this.eMantenida;
     return lectura;
   }
 

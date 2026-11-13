@@ -136,6 +136,48 @@
   opacity: 0.35;
 }
 
+/* Anillo de mantener E (desplegar el LRV): se completa en sentido horario desde arriba. */
+.anillo {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 76px;
+  height: 76px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.anillo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.anillo circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.anillo-fondo {
+  stroke: rgba(255, 255, 255, 0.28);
+  fill: rgba(0, 0, 0, 0.45) !important;
+}
+
+.anillo-progreso {
+  stroke: #ffd60a;
+  stroke-linecap: round;
+}
+
+.anillo-tecla {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font: 700 24px system-ui, sans-serif;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
 /* Botón y panel de opciones (SPEC 13). */
 .opciones-boton {
   position: fixed;

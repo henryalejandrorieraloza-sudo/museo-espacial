@@ -6,6 +6,7 @@
 //   Ratón           mirar (pointer lock); equivale a inclinar y cabecear la cabeza
 //   Espacio         aplaudir
 //   E o clic izq.   mantener para señalar la vitrina del centro de la pantalla; en la Luna, golpe
+//   E mantenida     en la Luna, con el LRV plegado: desplegarlo (solo la tecla, no el clic)
 //   F o clic der.   pellizco y agarre
 //   B               bajarse del LRV (misión lunar). La E ya es señalar y golpe, y la F el agarre
 //   Esc             abrir Opciones
@@ -129,6 +130,7 @@ export class FuenteTeclado implements FuenteEntrada {
     lectura.pellizcoNuevo = this.agarrePendiente;
     lectura.agarreNuevo = this.agarrePendiente;
     lectura.bajarse = this.bajarsePendiente;
+    lectura.desplegarMantenido = this.senalarTecla;
     this.espacioPendiente = false;
     this.bajarsePendiente = false;
     this.golpePendiente = false;

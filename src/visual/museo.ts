@@ -8,6 +8,8 @@ import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, colocarLRV, crearEscenaLuna, cre
 import type { RuedasLRV } from './lrv';
 import { crearMentor, type EstadoMentor, type GestoMentor } from './mentor';
 import { alturaLuna } from './lunaTerreno';
+import { DURACION_DESPLIEGUE_LRV_S } from './despliegueApollo17';
+import { crearDespliegueLRV, type DespliegueVisualLRV } from './despliegueLRV';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
 import { ARQ } from './paleta';
 import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
@@ -212,6 +214,10 @@ let rumboLRV = 0;
 /** Ruedas del LRV (dirección y rodadura) y la última posición del LRV, para saber cuánto avanzó. */
 let ruedasLRV: RuedasLRV | null = null;
 let posicionPreviaLRV: { x: number; z: number } | null = null;
+/** Animación del despliegue del LRV desde la bahía del LM (despliegueLRV.ts). */
+let despliegueLRV: DespliegueVisualLRV | null = null;
+/** El LRV ya está desplegado: hasta entonces lo coloca la animación, no la misión. */
+let lrvDesplegado = true;
 /** Render de la Luna (dos pasadas y bloom). */
 let postLuna: { render(): void; ajustar(ancho: number, alto: number): void } | null = null;
 /** Posición y giro del jugador en el museo, guardados mientras está en una escena. */
@@ -315,6 +321,7 @@ async function iniciar(container: HTMLElement): Promise<void> {
   haloRoca = nodos.get('escena_luna')?.getObjectByName('halo_roca') ?? null;
   lrvLuna = nodos.get('escena_luna')?.getObjectByName('lrv_placeholder') ?? null;
   ruedasLRV = (lrvLuna?.userData.ruedas as RuedasLRV | undefined) ?? null;
+  despliegueLRV = lrvLuna ? crearDespliegueLRV(lrvLuna) : null;
   postLuna = crearPostprocesoLuna(renderer, escenaNueva, camaraNueva);
 
   // Colocación: las vitrinas en su posición; el mentor y el halo se mueven en tiempo de juego.
@@ -425,6 +432,8 @@ function entrarEscena(escena: Escena): void {
   ruedasLRV?.reiniciar();
   posicionPreviaLRV = null;
   if (escena === 'luna') {
+    // El LRV empieza plegado en la bahía del LM, como viajó (despliegueLRV.ts).
+    poseDespliegueLRV(0, 0);
     // Llegada junto al LM y al LRV, de pie, mirando hacia los dos (sitioApollo17.ts).
     posicion = new THREE.Vector3(LLEGADA.x, alturaLuna(LLEGADA.x, LLEGADA.z) + ALTURA_OJOS, LLEGADA.z);
     yaw = -THREE.MathUtils.degToRad(LLEGADA.azimutMirada);
@@ -642,13 +651,16 @@ function actualizarLuna(estado: {
   haloVisible: boolean;
 }): void {
   rumboLRV = estado.rumboGrados;
-  // Metros que avanzó el LRV en su rumbo desde el fotograma anterior (negativos al retroceder).
   const rad = THREE.MathUtils.degToRad(estado.rumboGrados);
-  const previa = posicionPreviaLRV;
-  const avanceM = previa ? (estado.x - previa.x) * Math.sin(rad) - (estado.z - previa.z) * Math.cos(rad) : 0;
-  posicionPreviaLRV = { x: estado.x, z: estado.z };
-  ruedasLRV?.actualizar(estado.direccionGrados, avanceM, estado.dtS);
-  if (lrvLuna) colocarLRV(lrvLuna, estado.x, estado.z, estado.rumboGrados);
+  // Mientras se despliega, el LRV lo coloca la animación (poseDespliegueLRV) y no se puede subir a él.
+  if (lrvDesplegado) {
+    // Metros que avanzó el LRV en su rumbo desde el fotograma anterior (negativos al retroceder).
+    const previa = posicionPreviaLRV;
+    const avanceM = previa ? (estado.x - previa.x) * Math.sin(rad) - (estado.z - previa.z) * Math.cos(rad) : 0;
+    posicionPreviaLRV = { x: estado.x, z: estado.z };
+    ruedasLRV?.actualizar(estado.direccionGrados, avanceM, estado.dtS);
+    if (lrvLuna) colocarLRV(lrvLuna, estado.x, estado.z, estado.rumboGrados);
+  }
   if (haloRoca) haloRoca.visible = estado.haloVisible;
   if (estado.sentado && lrvLuna) {
     if (!sentadoLRV) miradaLRV = 0;
@@ -670,6 +682,18 @@ function actualizarLuna(estado: {
     moverEnLuna(0, 0, 0);
   }
   sentadoLRV = estado.sentado;
+}
+
+/**
+ * Despliegue del LRV (misión lunar): deja el LRV en la pose del segundo `tiempoS` de la animación (0 = plegado en la
+ * bahía del LM; DURACION_DESPLIEGUE_LRV_S = estacionado y listo, donde lo coloca la misión). `dtS` hace rodar las
+ * ruedas en la prueba de manejo.
+ */
+function poseDespliegueLRV(tiempoS: number, dtS: number): void {
+  lrvDesplegado = tiempoS >= DURACION_DESPLIEGUE_LRV_S;
+  despliegueLRV?.aplicar(tiempoS, dtS);
+  // Al terminar, la misión toma el relevo desde la posición estacionada, sin un salto en la rodadura.
+  if (lrvDesplegado) posicionPreviaLRV = null;
 }
 
 /** Coloca las manos del avatar según las manos detectadas en este fotograma (SPEC 5.5). */
@@ -697,6 +721,7 @@ export const visual = {
   museo: {
     iniciar,
     actualizarLuna,
+    poseDespliegueLRV,
     actualizarManos,
     ocultarManos,
     mostrarVitrina,

@@ -20,9 +20,18 @@ import type { FuenteEntrada, LecturaEntrada, Senal } from '../input/fuente';
 import { cargarControl, cargarOpciones, guardarControl, type ModoControl, type Opciones } from './opciones';
 import { Museo, type EventoMuseo } from './museo';
 import { MisionLuna, metrosAPieLuna, type EntradaLuna, type EstadoLuna } from './luna';
+import { DespliegueLRV } from './despliegueLRV';
+import type { FaseDespliegueLRV } from '../visual/despliegueApollo17';
+import { crearAnillo, type AnilloUi } from '../ui/anillo';
 
 /** Misión lunar activa (SPEC 8). Solo existe mientras la pantalla es la escena de Luna. */
 let mision: MisionLuna | null = null;
+/** Despliegue del LRV de la misión lunar activa: empieza plegado en la bahía del LM. */
+let despliegue: DespliegueLRV | null = null;
+/** Instante (s) de la última vuelta del despliegue: la animación avanza con el reloj, haya o no fotograma nuevo. */
+let ultimoDespliegueS: number | null = null;
+/** Tiempo máximo (s) que avanza el despliegue en una vuelta, para no saltar tras una pausa. */
+const DT_MAX_DESPLIEGUE_S = 0.1;
 
 /** Control con el que se juega. Decide qué textos de ayuda se muestran (gesto o tecla). */
 let modoControl: ModoControl = 'camara';
@@ -35,12 +44,28 @@ const FRASES_LUNA: Partial<Record<EstadoLuna, ClaveTexto>> = {
   muestra_recogida: 'luna_muestra_recogida',
 };
 
+/**
+ * Frase del mentor al empezar algunas fases del despliegue del LRV (secuencia real: visual/despliegueApollo17.ts).
+ * Las fases cortas se cuentan junto con la siguiente, para que cada frase tenga tiempo de terminar.
+ */
+const FRASES_DESPLIEGUE: Partial<Record<FaseDespliegueLRV, ClaveTexto>> = {
+  liberacion: 'luna_despliegue_liberacion',
+  chasisTrasero: 'luna_despliegue_chasis',
+  bajadaDelantera: 'luna_despliegue_bajada',
+  preparacion: 'luna_despliegue_preparacion',
+  pruebaManejo: 'luna_despliegue_prueba',
+  carga: 'luna_despliegue_carga',
+};
+/** La frase de "LRV listo" espera a que el mentor termine la de la carga. */
+let listoPendiente = false;
+
 /** Con teclado, estos textos nombran la tecla en vez del gesto. */
 const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   ayuda: 'ayuda_teclado',
   entrar_aplauso: 'entrar_teclado',
   luna_entrando_museo: 'luna_entrando_museo_teclado',
   luna_lejos_LRV: 'luna_lejos_LRV_teclado',
+  luna_LRV_desplegado: 'luna_LRV_desplegado_teclado',
   luna_sentado_en_LRV: 'luna_sentado_en_LRV_teclado',
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
   luna_golpeando: 'luna_golpeando_teclado',
@@ -133,6 +158,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
   const cursorUi = crearCursor();
+  const anillo = crearAnillo();
   const inicio = crearInicioUi();
   const video = requireEl<HTMLVideoElement>('camara');
   // Opciones (SPEC 13): el panel modifica este mismo objeto al cambiar un valor.
@@ -168,6 +194,12 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         if (evento.mision === 'luna') {
           // Misión lunar (SPEC 8): sin cartel de "en construcción". El primer aplauso dentro sienta al jugador.
           mision = new MisionLuna();
+          // El LRV llega plegado en la bahía del LM: hay que mantener E para desplegarlo.
+          despliegue = new DespliegueLRV();
+          ultimoDespliegueS = null;
+          listoPendiente = false;
+          claveEntrar = 'luna_mantener_E';
+          ui.indicarEntrar(texto(claveEntrar));
           cursorUi.mostrar(false);
           decirFrase(voz, ui, 'luna_entrando_museo');
         } else {
@@ -178,6 +210,12 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
       case 'regresoMuseo':
         // Se quita el texto de la escena y el mentor da su conclusión (voz y subtítulos).
         mision = null;
+        despliegue = null;
+        anillo.mostrar(null);
+        if (claveEntrar === 'luna_mantener_E') {
+          claveEntrar = null;
+          ui.indicarEntrar(null);
+        }
         ui.ocultarMision();
         claveMision = null;
         hablar(voz, ui, 'regreso_museo', undefined, true);
@@ -232,7 +270,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   opcionesUi.onVisibilidad((abierto) => fuente.pausar(abierto));
   requireEl('ayuda').textContent = texto('ayuda');
 
-  const sesion: Sesion = { museo, ui, cursorUi, opciones, voz };
+  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz };
   alCambiarIdioma(() => releerTextos(sesion));
   let avisoActual: string | null | undefined;
   const bucle = (): void => {
@@ -244,6 +282,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
       ui.aviso(lectura.aviso);
     }
     dibujarManos(sesion, lectura);
+    actualizarDespliegue(sesion, lectura);
     if (lectura.listo && lectura.hayDatos) aplicarLectura(sesion, lectura);
     requestAnimationFrame(bucle);
   };
@@ -255,6 +294,8 @@ interface Sesion {
   museo: Museo;
   ui: JuegoUi;
   cursorUi: CursorUi;
+  /** Anillo de mantener E para desplegar el LRV. */
+  anillo: AnilloUi;
   /** Opciones vivas: el panel las modifica en el mismo objeto. */
   opciones: Opciones;
   voz: Voz;
@@ -302,6 +343,7 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
       velocidadGolpeHombrosS: lectura.golpeHombrosS,
       agarreNuevo: lectura.agarreNuevo,
       bajarse: lectura.bajarse,
+      lrvDesplegado: despliegue?.desplegado ?? true,
     });
     return;
   }
@@ -324,6 +366,42 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
     // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
     accion: lectura.aplauso,
   });
+}
+
+/**
+ * Despliegue del LRV, en cada vuelta del bucle (no solo con fotograma nuevo, para que la animación no se congele):
+ * mantener E llena el anillo; lleno, arranca la animación y el mentor cuenta cada fase. Durante el fundido de
+ * entrada no avanza.
+ */
+function actualizarDespliegue(sesion: Sesion, lectura: LecturaEntrada): void {
+  const { anillo, ui, voz } = sesion;
+  if (mision === null || despliegue === null) return;
+  const previo = ultimoDespliegueS;
+  ultimoDespliegueS = lectura.ahoraS;
+  const enTransicion = sesion.museo.enTransicion;
+  const dtS = previo === null || enTransicion ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, lectura.ahoraS - previo));
+  const estadoPrevio = despliegue.estado;
+  const eventos = despliegue.actualizar(dtS, lectura.listo && lectura.desplegarMantenido && !enTransicion);
+  anillo.mostrar(despliegue.estado === 'plegado' && despliegue.anillo > 0 ? despliegue.anillo : null);
+  // Plegado, la pose no cambia (entrarEscena ya lo dejó en la bahía); después de terminar, la lleva la misión.
+  if (estadoPrevio === 'desplegando' || despliegue.estado === 'desplegando') {
+    visual.museo.poseDespliegueLRV(despliegue.tiempoS, dtS);
+  }
+  for (const evento of eventos) {
+    if (evento.tipo === 'iniciado') {
+      claveEntrar = null;
+      ui.indicarEntrar(null);
+    } else if (evento.tipo === 'fase') {
+      const clave = FRASES_DESPLIEGUE[evento.fase];
+      if (clave) decirFrase(voz, ui, clave);
+    } else if (evento.tipo === 'terminado') {
+      listoPendiente = true;
+    }
+  }
+  if (listoPendiente && !mentorHablando) {
+    listoPendiente = false;
+    decirFrase(voz, ui, 'luna_LRV_desplegado');
+  }
 }
 
 /** Avanza la misión lunar un fotograma, actualiza la escena y reacciona a los eventos (voz, volver). */
@@ -349,6 +427,9 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
       decirFrase(sesion.voz, sesion.ui, evento.conMuestra ? 'luna_bajado_muestra' : 'luna_bajado');
     } else if (evento.tipo === 'lejosDelLRV') {
       decirFrase(sesion.voz, sesion.ui, 'luna_lejos_LRV');
+    } else if (evento.tipo === 'lrvPlegado') {
+      // Desplegándose, el mentor ya va contando el despliegue: no se le interrumpe.
+      if (despliegue?.estado === 'plegado') decirFrase(sesion.voz, sesion.ui, 'luna_LRV_plegado');
     } else if (evento.tipo === 'volver') {
       sesion.museo.volver();
     }

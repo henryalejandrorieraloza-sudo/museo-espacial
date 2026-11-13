@@ -15,6 +15,14 @@
     <div id="entrar" class="entrar" role="status" hidden></div>
     <p id="ayuda" class="ayuda"></p>
     <div id="cursor" class="cursor" hidden></div>
+    <!-- Anillo de mantener E para desplegar el LRV (misión lunar). Lo dibuja src/ui/anillo.ts. -->
+    <div id="anillo" class="anillo" hidden>
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <circle class="anillo-fondo" cx="24" cy="24" r="20" />
+        <circle class="anillo-progreso" cx="24" cy="24" r="20" transform="rotate(-90 24 24)" />
+      </svg>
+      <span class="anillo-tecla">E</span>
+    </div>
     <button id="opcionesBoton" class="opciones-boton" type="button"></button>
     <section id="opciones" class="opciones" hidden></section>
 

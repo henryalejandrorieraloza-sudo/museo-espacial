@@ -65,6 +65,7 @@ Proyecto educativo y narrativo en una página web pública. El jugador recorre u
 | Mirar arriba o abajo en el museo | Subir o bajar la cabeza (límite ±35°) |
 | Señalar vitrina | Cursor con el dedo índice (por defecto). El rayo desde el hombro queda como opción |
 | Iniciar inmersión | Aplaudir |
+| Desplegar LRV (Apollo 17) | Mantener la tecla E 3 s, en los dos modos de control (aún no tiene gesto) |
 | Conducir LRV | Volante gestual con ambas manos |
 | Avanzar LRV | Subir las rodillas (caminar en el sitio) |
 | Avanzar Perseverance | Inclinar una mano hacia arriba |
@@ -181,11 +182,12 @@ Parte visual: ver spec-visual-museo.md.
 
 ### 8.1 Escena
 
-- Terreno lunar con el LRV estacionado y una roca marcada con halo.
+- Terreno lunar con el LRV plegado en la bahía del LM y una roca marcada con halo.
 - Cámara en primera persona, con las manos del astronauta visibles.
 - Halo azul celeste sobre la roca de Station 1, cerca de Steno Crater.
 - Sitio: valle de Taurus-Littrow, junto al LM Challenger, 1 h después del inicio de la EVA-1 (12 dic. 1972, 00:54 UTC). Sol y Tierra según la tabla del ALSJ (Sol a 15.7° de altura y azimut 96.8°; Tierra a 45.3° y azimut 240.7°, gibosa al 68 %). Estrellas del catálogo Hipparcos en su posición real, muy tenues. Datos y fuentes en `src/visual/sitioApollo17.ts` y `src/visual/cielo.ts`.
 - El jugador llega a pie: camina y mira como en el museo, sin atravesar el LM ni el LRV. Para subir, se acerca al LRV (3.2 m) y aplaude. Lejos del LRV, el aplauso no lo sienta y el mentor le pide acercarse.
+- Despliegue del LRV: el LRV empieza plegado en la bahía del cuadrante suroeste del LM, con la parte de abajo del chasis hacia fuera, como viajó (ALSJ, NSSDC). Mientras está plegado o desplegándose no se puede subir ni conducir, y se muestra "Mantén E para desplegar el LRV". Mantener E llena un anillo en el centro de la pantalla en 3 s (`SEGUNDOS_MANTENER_DESPLEGAR`); soltarla antes lo vacía en 0.35 s sin desplegar nada. Con el anillo lleno, E queda bloqueada y se reproduce la secuencia real de Apollo 17 (117:26–117:48 GET, unos 21 min) acortada a 44.5 s: liberación con la anilla en D, inclinación con la cinta, a 45° se abre el chasis trasero y saltan sus ruedas, ruedas traseras al suelo y apertura del delantero a 73°, bajada del frente, retiro y alineación hacia el este, guardabarros, asientos y consola, encendido y prueba de manejo (marcha atrás para apartarse del LM, por fuera de la pata sur y un bucle hasta la posición de estacionamiento), y montaje de la LCRU, las antenas, la cámara y el geopallet. El mentor lo cuenta en seis frases. Fases, tiempos y fuentes en `src/visual/despliegueApollo17.ts`; el recorrido de la prueba de manejo y las medidas de la bahía son del modelo, no de una fuente.
 - Sentado en el asiento del comandante (izquierdo, con el mando en T a la derecha), el giro de la cabeza o el ratón mueve solo la vista (hasta ±100° del rumbo).
 - Simplificación de juego: la roca y su cráter de ~20 m están a ~45 m del LRV, no a los ~1.1 km reales de la estación 1. El LRV aparca apuntando a la roca. Los textos de la misión lo dicen.
 
@@ -331,6 +333,7 @@ No se guardan muestras recogidas como progreso.
 - [ ] Manos como guantes de traje con fuelles (spec-visual-museo.md, sección 9): verificadas con manos sintéticas; falta verlas con cámara real.
 - [ ] Museo y navegación.
 - [ ] Misión lunar. Escena de Taurus-Littrow (LM, LRV, terreno, macizos, Sol, Tierra y estrellas), caminar a pie y subir al LRV: probado en Chrome sin interfaz con teclado, de la vitrina a la muestra y de vuelta al museo. Falta verlo en un navegador con ventana y con cámara real.
+- [ ] Despliegue del LRV desde la bahía del LM (mantener E, anillo y animación por fases): probado en Chrome sin interfaz con teclado, de la llegada a la Luna a subirse al LRV desplegado, y la secuencia revisada en capturas. Falta verlo en un navegador con ventana y decidir un gesto para el modo cámara.
 - [ ] Misión marciana.
 - [ ] Mentor y voz.
 - [ ] Publicación.
