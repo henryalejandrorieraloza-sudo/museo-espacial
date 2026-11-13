@@ -72,8 +72,11 @@ export const LM = { x: 0, z: 0, azimutFrente: AZIMUT_BAHIA_LRV + DESVIO_BAHIA_RE
  * del LRV en esa dirección, para no conducir 1 km. Steno sí se dibuja en su sitio aproximado, más lejos.
  */
 export const ESTACION1_CRATER = { ...enAzimut(168, 42, POSICION_LRV), diametro: 20, profundidad: 3.5 } as const;
-/** Roca de la estación 1 con el halo azul celeste: en el borde norte-noroeste del cráter compacto. */
-export const ROCA_ESTACION1 = enAzimut(330, 10.6, ESTACION1_CRATER);
+/**
+ * Suelo naranja de la estación 1 con el halo azul celeste (antes una roca): en el borde suroeste del cráter compacto,
+ * a ~48 m del LRV (la roca estaba a ~32 m). El nombre se conserva por las referencias de la lógica del juego.
+ */
+export const ROCA_ESTACION1 = enAzimut(230, 11.5, ESTACION1_CRATER);
 
 /** El LRV aparca apuntando a la roca (~174°, hacia el sur): se llega con solo avanzar recto. */
 export const LRV_ESTACIONADO = { ...POSICION_LRV, rumbo: azimutEntre(POSICION_LRV, ROCA_ESTACION1) } as const;

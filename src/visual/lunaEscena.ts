@@ -70,26 +70,114 @@ function enEjesDe(direccion: THREE.Vector3, azimutFrente: number): THREE.Vector3
   return direccion.clone().applyAxisAngle(EJE_Y, THREE.MathUtils.degToRad(azimutFrente));
 }
 
-/** Roca de la estación 1 (~0.9 m, sin identificar como muestra concreta) con el halo azul celeste. */
-function crearRocaConHalo(): THREE.Group {
+/**
+ * Suelo naranja de la estación 1 (vidrio volcánico, como el de la foto de Shorty) con el halo azul celeste.
+ * Mancha irregular pegada al terreno, con el borde que se desvanece en el regolito gris, y unos fragmentos
+ * sueltos del mismo color. Conserva los nombres de nodo `roca_placeholder` y `halo_roca` (ver MODELS.md).
+ * // VERIFICAR: la estación 1 real no tenía suelo naranja; es una decisión de juego (el naranja era de la estación 4).
+ */
+const RADIO_MANCHA_M = 2.1;
+function crearSueloNaranjaConHalo(): THREE.Group {
   const grupo = new THREE.Group();
   grupo.name = 'roca_placeholder';
-  const material = crearMaterialRoca();
-  material.color.setHex(SUELO_LUNA.brecha);
-  const roca = new THREE.Mesh(geometriaRoca(31, 1), material);
-  roca.position.y = 0.22;
-  roca.scale.set(0.5, 0.32, 0.42);
-  roca.rotation.set(0.2, 0.7, 0.1);
-  roca.castShadow = true;
-  roca.receiveShadow = true;
+  const cx = ROCA_ESTACION1.x;
+  const cz = ROCA_ESTACION1.z;
+  const y0 = alturaLuna(cx, cz);
+  // Azar determinista (LCG) para que la mancha sea igual en cada partida.
+  let semilla = 74220;
+  const azar = (): number => {
+    semilla = (semilla * 1664525 + 1013904223) % 4294967296;
+    return semilla / 4294967296;
+  };
+
+  // Mancha: malla polar con radio irregular y alfa que baja hacia el borde.
+  const anillos = 10;
+  const sectores = 40;
+  const base = new THREE.Color(SUELO_LUNA.naranja);
+  const posiciones: number[] = [0, 0.012, 0];
+  const colores: number[] = [base.r, base.g, base.b, 0.95];
+  const indices: number[] = [];
+  const irregular: number[] = [];
+  for (let k = 0; k < sectores; k++) irregular.push(0.7 + azar() * 0.5);
+  for (let i = 1; i <= anillos; i++) {
+    const f = i / anillos;
+    for (let k = 0; k < sectores; k++) {
+      const ang = (k / sectores) * Math.PI * 2;
+      const r = RADIO_MANCHA_M * f * irregular[k];
+      const x = Math.cos(ang) * r * 1.2;
+      const z = Math.sin(ang) * r * 0.85;
+      posiciones.push(x, alturaLuna(cx + x, cz + z) - y0 + 0.012, z);
+      const alfa = THREE.MathUtils.clamp((1 - f) * 2.4 + (azar() - 0.5) * 0.7, 0, 1) * 0.95;
+      const tono = 0.85 + azar() * 0.3;
+      colores.push(base.r * tono, base.g * tono, base.b * tono, alfa);
+    }
+  }
+  for (let k = 0; k < sectores; k++) indices.push(0, 1 + ((k + 1) % sectores), 1 + k);
+  for (let i = 1; i < anillos; i++) {
+    for (let k = 0; k < sectores; k++) {
+      const a = 1 + (i - 1) * sectores + k;
+      const b = 1 + (i - 1) * sectores + ((k + 1) % sectores);
+      const c = a + sectores;
+      const d = b + sectores;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(posiciones, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colores, 4));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mancha = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      transparent: true,
+      roughness: 1,
+      metalness: 0,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -4,
+    }),
+  );
+  mancha.name = 'suelo_naranja';
+  mancha.receiveShadow = true;
+  grupo.add(mancha);
+
+  // Fragmentos como en la foto: muchos terrones naranja-pardo de varios tamaños sobre la mancha, más densos hacia el
+  // centro, y unos pocos bloques gris claro en el borde (la capa gris que Schmitt abrió al cavar).
+  const materiales = [1, 0.8, 0.62].map((k) => {
+    const m = crearMaterialRoca();
+    m.color.setHex(SUELO_LUNA.naranja).multiplyScalar(k);
+    return m;
+  });
+  const materialClaro = crearMaterialRoca();
+  materialClaro.color.setHex(SUELO_LUNA.rocaClara);
+  for (let n = 0; n < 130; n++) {
+    const claro = n >= 118;
+    const ang = azar() * Math.PI * 2;
+    const r = claro ? RADIO_MANCHA_M * (0.8 + azar() * 0.25) : azar() ** 0.7 * RADIO_MANCHA_M * 0.85;
+    const x = Math.cos(ang) * r * 1.2;
+    const z = Math.sin(ang) * r * 0.85;
+    const tam = claro ? 0.1 + azar() * 0.12 : 0.03 + azar() ** 3 * 0.14;
+    const material = claro ? materialClaro : materiales[Math.floor(azar() * materiales.length)];
+    const fragmento = new THREE.Mesh(geometriaRoca(40 + (n % 24), 1), material);
+    fragmento.position.set(x, alturaLuna(cx + x, cz + z) - y0 + tam * 0.3, z);
+    fragmento.scale.set(tam, tam * (0.55 + azar() * 0.35), tam * (0.8 + azar() * 0.4));
+    fragmento.rotation.set(azar() * 3, azar() * 3, azar() * 3);
+    fragmento.castShadow = true;
+    fragmento.receiveShadow = true;
+    grupo.add(fragmento);
+  }
+
   const halo = new THREE.Mesh(
     new THREE.RingGeometry(RADIO_HALO, RADIO_HALO + 0.05, 48),
     new THREE.MeshBasicMaterial({ color: tinte(COLOR_HALO, BRILLO_HALO), side: THREE.DoubleSide }),
   );
   halo.name = 'halo_roca';
   halo.position.y = 0.3;
-  grupo.add(roca, halo);
-  grupo.position.set(ROCA_ESTACION1.x, alturaLuna(ROCA_ESTACION1.x, ROCA_ESTACION1.z), ROCA_ESTACION1.z);
+  grupo.add(halo);
+  grupo.position.set(cx, y0, cz);
   return grupo;
 }
 
@@ -157,7 +245,7 @@ export function crearEscenaLuna(): THREE.Group {
   colocarLRV(lrv, LRV_ESTACIONADO.x, LRV_ESTACIONADO.z, LRV_ESTACIONADO.rumbo);
 
   const cielo = crearCielo();
-  grupo.add(crearSuelo(), crearMacizos(), cielo, lm, lrv, crearRocaConHalo());
+  grupo.add(crearSuelo(), crearMacizos(), cielo, lm, lrv, crearSueloNaranjaConHalo());
 
   // La caja de sombras sigue al jugador, un poco por delante de él, y se ajusta a la rejilla de texels del mapa
   // para que los bordes de las sombras no tiemblen al caminar.
