@@ -23,23 +23,23 @@ import { LM, LRV_ESTACIONADO, ROCA_ESTACION1 } from './sitioApollo17';
 // y los macizos a 10 km conviven sin perder precisión de profundidad cerca de la cámara.
 
 /** Sol: luz direccional casi blanca (la luz real del Sol fuera de la atmósfera es blanca), con sombras duras. */
-const COLOR_SOL = 0xfff6ec;
-const INTENSIDAD_SOL = 9;
+export const COLOR_SOL = 0xfff6ec;
+export const INTENSIDAD_SOL = 9;
 /**
  * Relleno de las sombras. En la Luna el cielo es negro: la única luz en la sombra es la que rebota en el suelo
  * iluminado, gris y desde abajo. Por eso las sombras de las fotos son muy oscuras pero no negras del todo.
  */
-const COLOR_RELLENO_CIELO = 0x2c2c30;
-const COLOR_RELLENO_SUELO = 0x75736e;
-const INTENSIDAD_RELLENO = 0.5;
+export const COLOR_RELLENO_CIELO = 0x2c2c30;
+export const COLOR_RELLENO_SUELO = 0x75736e;
+export const INTENSIDAD_RELLENO = 0.5;
 /**
  * Relleno extra solo para el relieve lejano (pasada CAPA_LEJOS): las laderas de los macizos a la sombra reciben la
  * luz que rebota en el valle y en las laderas al sol, de kilómetros de extensión. Sin él se verían negras, como
  * agujeros en la montaña.
  */
-const COLOR_RELLENO_LEJOS_CIELO = 0x8a8884;
-const COLOR_RELLENO_LEJOS_SUELO = 0x9a9893;
-const INTENSIDAD_RELLENO_LEJOS = 1.6;
+export const COLOR_RELLENO_LEJOS_CIELO = 0x8a8884;
+export const COLOR_RELLENO_LEJOS_SUELO = 0x9a9893;
+export const INTENSIDAD_RELLENO_LEJOS = 1.6;
 /** Exposición del tone mapping en la Luna. */
 export const EXPOSICION_LUNA = 1.0;
 /**
@@ -49,10 +49,10 @@ export const EXPOSICION_LUNA = 1.0;
 const BLOOM_FUERZA = 0.3;
 const BLOOM_RADIO = 0.2;
 const BLOOM_UMBRAL = 3.0;
-const PIXELES_MAXIMOS = 1.25;
+export const PIXELES_MAXIMOS = 1.25;
 /** Halo azul celeste (SPEC 10): color y brillo constantes, sin iluminación ni bloom (no ilumina nada alrededor). */
-const COLOR_HALO = 0x87ceeb;
-const BRILLO_HALO = 1.3;
+export const COLOR_HALO = 0x87ceeb;
+export const BRILLO_HALO = 1.3;
 const RADIO_HALO = 0.75;
 /** Sombras: caja de ±LADO_SOMBRA_M alrededor del jugador, con mapa de TAMANO_MAPA_SOMBRA píxeles. */
 const LADO_SOMBRA_M = 36;

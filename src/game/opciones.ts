@@ -37,6 +37,11 @@ export interface Opciones {
   tiempoOcultarManoS: number;
   /** Salto (m) por debajo del cual la mano reaparece deslizándose; por encima, aparece de golpe donde la detecta la cámara. */
   umbralSaltoManoM: number;
+  /**
+   * Subtítulos en la animación del LRV (activados por defecto). Se cambian aquí o con la tecla C durante la animación.
+   * Las opciones guardadas antes de existir este campo se leen igual: toma el valor por defecto.
+   */
+  subtitulosPresentacion: boolean;
 }
 
 /** Separación inicial entre las manos (m): 0 = las manos como antes. */
@@ -69,6 +74,7 @@ export const OPCIONES_DEFAULT: Opciones = {
   limitesMano: tablaLimitesPorDefecto(),
   tiempoOcultarManoS: 1,
   umbralSaltoManoM: 0.05,
+  subtitulosPresentacion: true,
 };
 
 /** Rangos aceptados. Un valor fuera de rango se ajusta al límite más cercano. */
@@ -135,6 +141,8 @@ export function normalizarOpciones(datos: Partial<Record<keyof Opciones, unknown
     limitesMano: normalizarLimites(datos.limitesMano),
     tiempoOcultarManoS: enRango(datos.tiempoOcultarManoS, RANGOS.tiempoOcultarManoS, d.tiempoOcultarManoS),
     umbralSaltoManoM: enRango(datos.umbralSaltoManoM, RANGOS.umbralSaltoManoM, d.umbralSaltoManoM),
+    subtitulosPresentacion:
+      typeof datos.subtitulosPresentacion === 'boolean' ? datos.subtitulosPresentacion : d.subtitulosPresentacion,
   };
 }
 

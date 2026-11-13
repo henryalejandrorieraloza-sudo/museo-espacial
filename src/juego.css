@@ -380,3 +380,113 @@
   padding: 8px 14px;
   font-size: 14px;
 }
+
+/* Presentación del LRV (src/ui/presentacionUi.ts). Encima de la escena y por debajo de los subtítulos (z-index 3). */
+.presentacion {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.presentacion-fundido {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+}
+
+.presentacion-rotulos {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Rótulo de una pieza: texto blanco en negrita sobre una caja oscura, como en la referencia. */
+.presentacion-rotulo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: min(360px, 70vw);
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(10, 12, 16, 0.72);
+  border: 1px solid rgba(135, 206, 235, 0.55);
+  color: #fff;
+  font: 700 clamp(15px, 2vw, 22px)/1.25 Georgia, 'Times New Roman', serif;
+  text-align: center;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+/* Tarjeta del peso: dos columnas, Tierra y Luna, y la masa debajo. */
+.presentacion-peso {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  padding: 16px 20px 12px;
+  border-radius: 8px;
+  background: rgba(10, 12, 16, 0.78);
+  border: 1px solid rgba(135, 206, 235, 0.55);
+  color: #fff;
+  text-align: center;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.presentacion-peso-fila {
+  display: flex;
+  justify-content: space-around;
+  gap: 16px;
+}
+
+.presentacion-peso-columna {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.presentacion-peso-columna strong {
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.1;
+}
+
+.presentacion-peso-columna span {
+  font: 600 16px/1.3 system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.presentacion-peso p {
+  margin: 10px 0 0;
+  font: 400 14px/1.4 system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.presentacion-ayuda {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.8);
+  font: 500 13px/1.3 system-ui, sans-serif;
+}
+
+/* "Estás listo para la misión": centrado, grande, sobre el último plano oscurecido. */
+.presentacion-listo {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  right: 16px;
+  transform: translateY(-50%);
+  margin: 0;
+  padding: 24px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font: 700 clamp(28px, 5vw, 52px)/1.2 Georgia, 'Times New Roman', serif;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
+}

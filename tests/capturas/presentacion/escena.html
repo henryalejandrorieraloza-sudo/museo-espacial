@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <title>Capturas de la presentación del LRV</title>
+    <style>
+      html, body { margin: 0; background: #000; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <!-- Solo para desarrollo: npm run dev y abrir /tests/capturas/presentacion/escena.html?escena=2&tramo=0&t=5 -->
+    <section id="presentacion" class="presentacion">
+      <div id="presentacionFundido" class="presentacion-fundido"></div>
+      <div id="presentacionRotulos" class="presentacion-rotulos"></div>
+      <div id="presentacionPeso" class="presentacion-peso" hidden></div>
+      <p id="presentacionAyuda" class="presentacion-ayuda" hidden></p>
+      <h1 id="presentacionListo" class="presentacion-listo" hidden></h1>
+    </section>
+    <div id="subtitulos" class="subtitulos" hidden></div>
+    <script type="module" src="./escena.ts"></script>
+  </body>
+</html>

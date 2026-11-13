@@ -17,13 +17,15 @@ import { crearUi, type JuegoUi } from '../ui/juegoUi';
 import { FuenteCamara } from '../input/camaraFuente';
 import { FuenteTeclado } from '../input/tecladoFuente';
 import type { FuenteEntrada, LecturaEntrada, Senal } from '../input/fuente';
-import { cargarControl, cargarOpciones, guardarControl, type ModoControl, type Opciones } from './opciones';
+import { cargarControl, cargarOpciones, guardarControl, guardarOpciones, type ModoControl, type Opciones } from './opciones';
 import { Museo, type EventoMuseo } from './museo';
 import { MisionLuna, metrosAPieLuna, type EntradaLuna, type EstadoLuna } from './luna';
 import { DespliegueLRV } from './despliegueLRV';
 import { BalanceoCaminata, type EntradaBalanceo } from './balanceo';
 import type { FaseDespliegueLRV } from '../visual/despliegueApollo17';
 import { crearAnillo, type AnilloUi } from '../ui/anillo';
+import { GUION, PresentacionLRV, opacidadMarca, type EventoPresentacion } from './presentacionLRV';
+import { crearPresentacionUi, type PresentacionUi, type RotuloUi } from '../ui/presentacionUi';
 
 /** Misión lunar activa (SPEC 8). Solo existe mientras la pantalla es la escena de Luna. */
 let mision: MisionLuna | null = null;
@@ -33,6 +35,17 @@ let despliegue: DespliegueLRV | null = null;
 let ultimoDespliegueS: number | null = null;
 /** Tiempo máximo (s) que avanza el despliegue en una vuelta, para no saltar tras una pausa. */
 const DT_MAX_DESPLIEGUE_S = 0.1;
+
+/** Presentación del LRV en curso (entre la vitrina y la misión lunar), o null. */
+let presentacion: PresentacionLRV | null = null;
+/** Instante (s) de la última vuelta de la presentación: avanza con el reloj, haya o no fotograma de la cámara. */
+let ultimaPresentacionS: number | null = null;
+/** Frase de la presentación que está sonando: se vuelve a mostrar si se encienden los subtítulos con la tecla C. */
+let frasePresentacion: string | null = null;
+/** Desplazamiento del rótulo respecto a su pieza (px) cuando la marca no dice otro: encima. */
+const ROTULO_ENCIMA_PX = [0, -80] as const;
+/** Oscurecimiento del último plano mientras se ve "Estás listo para la misión". */
+const OSCURO_LISTO = 0.35;
 
 /** Control con el que se juega. Decide qué textos de ayuda se muestran (gesto o tecla). */
 let modoControl: ModoControl = 'camara';
@@ -158,6 +171,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   });
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
+  const presUi = crearPresentacionUi();
   const cursorUi = crearCursor();
   const anillo = crearAnillo();
   const inicio = crearInicioUi();
@@ -186,7 +200,30 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         ui.indicarEntrar(null);
         claveEntrar = null;
         break;
+      case 'presentacionAbierta':
+        // La animación del LRV entre la vitrina y la misión (game/presentacionLRV.ts). Sin entradas del museo; Enter
+        // la salta (después de la introducción) y C enciende o apaga sus subtítulos.
+        voz.cancelar();
+        habla = null;
+        ui.subtitulos(null);
+        ui.indicarEntrar(null);
+        claveEntrar = null;
+        requireEl('ayuda').hidden = true;
+        presentacion = new PresentacionLRV();
+        ultimaPresentacionS = null;
+        frasePresentacion = null;
+        presUi.mostrar(true);
+        // Si la escena 3D no se pudo montar, se pasa directo a "Estás listo para la misión".
+        if (!evento.visible) {
+          presentacion.iniciar();
+          presentacion.forzarFinal();
+        }
+        break;
       case 'misionAbierta':
+        // Al salir de la presentación (si la hubo), se quita su capa. Lo demás de la misión no cambia.
+        presentacion = null;
+        presUi.mostrar(false);
+        requireEl('ayuda').hidden = false;
         voz.cancelar();
         habla = null;
         ui.subtitulos(null);
@@ -271,7 +308,23 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   opcionesUi.onVisibilidad((abierto) => fuente.pausar(abierto));
   requireEl('ayuda').textContent = texto('ayuda');
 
-  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz };
+  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz, presUi };
+  presUi.alTeclas(
+    () => {
+      if (presentacion?.saltar()) {
+        voz.cancelar();
+        ui.subtitulos(null);
+      }
+    },
+    () => {
+      // C: subtítulos de la animación. Se guarda como el resto de opciones.
+      opciones.subtitulosPresentacion = !opciones.subtitulosPresentacion;
+      guardarOpciones(opciones);
+      if (presentacion?.fase !== 'listo' && presentacion?.fase !== 'terminada') {
+        ui.subtitulos(opciones.subtitulosPresentacion ? frasePresentacion : null);
+      }
+    },
+  );
   alCambiarIdioma(() => releerTextos(sesion));
   let avisoActual: string | null | undefined;
   const balanceo = new BalanceoCaminata();
@@ -286,6 +339,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     actualizarBalanceo(balanceo, sesion, lectura);
     dibujarManos(sesion, lectura);
     actualizarDespliegue(sesion, lectura);
+    actualizarPresentacion(sesion, ahoraS);
     if (lectura.listo && lectura.hayDatos) aplicarLectura(sesion, lectura);
     requestAnimationFrame(bucle);
   };
@@ -302,6 +356,85 @@ interface Sesion {
   /** Opciones vivas: el panel las modifica en el mismo objeto. */
   opciones: Opciones;
   voz: Voz;
+  presUi: PresentacionUi;
+}
+
+/**
+ * Frase de la presentación con la voz del mentor (la del robot del museo). Los subtítulos siguen la opción
+ * `subtitulosPresentacion`; `conSubtitulos` = false para "Estás listo", que ya se lee en grande.
+ */
+function narrarPresentacion(sesion: Sesion, clave: ClaveTexto, alTerminar: () => void, conSubtitulos = true): void {
+  const { voz, ui, opciones } = sesion;
+  habla = null;
+  voz.cancelar();
+  frasePresentacion = null;
+  ui.subtitulos(null);
+  voz.hablar(tGuion(clave), alTerminar, (frase) => {
+    if (!conSubtitulos) return;
+    frasePresentacion = frase;
+    ui.subtitulos(opciones.subtitulosPresentacion ? frase : null);
+  });
+}
+
+/** Reacciona a los eventos de la presentación: frase de cada tramo, "Estás listo" y paso a la misión. */
+function eventosPresentacion(sesion: Sesion, p: PresentacionLRV, eventos: readonly EventoPresentacion[]): void {
+  const { voz, ui, presUi, museo } = sesion;
+  const alTerminar = (): void => {
+    if (presentacion === p) p.terminoVoz();
+  };
+  for (const evento of eventos) {
+    if (evento.tipo === 'tramo') {
+      const clave = GUION[evento.escena]?.tramos[evento.tramo]?.narracion ?? null;
+      if (clave) {
+        narrarPresentacion(sesion, clave, alTerminar);
+      } else {
+        voz.cancelar();
+        frasePresentacion = null;
+        ui.subtitulos(null);
+      }
+    } else if (evento.tipo === 'listo') {
+      presUi.rotulos([]);
+      presUi.peso(0);
+      presUi.ayuda(null);
+      presUi.fundido(OSCURO_LISTO);
+      presUi.listo(t('pres_listo'));
+      narrarPresentacion(sesion, 'pres_listo', alTerminar, false);
+    } else if (evento.tipo === 'fin') {
+      museo.terminarPresentacion();
+    }
+  }
+}
+
+/**
+ * Presentación del LRV, en cada vuelta del bucle (no solo con fotograma de la cámara): avanza el guion, mueve la
+ * escena 3D y pone los rótulos, la tarjeta del peso, el fundido y la ayuda de teclas.
+ */
+function actualizarPresentacion(sesion: Sesion, ahoraS: number): void {
+  const p = presentacion;
+  if (p === null) return;
+  const { presUi } = sesion;
+  const previo = ultimaPresentacionS;
+  ultimaPresentacionS = ahoraS;
+  const dtS = previo === null ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, ahoraS - previo));
+  eventosPresentacion(sesion, p, p.fase === 'espera' ? p.iniciar() : p.actualizar(dtS));
+  if (presentacion !== p || p.fase === 'listo' || p.fase === 'terminada') return;
+
+  const tramo = p.tramoActual;
+  if (!tramo) return;
+  const tiempo = p.tiempoTramo;
+  const posiciones = visual.museo.actualizarPresentacion({ tramo, t: tiempo, dtS });
+  const rotulos: RotuloUi[] = [];
+  tramo.marcas.forEach((m, i) => {
+    const pos = posiciones[i];
+    if (!m.rotulo || !pos?.enPantalla) return;
+    const [dx, dy] = m.rotuloPx ?? ROTULO_ENCIMA_PX;
+    rotulos.push({ texto: t(m.rotulo), x: pos.x + dx, y: pos.y + dy, opacidad: opacidadMarca(m, tiempo) });
+  });
+  presUi.rotulos(rotulos);
+  const peso = tramo.tarjetaPeso;
+  presUi.peso(peso ? opacidadMarca({ resalte: 'lrv', rotulo: null, desde: peso[0], hasta: peso[1] }, tiempo) : 0);
+  presUi.fundido(p.fundido);
+  presUi.ayuda(t(p.saltable ? 'pres_ayuda' : 'pres_ayuda_intro'));
 }
 
 /** Sin caminata: el balanceo se va a cero. */

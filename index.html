@@ -11,6 +11,15 @@
 
     <video id="camara" class="camara" autoplay muted playsinline hidden></video>
     <div id="aviso" class="aviso" role="status" hidden></div>
+    <!-- Presentación del LRV (src/ui/presentacionUi.ts): fundido, rótulos, peso, ayuda de teclas y "Estás listo".
+         Va por debajo de los subtítulos, que se leen siempre. -->
+    <section id="presentacion" class="presentacion" hidden>
+      <div id="presentacionFundido" class="presentacion-fundido"></div>
+      <div id="presentacionRotulos" class="presentacion-rotulos"></div>
+      <div id="presentacionPeso" class="presentacion-peso" hidden></div>
+      <p id="presentacionAyuda" class="presentacion-ayuda" hidden></p>
+      <h1 id="presentacionListo" class="presentacion-listo" role="status" hidden></h1>
+    </section>
     <div id="subtitulos" class="subtitulos" hidden></div>
     <div id="entrar" class="entrar" role="status" hidden></div>
     <p id="ayuda" class="ayuda"></p>

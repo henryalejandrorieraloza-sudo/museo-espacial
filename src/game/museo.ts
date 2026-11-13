@@ -16,17 +16,25 @@ const MISION_DE: Record<VitrinaId, Mision> = {
   vitrina_perseverance: 'marte',
 };
 
+/**
+ * Vitrinas con presentación antes de la misión: al entrar se ve la animación del LRV (game/presentacionLRV.ts) y,
+ * al terminar, se pasa a la misión igual que antes.
+ */
+const CON_PRESENTACION: ReadonlySet<VitrinaId> = new Set(['vitrina_lrv']);
+
 export function esVitrina(id: string | null): id is VitrinaId {
   return id !== null && id in MISION_DE;
 }
 
-export type Pantalla = { tipo: 'museo' } | { tipo: 'mision'; mision: Mision };
+export type Pantalla = { tipo: 'museo' } | { tipo: 'presentacion'; mision: Mision } | { tipo: 'mision'; mision: Mision };
 
 export type EventoMuseo =
   | { tipo: 'vitrinaSeleccionada'; id: VitrinaId }
   | { tipo: 'vitrinaDeseleccionada'; id: VitrinaId }
   /** El mentor terminó de hablar de esta vitrina: ya se puede aplaudir para entrar. */
   | { tipo: 'listoParaEntrar'; id: VitrinaId }
+  /** Empieza la presentación previa a la misión. `visible`: false si la escena 3D no se pudo montar. */
+  | { tipo: 'presentacionAbierta'; mision: Mision; visible: boolean }
   | { tipo: 'misionAbierta'; mision: Mision }
   | { tipo: 'regresoMuseo' };
 
@@ -124,6 +132,8 @@ export class Museo {
       if (entrada.accion) this.volver();
       return;
     }
+    // Durante la presentación no hay entradas: ni mover la cámara, ni aplaudir. Solo Enter la salta (juego.ts).
+    if (this.pantallaActual.tipo === 'presentacion') return;
 
     // Con una vitrina seleccionada, el flujo (explicación, aviso y entrada) no lo interrumpe nada (SPEC 7.2):
     // ni el cursor, ni la cabeza, ni la caminata, ni perder el seguimiento. La selección no cambia hasta entrar.
@@ -131,8 +141,9 @@ export class Museo {
       // Aplauso o espacio: entra solo cuando el mentor ya terminó. Mientras habla, no hace nada.
       // No se comprueba dónde está el jugador ni hacia dónde mira.
       if (entrada.accion && this.fase === 'listo') {
-        const mision = MISION_DE[this.seleccionada];
-        this.iniciarTransicion(() => this.abrirMision(mision));
+        const id = this.seleccionada;
+        const mision = MISION_DE[id];
+        this.iniciarTransicion(() => (CON_PRESENTACION.has(id) ? this.abrirPresentacion(mision) : this.abrirMision(mision)));
         return;
       }
       visual.museo.moverCamara(entrada.giroGrados, entrada.metros, entrada.cabeceoGrados, entrada.lateralMetros);
@@ -155,6 +166,16 @@ export class Museo {
   volver(): void {
     if (this.transicion || this.pantallaActual.tipo !== 'mision') return;
     this.iniciarTransicion(() => this.completarVolver());
+  }
+
+  /**
+   * Fin de la presentación (terminó o se saltó y ya se dijo "Estás listo para la misión"): entra a la misión con el
+   * fundido de siempre, como si se hubiera aplaudido sin presentación.
+   */
+  terminarPresentacion(): void {
+    if (this.transicion || this.pantallaActual.tipo !== 'presentacion') return;
+    const { mision } = this.pantallaActual;
+    this.iniciarTransicion(() => this.abrirMision(mision));
   }
 
   private iniciarTransicion(cambio: () => void): void {
@@ -187,6 +208,14 @@ export class Museo {
     this.seleccionada = null;
     this.fase = null;
     this.emitir({ tipo: 'vitrinaDeseleccionada', id });
+  }
+
+  /** La vitrina sigue seleccionada durante la presentación; se deselecciona al abrir la misión. */
+  private abrirPresentacion(mision: Mision): void {
+    this.candidata = null;
+    this.pantallaActual = { tipo: 'presentacion', mision };
+    const visible = visual.museo.entrarPresentacion();
+    this.emitir({ tipo: 'presentacionAbierta', mision, visible });
   }
 
   private abrirMision(mision: Mision): void {

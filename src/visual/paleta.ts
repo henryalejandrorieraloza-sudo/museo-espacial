@@ -267,6 +267,36 @@ const _color = new THREE.Color();
 const _euler = new THREE.Euler();
 const _q = new THREE.Quaternion();
 
+/**
+ * Registro opcional de piezas por nombre: mientras está activo (`registrandoPartes`), cada pieza que se añade dentro de
+ * `parte(nombre, …)` se copia también a la parte `nombre` de su lote. Al construir, el grupo del lote lleva en
+ * `userData.partes` (Map nombre → geometría, solo posiciones, en los ejes del lote) lo que se registró. Lo usa la
+ * presentación del LRV para resaltar piezas; sin registro activo, no se copia nada y el modelo es el mismo.
+ */
+let registrarPartes = false;
+const partesActivas: string[] = [];
+
+/** Ejecuta `fn` con el registro de partes activo. */
+export function registrandoPartes<T>(fn: () => T): T {
+  const previo = registrarPartes;
+  registrarPartes = true;
+  try {
+    return fn();
+  } finally {
+    registrarPartes = previo;
+  }
+}
+
+/** Las piezas que se añadan dentro de `fn` pertenecen también a la parte `nombre` (se pueden anidar). */
+export function parte(nombre: string, fn: () => void): void {
+  partesActivas.push(nombre);
+  try {
+    fn();
+  } finally {
+    partesActivas.pop();
+  }
+}
+
 /** Acumula piezas estáticas y las fusiona por material. */
 export class Lote {
   private readonly opacas: THREE.BufferGeometry[] = [];
@@ -278,6 +308,8 @@ export class Lote {
   private readonly vidrios: THREE.BufferGeometry[] = [];
   private readonly azarCara = azar(7);
   private matriz = new THREE.Matrix4();
+  /** Copias de las piezas de cada parte con nombre (solo con `registrandoPartes`). */
+  private readonly partes = new Map<string, THREE.BufferGeometry[]>();
 
   /**
    * `acabado`: 'museo' (rugosidad 0.75 y metalicidad 0.2, como pide el estilo) o 'mate' (suelo lunar).
@@ -300,17 +332,33 @@ export class Lote {
   /** Pieza mate iluminada. */
   pieza(geo: THREE.BufferGeometry, color: ColorCara, t: Transformacion = {}): void {
     if (t.m === 'satinado') {
-      this.satinadas.push(this.prepararSuave(geo, color, t));
+      this.satinadas.push(this.anotar(this.prepararSuave(geo, color, t)));
       return;
     }
     const metal = t.m === 'metal' || (t.m === undefined && typeof color === 'number' && this.coloresMetal.has(color));
     const lista = metal ? this.metales : t.m === 'rejilla' ? this.rejillas : this.opacas;
-    lista.push(this.preparar(geo, color, 1, t));
+    lista.push(this.anotar(this.preparar(geo, color, 1, t)));
   }
 
   /** Pieza que emite luz. `intensidad` > 1.2 hace que florezca con el bloom. */
   emisiva(geo: THREE.BufferGeometry, color: ColorCara, intensidad = 2.5, t: Transformacion = {}): void {
-    this.emisivas.push(this.preparar(geo, color, intensidad, t));
+    this.emisivas.push(this.anotar(this.preparar(geo, color, intensidad, t)));
+  }
+
+  /** Si hay registro de partes, guarda una copia (solo posiciones) de `g` en cada parte activa. Devuelve `g`. */
+  private anotar(g: THREE.BufferGeometry): THREE.BufferGeometry {
+    if (!registrarPartes || partesActivas.length === 0) return g;
+    for (const nombre of new Set(partesActivas)) {
+      const copia = new THREE.BufferGeometry();
+      copia.setAttribute('position', g.getAttribute('position').clone());
+      let lista = this.partes.get(nombre);
+      if (!lista) {
+        lista = [];
+        this.partes.set(nombre, lista);
+      }
+      lista.push(copia);
+    }
+    return g;
   }
 
   /** Luz falsa aditiva (halos, haces, hologramas). `colorV` da el color lineal de cada vértice. */
@@ -354,6 +402,16 @@ export class Lote {
     anadir(this.emisivas, EMISIVO);
     anadir(this.vidrios, VIDRIO, 1);
     anadir(this.aditivas, ADITIVO, 2);
+    if (this.partes.size > 0) {
+      const partes = new Map<string, THREE.BufferGeometry>();
+      for (const [nombre, lista] of this.partes) {
+        const fusion = mergeGeometries(lista, false);
+        for (const g of lista) g.dispose();
+        if (fusion) partes.set(nombre, fusion);
+      }
+      this.partes.clear();
+      grupo.userData.partes = partes;
+    }
     return grupo;
   }
 

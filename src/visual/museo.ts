@@ -15,6 +15,7 @@ import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } 
 import { ARQ } from './paleta';
 import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
 import { LLEGADA, LM, RADIO_LRV_M, RADIO_OBSTACULO_LM_M, RADIO_OBSTACULO_LRV_M } from './sitioApollo17';
+import { crearPresentacionVisual, type EstadoPresentacionVisual, type PosicionMarca, type PresentacionVisual } from './presentacionLRV';
 
 // Toda la parte visual del museo (Three.js). La lógica de juego solo llama a `visual.museo`.
 // Convención de ejes: X a la derecha, Y arriba (metros), −Z hacia donde mira la cámara al inicio.
@@ -236,6 +237,13 @@ let lucesMision: THREE.Group | null = null;
 let ambienteMuseo: AmbienteMuseo | null = null;
 /** true mientras el jugador está en el museo; false en una escena de misión. */
 let enMuseo = true;
+/** Presentación del LRV (presentacionLRV.ts): se crea la primera vez que se entra y se reutiliza. */
+let presentacion: PresentacionVisual | null = null;
+/** true mientras se ve la presentación: se dibuja ella en vez del museo o la misión. */
+let enPresentacion = false;
+/** Tamaño de la vista (px), para la presentación cuando se crea. */
+let anchoVista = 1;
+let altoVista = 1;
 
 function vitrinaAim(id: string): THREE.Vector3 {
   const p = POSICION_VITRINA[id];
@@ -359,6 +367,9 @@ async function iniciar(container: HTMLElement): Promise<void> {
     renderer.setSize(width, height, false);
     post.ajustar(width, height);
     postLuna?.ajustar(width, height);
+    presentacion?.ajustar(width, height);
+    anchoVista = width;
+    altoVista = height;
     camaraNueva.aspect = width / height;
     camaraNueva.updateProjectionMatrix();
   };
@@ -368,6 +379,10 @@ async function iniciar(container: HTMLElement): Promise<void> {
   const reloj = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const t = reloj.getElapsedTime();
+    if (enPresentacion && presentacion) {
+      presentacion.render();
+      return;
+    }
     // El robot flota (sube y baja suave) y siempre gira hacia el jugador.
     if (mentor?.visible) {
       mentor.position.y = ALTURA_MENTOR + Math.sin(t * VELOCIDAD_FLOTADO) * AMPLITUD_FLOTADO;
@@ -436,6 +451,7 @@ function activarAmbiente(lugar: 'museo' | Escena): void {
  */
 function entrarEscena(escena: Escena): void {
   if (!escenaPrincipal) return;
+  enPresentacion = false;
   guardadaMuseo = { posicion: posicion.clone(), yaw, cabeceo };
   mostrarMuseo(false);
   activarAmbiente(escena);
@@ -465,6 +481,7 @@ function entrarEscena(escena: Escena): void {
 /** Vuelve del escenario al museo, en la misma posición y con el mismo giro en que se salió. */
 function volverAlMuseo(): void {
   if (!escenaPrincipal) return;
+  enPresentacion = false;
   for (const escena of ESCENAS) {
     const obj = nodos.get(escena.id);
     if (obj) obj.visible = false;
@@ -730,6 +747,34 @@ function actualizarManos(manos: ManoDetectada[], w: number, h: number, escala: n
   );
 }
 
+/**
+ * Pasa a la presentación del LRV: oculta el museo (el jugador conserva su sitio, que guarda `entrarEscena` al abrir la
+ * misión) y dibuja la escena de la presentación. Devuelve false si no se pudo montar: entonces se sigue sin ella.
+ */
+function entrarPresentacion(): boolean {
+  if (!rendererPrincipal) return false;
+  try {
+    presentacion ??= crearPresentacionVisual(rendererPrincipal);
+    presentacion.reiniciar();
+    presentacion.ajustar(anchoVista, altoVista);
+  } catch (err) {
+    console.error('No se pudo montar la presentación del LRV', err);
+    presentacion = null;
+    return false;
+  }
+  mostrarMuseo(false);
+  rendererPrincipal.toneMapping = THREE.ACESFilmicToneMapping;
+  rendererPrincipal.toneMappingExposure = EXPOSICION_LUNA;
+  enPresentacion = true;
+  return true;
+}
+
+/** Un fotograma de la presentación. Devuelve la posición en pantalla de las piezas de cada marca del tramo. */
+function actualizarPresentacion(estado: EstadoPresentacionVisual): PosicionMarca[] {
+  if (!enPresentacion || !presentacion) return [];
+  return presentacion.actualizar(estado);
+}
+
 /** Oculta las dos manos del avatar, por ejemplo si el seguimiento se ha perdido (SPEC 6). */
 function ocultarManos(): void {
   manosAvatar?.ocultar();
@@ -755,6 +800,8 @@ export const visual = {
     vitrinaEnPantalla,
     entrarEscena,
     volverAlMuseo,
+    entrarPresentacion,
+    actualizarPresentacion,
     fundido,
   },
 };

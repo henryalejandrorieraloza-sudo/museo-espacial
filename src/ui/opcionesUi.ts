@@ -77,6 +77,11 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
   const estaAbierto = (): boolean => !panel.hidden;
   const ponerVisible = (visible: boolean): void => {
     if (estaAbierto() === visible) return;
+    // Al abrir, el panel se rehace con los valores actuales: algunos cambian fuera de él (la tecla C de los subtítulos).
+    if (visible) {
+      ultimas = actuales;
+      montar();
+    }
     panel.hidden = !visible;
     for (const oyente of oyentes) oyente(visible);
   };
@@ -90,6 +95,7 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
       crear('option', { value: 'rayo' }, [t('opc_metodo_rayo')]),
     ]);
     const checkAjuste = crear('input', { type: 'checkbox', id: 'opcAjusteMano' });
+    const checkSubtitulos = crear('input', { type: 'checkbox', id: 'opcSubtitulosLRV' });
     const selectMano = crear('select', { id: 'opcMano' }, [
       crear('option', { value: 'Right' }, [t('opc_mano_derecha')]),
       crear('option', { value: 'Left' }, [t('opc_mano_izquierda')]),
@@ -136,6 +142,7 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
     }
 
     campos.push(crear('label', {}, [checkAjuste, t('opc_ajuste_mano')]));
+    campos.push(crear('label', {}, [checkSubtitulos, t('opc_subtitulos_lrv')]));
 
     // Topes de las articulaciones de la mano (grados): mínimo y máximo por parámetro. Se aplican al momento.
     const limInputs = new Map<string, [HTMLInputElement, HTMLInputElement]>();
@@ -173,6 +180,7 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
       selectMetodo.value = o.metodoSenalar;
       selectMano.value = o.manoSenaladora;
       checkAjuste.checked = o.ajusteManoModelo;
+      checkSubtitulos.checked = o.subtitulosPresentacion;
       for (const { clave } of NUMERICOS) {
         const input = inputs.get(clave);
         if (input) input.value = String(o[clave]);
@@ -206,6 +214,7 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
         metodoSenalar: selectMetodo.value,
         manoSenaladora: selectMano.value,
         ajusteManoModelo: checkAjuste.checked,
+        subtitulosPresentacion: checkSubtitulos.checked,
         limitesMano: leerLimites(),
         ...Object.fromEntries(NUMERICOS.map(({ clave }) => [clave, Number(inputs.get(clave)?.value)])),
       });
@@ -221,6 +230,7 @@ export function crearOpcionesUi(actuales: Opciones, onCambio: (nuevas: Opciones)
     selectMetodo.addEventListener('change', aplicar);
     selectMano.addEventListener('change', aplicar);
     checkAjuste.addEventListener('change', aplicar);
+    checkSubtitulos.addEventListener('change', aplicar);
     for (const [clave, input] of inputs) {
       // Los deslizadores aplican en vivo mientras se arrastran; los campos numéricos al confirmar.
       input.addEventListener(DESLIZADORES.has(clave) ? 'input' : 'change', aplicar);

@@ -155,7 +155,7 @@ Parte visual: ver spec-visual-museo.md.
 4. El mentor empieza a hablar la explicación de la vitrina. Habla frase a frase, y cada frase aparece como subtítulo mientras suena.
 5. Cuando termina la última frase, aparece el texto “Aplaude para entrar (o pulsa espacio)”.
 6. El jugador aplaude o pulsa espacio. Se entra a la escena con fundido de 0.6 s:
-   - Vitrina del LRV → Luna, junto al LRV.
+   - Vitrina del LRV → presentación del LRV (sección 7.4) y, al terminar, Luna, junto al LRV.
    - Vitrina de Perseverance → Marte, solo con Perseverance visible.
 7. Comienza la misión.
 
@@ -171,6 +171,19 @@ Parte visual: ver spec-visual-museo.md.
 - La barra espaciadora funciona en todo el flujo como respaldo del aplauso.
 - En la escena, el texto de la sesión anterior (“misión en construcción”) se mantiene.
 - Para volver al museo, aplaude o pulsa espacio (sección 7.3). Después, el jugador puede señalar otra vitrina y empezar una nueva explicación.
+
+### 7.4 Presentación del LRV
+
+Animación corta e informativa entre la vitrina del LRV y la misión lunar. Guion y máquina de estados en `src/game/presentacionLRV.ts`; escena en `src/visual/presentacionLRV.ts`; rótulos y textos en pantalla en `src/ui/presentacionUi.ts`.
+
+- **Cuándo:** al aplaudir o pulsar espacio tras la explicación de la vitrina del LRV (la explicación y el aviso “Aplaude para entrar” no cambian). Al terminar, aparece “Estás listo para la misión”, el narrador lo dice y se entra a la Luna con el fundido de siempre. La misión es la misma de antes.
+- **Contenido:** solo el LRV (el mismo modelo que se conduce, desplegado y cargado). Sin astronautas, personas ni sus sombras. Suelo de regolito gris, cielo negro con el Sol, la Tierra y las estrellas de la escena lunar, un solo Sol con sombras duras y el mismo render que la misión.
+- **Narrador:** la voz del mentor (el robot del museo), con la misma síntesis y el mismo catálogo de audio grabado. Una frase por tramo; cada tramo dura su mínimo o lo que tarde su frase, lo que sea mayor, así la imagen y los subtítulos no se desfasan. Si la voz nunca avisa del final, el tramo sigue a los 20 s de su mínimo.
+- **Subtítulos:** abajo, sincronizados con la voz. Se apagan y encienden con la tecla C o en Opciones (“Subtítulos en la animación del LRV”).
+- **Saltar:** Enter, desde la segunda escena (la introducción siempre se ve). Salta a “Estás listo para la misión”. Durante la animación el museo no recibe entradas (ni moverse ni aplaudir).
+- **Escenas, en orden** (duración mínima total: 85.5 s): introducción (8 s), chasis (8.5 s), ruedas y asientos con la tarjeta del peso (15.5 s), electrónica y comunicaciones (14 s), energía (10 s), propulsión (16.5 s) y cierre en el suelo naranja del cráter Shorty (10 s), con fundidos de 0.5 s entre escenas. Cámara con ease-in-out, movimientos de 2 a 4 s. Las piezas se resaltan con un contorno azul celeste y un rótulo en español que aparecen y se van en 0.5 s.
+- **Datos:** NSSDC y Wikipedia (“Lunar Roving Vehicle”) y ALSJ, citados en `src/game/presentacionLRV.ts`. El mando en T: adelante avanza, a los lados gira y atrás frena; para la marcha atrás se activa un interruptor del mando antes de tirar hacia atrás (NSSDC). // VERIFICAR con el manual de operación del LRV. Las baterías iban en el chasis delantero. El rumbo del LRV respecto al Sol, la forma del marco interior de la rueda, el recorrido del mando y qué columnas del panel ocupa cada grupo de interruptores son del modelo (// VERIFICAR).
+- **Sin escena 3D:** si no se puede montar, se pasa directo a “Estás listo para la misión” y a la Luna.
 
 ### 7.3 Regreso
 
@@ -311,6 +324,7 @@ No se guardan muestras recogidas como progreso.
 - Topes de las articulaciones de la mano (grados, mín y máx por parámetro), con botón de restaurar.
 - Control: cámara (gestos) o teclado y ratón. Se elige en la pantalla de inicio y se guarda en localStorage (`museo-espacial:control:v1`). El botón “Cambiar control” vuelve a la pantalla de inicio. El mapeo de teclas está en spec-visual-museo.md, sección 9.1.
 - Idioma (español / inglés).
+- Subtítulos en la animación del LRV (activados por defecto; también con la tecla C durante la animación).
 - Recalibrar.
 - Modo de movilidad limitada (deshabilitado, “Próximamente”).
 
@@ -334,6 +348,7 @@ No se guardan muestras recogidas como progreso.
 - [ ] Museo y navegación.
 - [ ] Misión lunar. Escena de Taurus-Littrow (LM, LRV, terreno, macizos, Sol, Tierra y estrellas), caminar a pie y subir al LRV: probado en Chrome sin interfaz con teclado, de la vitrina a la muestra y de vuelta al museo. Falta verlo en un navegador con ventana y con cámara real.
 - [ ] Despliegue del LRV desde la bahía del LM (mantener E, anillo y animación por fases): probado en Chrome sin interfaz con teclado, de la llegada a la Luna a subirse al LRV desplegado, y la secuencia revisada en capturas. Falta verlo en un navegador con ventana y decidir un gesto para el modo cámara.
+- [ ] Presentación del LRV entre la vitrina y la misión lunar (sección 7.4): guion probado con `node --test tests/presentacionLRV.test.ts` y tomas revisadas en capturas sin interfaz (`tests/capturas/presentacion/`). Falta verla en un navegador con ventana y con voz.
 - [ ] Misión marciana.
 - [ ] Mentor y voz.
 - [ ] Publicación.
