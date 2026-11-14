@@ -71,6 +71,10 @@ const GROSOR_CONTORNO_PX = 2.6;
 const ANGULO_ARISTA = 32;
 /** Inclinación máxima de la palanca del mando en T en la animación (rad). // VERIFICAR: recorrido real del mando. */
 const INCLINACION_MANDO = THREE.MathUtils.degToRad(22);
+// Deriva de la cámara mientras habla el narrador: gira despacio hacia un lado (grados máximos) y se frena sola (τ en s
+// de narración). Solo avanza con la voz, así no queda estática, y nunca da saltos entre tomas.
+const DERIVA_MAX_GRADOS = 12;
+const DERIVA_TAU_S = 8;
 /** Diámetro del marco de tope dentro de cada rueda: 64.8 cm (NSSDC). // VERIFICAR: su forma (aquí, dos aros con riostras). */
 const RADIO_MARCO_INTERIOR = 0.324;
 /** Sombras: caja de ±LADO_SOMBRA_M alrededor del LRV. */
@@ -691,6 +695,9 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
   let ultimaPose: Toma | null = null;
   let tramoPrevio: Tramo | null = null;
   let avancePrevio = 0;
+  // Tiempo de narración acumulado y ganancia (0–1) de la deriva: sube con la voz y baja en silencio.
+  let derivaS = 0;
+  let ganancia = 0;
 
   const _p = new THREE.Vector3();
   const _m = new THREE.Vector3();
@@ -700,10 +707,10 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
    * Coloca una cámara según una toma. `sigue`: posición (x, z) y rumbo (rad) del LRV al que va pegada la toma: la
    * posición mueve el punto de mira y el rumbo gira la cámara con él (0 = solo lo sigue, sin girar).
    */
-  const colocarCamara = (cam: THREE.PerspectiveCamera, pose: Toma, sx = 0, sz = 0, rumbo = 0): void => {
+  const colocarCamara = (cam: THREE.PerspectiveCamera, pose: Toma, sx = 0, sz = 0, rumbo = 0, deriva = 0): void => {
     const c = Math.cos(rumbo);
     const sn = Math.sin(rumbo);
-    const az = THREE.MathUtils.degToRad(pose.az) - rumbo;
+    const az = THREE.MathUtils.degToRad(pose.az) + deriva - rumbo;
     const el = THREE.MathUtils.degToRad(pose.el);
     // La altura del punto de mira es sobre el suelo que hay debajo (el borde de Shorty levanta el terreno).
     const mx = pose.mira[0] * c + pose.mira[2] * sn + sx;
@@ -819,6 +826,11 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
       if (palanca) palanca.rotation.set(-mando.adelante * INCLINACION_MANDO, 0, -mando.lado * INCLINACION_MANDO);
       if (palancaInterruptor) palancaInterruptor.rotation.x = THREE.MathUtils.lerp(0.45, -0.55, mando.interruptor);
 
+      // Deriva lenta de la cámara mientras habla el narrador (ver DERIVA_MAX_GRADOS).
+      ganancia += ((tramo.narracion !== null ? 1 : 0) - ganancia) * Math.min(1, dtS * 2);
+      derivaS += dtS * ganancia;
+      const deriva = THREE.MathUtils.degToRad(DERIVA_MAX_GRADOS * (1 - Math.exp(-derivaS / DERIVA_TAU_S)));
+
       // Cámaras.
       let pose: Toma;
       let camaraMarcas: THREE.PerspectiveCamera = camara;
@@ -827,13 +839,13 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
         const der = poseEn(tramo.division.derecha, t, null);
         const sx = mov?.x ?? 0;
         const sz = mov?.z ?? 0;
-        colocarCamara(camara, izq, sx, sz, 0);
-        colocarCamara(camaraDer, der, sx, sz, mov?.rumbo ?? 0);
+        colocarCamara(camara, izq, sx, sz, 0, deriva);
+        colocarCamara(camaraDer, der, sx, sz, mov?.rumbo ?? 0, deriva);
         pose = der;
         camaraMarcas = camara;
       } else {
         pose = poseEn(tramo.tomas, t, posePrevia);
-        colocarCamara(camara, pose, 0, tramo.camaraSigueLRV ? -metros : 0, 0);
+        colocarCamara(camara, pose, 0, tramo.camaraSigueLRV ? -metros : 0, 0, deriva);
       }
       ultimaPose = pose;
       cielo.position.copy(camara.position);
@@ -889,6 +901,8 @@ export function crearPresentacionVisual(renderer: THREE.WebGLRenderer): Presenta
       ultimaPose = null;
       tramoPrevio = null;
       avancePrevio = 0;
+      derivaS = 0;
+      ganancia = 0;
       if (dividida) {
         dividida = false;
         aplicarTamano();
