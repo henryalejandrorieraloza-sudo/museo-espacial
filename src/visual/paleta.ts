@@ -45,6 +45,9 @@ export const HIST = {
   ruedaRover: 0xa8a8a0,
   generador: 0x2f2d2b,
   lente: 0x15161a,
+  /** Cassini: manta térmica dorada, antena de alta ganancia gris, cubierta del motor y generadores negros. */
+  mli: 0xb8963e,
+  antenaCassini: 0xa6a6a2,
   /** Saturn V: blanco con negro. Atlas V: etapa central naranja salmón y cofia blanca. */
   blancoCohete: 0xece8da,
   negro: 0x171416,

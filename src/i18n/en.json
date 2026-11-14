@@ -1,6 +1,7 @@
 {
   "vitrina_lrv": "This is the LRV {directo}, the Apollo 17 lunar rover. The astronauts drove it in 1972 {exacto} and it stayed on the Moon. Soon you'll get to explore its mission {cercano}.",
   "vitrina_perseverance": "This is Perseverance {directo}, a Mars rover. It landed in Jezero Crater in February 2021 {exacto} and it's still exploring the planet. Soon you'll get to explore its mission {cercano}.",
+  "vitrina_cassini": "Did you know a spacecraft spent thirteen years orbiting Saturn? This is the Cassini probe {directo}. It reached Saturn in 2004 {exacto} and carried the Huygens probe, which landed on Titan, Saturn's largest moon, in 2005. In 2017 it ended its mission by diving into the planet {cercano}, so it wouldn't contaminate its moons.",
   "escena_luna_construccion": "Moon — mission under construction",
   "escena_marte_construccion": "Mars — mission under construction",
   "regreso_museo": "Great tour {cercano}. When the mission is ready, you'll be able to live it in full.",

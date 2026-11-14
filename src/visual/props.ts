@@ -172,6 +172,145 @@ export function crearPerseveranceExhibicion(l: Lote): void {
 }
 
 /**
+ * Cuerpo cilíndrico envuelto en manta térmica: el radio ondula un poco con el ángulo y la altura, como la manta
+ * arrugada de Cassini. La onda depende de la posición (no del índice), así la costura del cilindro queda cerrada.
+ */
+function envueltaMLI(radioAbajo: number, radioArriba: number, alto: number, semilla: number): THREE.BufferGeometry {
+  const geo = new THREE.CylinderGeometry(radioArriba, radioAbajo, alto, 16, 6);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r < 1e-4) continue;
+    const a = Math.atan2(z, x);
+    const onda =
+      1 + 0.05 * Math.sin(a * 3 + y * 4.1 + semilla) + 0.035 * Math.sin(a * 7 - y * 9.3 + semilla * 2.3);
+    pos.setX(i, x * onda);
+    pos.setZ(i, z * onda);
+  }
+  return geo;
+}
+
+/** Generador radioisotópico (GPHS-RTG): cilindro de 1.14 m y 0.42 m de diámetro con aletas. Eje en Y, centrado. */
+function generadorCassini(l: Lote): void {
+  l.pieza(new THREE.CylinderGeometry(0.15, 0.15, 1.14, 8), HIST.generador);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    l.pieza(new THREE.BoxGeometry(0.02, 1.0, 0.13), HIST.generador, { p: [Math.cos(a) * 0.2, 0, Math.sin(a) * 0.2], r: [0, -a, 0] });
+  }
+  for (const y of [-0.6, 0.6]) l.pieza(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 8), HIST.aluminio, { p: [0, y, 0] });
+}
+
+/**
+ * Cassini-Huygens (NASA, ESA y ASI), tumbada: el eje principal va en horizontal (antena de alta ganancia hacia −X)
+ * y el brazo del magnetómetro apunta hacia arriba, como en la vista frontal del modelo 3D de NASA. Así el holograma
+ * cabe entre el tablero y la corona al girar. Origen en el borde inferior de la antena, centrado en el eje.
+ *
+ * Medidas aproximadas: 6.8 m de alto, antena de 4 m, brazo del magnetómetro de 11 m, sonda Huygens de 2.7 m de
+ * diámetro a un lado y tres generadores radioisotópicos abajo. Las tres antenas de ondas de radio (RPWS) miden
+ * 10 m en la nave real; aquí van acortadas a 3.2 m para no atravesar la vitrina.
+ */
+export function crearCassiniExhibicion(l: Lote): void {
+  // Sistema propio de la nave: +Y es su eje (de los motores a la antena), +X el lado del brazo y +Z el de las cámaras.
+  // El giro lleva +X de la nave a +Y del mundo y su eje Y a −X; el centro del eje queda en x = 0.
+  l.en([3.4, 2.0, 0], [0, 0, Math.PI / 2], () => {
+    // Motores principales (dos toberas) bajo la cubierta negra.
+    for (const x of [-0.28, 0.28]) {
+      l.pieza(new THREE.CylinderGeometry(0.08, 0.2, 0.42, 10), HIST.plateado, { p: [x, 0.22, 0] });
+    }
+    l.pieza(new THREE.CylinderGeometry(0.62, 0.78, 0.5, 14), HIST.negro, { p: [0, 0.65, 0] });
+    l.pieza(new THREE.SphereGeometry(0.62, 14, 5, 0, Math.PI * 2, 0, Math.PI / 2), HIST.negro, { p: [0, 0.9, 0] });
+
+    // Módulo inferior con los tres generadores, inclinados hacia fuera y abajo.
+    l.pieza(new THREE.CylinderGeometry(0.95, 0.85, 0.4, 12), HIST.mli, { p: [0, 1.1, 0] });
+    for (const a of [Math.PI / 3, Math.PI, (5 * Math.PI) / 3]) {
+      const dx = Math.cos(a);
+      const dz = Math.sin(a);
+      l.pieza(tuboEntre([dx * 0.8, 1.15, dz * 0.8], [dx * 1.2, 1.0, dz * 1.2], 0.04, 6), HIST.aluminio);
+      l.en([dx * 1.55, 0.78, dz * 1.55], [0, -a, 0], () => {
+        l.en([0, 0, 0], [0, 0, 1.0], () => generadorCassini(l));
+      });
+    }
+
+    // Módulo de propulsión: dos tanques apilados envueltos en manta dorada.
+    l.pieza(envueltaMLI(1.0, 0.86, 1.5, 1.3), HIST.mli, { p: [0, 2.05, 0] });
+    l.pieza(envueltaMLI(0.86, 1.0, 1.5, 4.1), HIST.mli, { p: [0, 3.55, 0] });
+
+    // Bus de electrónica de doce bahías, con algunas placas claras.
+    l.pieza(new THREE.CylinderGeometry(1.05, 1.05, 0.62, 12), HIST.mli, { p: [0, 4.62, 0] });
+    for (let i = 0; i < 12; i += 2) {
+      const a = ((i + 0.5) / 12) * Math.PI * 2;
+      l.pieza(cajaBiselada(0.38, 0.32, 0.04, 0.01), HIST.aluminio, {
+        p: [Math.cos(a) * 1.04, 4.62, Math.sin(a) * 1.04],
+        r: [0, Math.PI / 2 - a, 0],
+      });
+    }
+
+    // Antena de alta ganancia: plato de 4 m con costillas por detrás, subreflector sobre trípode y antena de baja
+    // ganancia encima.
+    const yPlato = 5.0;
+    const perfil: THREE.Vector2[] = [];
+    for (let k = 0; k <= 8; k++) {
+      const r = (k / 8) * 2.0;
+      perfil.push(new THREE.Vector2(r, yPlato + 0.48 * (r / 2.0) ** 2));
+    }
+    l.pieza(new THREE.LatheGeometry(perfil, 24), HIST.antenaCassini);
+    l.pieza(new THREE.CylinderGeometry(0.55, 0.7, 0.2, 12), HIST.antenaCassini, { p: [0, yPlato - 0.06, 0] });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const [c, s] = [Math.cos(a), Math.sin(a)];
+      l.pieza(tuboEntre([c * 0.6, yPlato - 0.08, s * 0.6], [c * 1.95, yPlato + 0.42, s * 1.95], 0.025, 4), HIST.antenaCassini);
+    }
+    const ySub = 6.45;
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+      l.pieza(tuboEntre([Math.cos(a) * 1.25, yPlato + 0.2, Math.sin(a) * 1.25], [Math.cos(a) * 0.2, ySub, Math.sin(a) * 0.2], 0.02, 4), HIST.aluminio);
+    }
+    l.pieza(new THREE.CylinderGeometry(0.34, 0.2, 0.1, 12), HIST.aluminio, { p: [0, ySub, 0] });
+    l.pieza(new THREE.ConeGeometry(0.12, 0.3, 10), HIST.aluminio, { p: [0, ySub + 0.2, 0] });
+    l.pieza(new THREE.CylinderGeometry(0.16, 0.22, 0.32, 10), HIST.aluminio, { p: [0, yPlato + 0.2, 0] });
+
+    // Sonda Huygens a un lado (−Z): escudo térmico cónico de 2.7 m hacia fuera y cubierta trasera hacia la nave.
+    l.en([0, 2.75, -1.05], [-Math.PI / 2, 0, 0], () => {
+      l.pieza(new THREE.CylinderGeometry(1.35, 0.75, 0.32, 16), HIST.mli, { p: [0, 0.16, 0] });
+      l.pieza(new THREE.CylinderGeometry(0.2, 1.35, 0.42, 16), HIST.mli, { p: [0, 0.53, 0] });
+      l.pieza(new THREE.CylinderGeometry(1.38, 1.38, 0.05, 16), HIST.aluminio, { p: [0, 0.33, 0] });
+    });
+
+    // Plataforma de teledetección (+Z): cámaras de ángulo estrecho y ancho y otros instrumentos.
+    l.en([0, 3.6, 1.1], [0, 0, 0], () => {
+      l.pieza(cajaBiselada(1.3, 1.5, 0.4, 0.03), HIST.mli);
+      l.pieza(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 10), HIST.negro, { p: [-0.35, 0, 0.32] });
+      l.pieza(new THREE.CylinderGeometry(0.11, 0.11, 0.6, 10), HIST.negro, { p: [0.05, 0.1, 0.3] });
+      l.pieza(cajaBiselada(0.36, 0.5, 0.36, 0.02), HIST.aluminio, { p: [0.4, -0.2, 0.34] });
+      l.pieza(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 10), HIST.lente, { p: [-0.35, 0.47, 0.32] });
+    });
+    // Analizador de polvo cósmico: tambor en el lado del brazo.
+    l.pieza(new THREE.CylinderGeometry(0.28, 0.28, 0.3, 12), HIST.aluminio, { p: [0.95, 3.7, 0.65], r: [0, 0, Math.PI / 2] });
+
+    // Brazo del magnetómetro (11 m), de sección cuadrada, con un sensor a mitad y otro en la punta.
+    const yBrazo = 4.55;
+    l.pieza(cajaBiselada(5.3, 0.16, 0.16, 0.02), HIST.mli, { p: [1.05 + 2.65, yBrazo, 0] });
+    l.pieza(new THREE.CylinderGeometry(0.1, 0.1, 0.32, 8), HIST.aluminio, { p: [6.55, yBrazo, 0], r: [0, 0, Math.PI / 2] });
+    l.pieza(cajaBiselada(5.3, 0.16, 0.16, 0.02), HIST.mli, { p: [6.75 + 2.65, yBrazo, 0] });
+    l.pieza(new THREE.CylinderGeometry(0.11, 0.11, 0.28, 8), HIST.aluminio, { p: [12.15, yBrazo, 0], r: [0, 0, Math.PI / 2] });
+
+    // Antenas de ondas de radio y plasma (RPWS): tres varillas finas en abanico (acortadas, ver arriba).
+    for (const d of [
+      [0.5, -0.12, 0.86],
+      [0.5, -0.12, -0.86],
+      [-0.3, -0.2, 0.93],
+    ] as const) {
+      const largo = 3.2;
+      const desde: V3 = [d[0] * 0.95, 4.1, d[2] * 0.95];
+      l.pieza(tuboEntre(desde, [desde[0] + d[0] * largo, desde[1] + d[1] * largo, desde[2] + d[2] * largo], 0.018, 4), HIST.aluminio);
+    }
+  });
+}
+
+/**
  * Traje A7LB de Apollo, vacío. Mira hacia +Z y mide unos 1.85 m.
  * `comandante`: franjas rojas en brazos, piernas y casco (Apollo 17: las del comandante).
  */

@@ -281,6 +281,8 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
         hablar(voz, ui, evento.id, () => museo.terminoVoz(evento.id));
         break;
       case 'vitrinaDeseleccionada':
+        // Vitrina sin misión ya explicada: la voz terminó y el subtítulo se quita solo, con su retraso de siempre.
+        if (evento.explicada) break;
         // Sin vitrina seleccionada no hay explicación ni entrada: se corta la voz y los textos.
         colaFrases.length = 0;
         voz.cancelar();

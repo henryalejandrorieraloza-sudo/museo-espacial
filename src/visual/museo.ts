@@ -21,7 +21,7 @@ import { DURACION_DESPLIEGUE_LRV_S } from './despliegueApollo17';
 import { crearDespliegueLRV, type DespliegueVisualLRV } from './despliegueLRV';
 import { crearManos, type ManoDetectada, type ManosAvatar, type OpcionesManos } from './manos';
 import { ARQ } from './paleta';
-import { crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
+import { crearCassiniExhibicion, crearLRVExhibicion, crearPerseveranceExhibicion } from './props';
 import {
   LLEGADA,
   LM,
@@ -61,10 +61,15 @@ const LIMITE_MIRADA_LRV = THREE.MathUtils.degToRad(100);
 /** Cabeceo máximo de la vista hacia arriba o abajo (rad, 35°). */
 const LIMITE_CABECEO = THREE.MathUtils.degToRad(35);
 
-/** Centro de cada vitrina de artefacto (base sobre el suelo). A unos 9 m del inicio y a 9 m entre sí. */
+/**
+ * Centro de cada vitrina de artefacto (base sobre el suelo). LRV y Perseverance, a unos 9 m del inicio y a 9 m entre
+ * sí; Cassini, al fondo de la sala entre los dos cohetes, con la pared oscura detrás (el cohete central, blanco y
+ * muy iluminado, no deja leer un holograma que tenga delante).
+ */
 const POSICION_VITRINA: Record<string, { x: number; z: number }> = {
   vitrina_lrv: { x: -4.5, z: 3 },
   vitrina_perseverance: { x: 4.5, z: 3 },
+  vitrina_cassini: { x: 0, z: -10.5 },
 };
 /** Punto al que apunta el rayo: el centro del holograma. */
 const ALTURA_PUNTO_VITRINA = ALTURA_CENTRO_EXHIBICION;
@@ -121,6 +126,7 @@ const PLACEHOLDERS: Record<string, Constructor> = {
   'placeholder:sala': crearRotonda,
   'placeholder:vitrina_lrv': () => crearInstalacionHolograma(crearLRVExhibicion, 'luna', ARQ.cian, -2.5),
   'placeholder:vitrina_perseverance': () => crearInstalacionHolograma(crearPerseveranceExhibicion, 'marte', ARQ.ambar, 2.5, 0.85),
+  'placeholder:vitrina_cassini': () => crearInstalacionHolograma(crearCassiniExhibicion, 'saturno', ARQ.magenta, 0, 0.45),
   'placeholder:mentor': crearMentor,
   'placeholder:escena_luna': crearEscenaLuna,
   'placeholder:escena_marte': crearEscenaMarte,

@@ -8,12 +8,17 @@ import { visual, type Escena } from '../visual/museo';
 export const SEGUNDOS_SENALAR = 1.5;
 /** Duración del fundido a negro (s): la mitad oscurece, la mitad aclara. */
 export const DURACION_FUNDIDO_S = 1.0;
-export type VitrinaId = 'vitrina_lrv' | 'vitrina_perseverance';
+export type VitrinaId = 'vitrina_lrv' | 'vitrina_perseverance' | 'vitrina_cassini';
 export type Mision = Escena;
 
-const MISION_DE: Record<VitrinaId, Mision> = {
+/**
+ * Misión de cada vitrina. Con null, la vitrina solo tiene la explicación del mentor: al terminar se deselecciona
+ * sola y se puede elegir otra (Cassini aún no tiene escena).
+ */
+const MISION_DE: Record<VitrinaId, Mision | null> = {
   vitrina_lrv: 'luna',
   vitrina_perseverance: 'marte',
+  vitrina_cassini: null,
 };
 
 /**
@@ -30,7 +35,8 @@ export type Pantalla = { tipo: 'museo' } | { tipo: 'presentacion'; mision: Misio
 
 export type EventoMuseo =
   | { tipo: 'vitrinaSeleccionada'; id: VitrinaId }
-  | { tipo: 'vitrinaDeseleccionada'; id: VitrinaId }
+  /** `explicada`: la vitrina no tiene misión y el mentor ya terminó; la voz y el subtítulo acaban solos. */
+  | { tipo: 'vitrinaDeseleccionada'; id: VitrinaId; explicada: boolean }
   /** El mentor terminó de hablar de esta vitrina: ya se puede aplaudir para entrar. */
   | { tipo: 'listoParaEntrar'; id: VitrinaId }
   /** Empieza la presentación previa a la misión. `visible`: false si la escena 3D no se pudo montar. */
@@ -79,6 +85,11 @@ export class Museo {
   /** Fase de la vitrina seleccionada; null si no hay ninguna seleccionada. */
   private fase: Fase | null = null;
   private candidata: VitrinaId | null = null;
+  /**
+   * Vitrina sin misión que el mentor acaba de explicar: no se vuelve a seleccionar hasta que el rayo o el cursor
+   * salgan de ella (si no, seguir señalándola repetiría la explicación).
+   */
+  private recienExplicada: VitrinaId | null = null;
   private inicioCandidata = 0;
   /** Tiempo del último fotograma procesado: sirve para calcular el progreso de la selección. */
   private ultimoAhoraS = 0;
@@ -149,9 +160,9 @@ export class Museo {
     if (this.seleccionada !== null) {
       // Aplauso o espacio: entra solo cuando el mentor ya terminó. Mientras habla, no hace nada.
       // No se comprueba dónde está el jugador ni hacia dónde mira.
-      if (entrada.accion && this.fase === 'listo') {
+      const mision = MISION_DE[this.seleccionada];
+      if (entrada.accion && this.fase === 'listo' && mision !== null) {
         const id = this.seleccionada;
-        const mision = MISION_DE[id];
         this.iniciarTransicion(() => (CON_PRESENTACION.has(id) ? this.abrirPresentacion(mision) : this.abrirMision(mision)));
         return;
       }
@@ -161,7 +172,9 @@ export class Museo {
 
     visual.museo.moverCamara(entrada.giroGrados, entrada.metros, entrada.cabeceoGrados, entrada.lateralMetros);
 
-    const apuntada = esVitrina(entrada.apuntando) ? entrada.apuntando : null;
+    let apuntada = esVitrina(entrada.apuntando) ? entrada.apuntando : null;
+    if (apuntada === this.recienExplicada) apuntada = null;
+    else this.recienExplicada = null;
     if (apuntada !== this.candidata) {
       this.candidata = apuntada;
       this.inicioCandidata = entrada.ahoraS;
@@ -206,6 +219,12 @@ export class Museo {
    */
   terminoVoz(id: VitrinaId): void {
     if (this.seleccionada !== id || this.fase !== 'hablando') return;
+    if (MISION_DE[id] === null) {
+      this.recienExplicada = id;
+      this.candidata = null;
+      this.deseleccionar(true);
+      return;
+    }
     this.fase = 'listo';
     this.emitir({ tipo: 'listoParaEntrar', id });
   }
@@ -217,12 +236,12 @@ export class Museo {
   }
 
   /** Solo se llama al abrir la misión: durante el flujo de una vitrina nunca se deselecciona. */
-  private deseleccionar(): void {
+  private deseleccionar(explicada = false): void {
     if (this.seleccionada === null) return;
     const id = this.seleccionada;
     this.seleccionada = null;
     this.fase = null;
-    this.emitir({ tipo: 'vitrinaDeseleccionada', id });
+    this.emitir({ tipo: 'vitrinaDeseleccionada', id, explicada });
   }
 
   /** La vitrina sigue seleccionada durante la presentación; se deselecciona al abrir la misión. */

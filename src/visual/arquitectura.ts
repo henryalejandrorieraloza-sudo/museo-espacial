@@ -664,7 +664,7 @@ function pedestalEnLote(l: Lote, o: OpcionesPedestal): void {
 // ---------------------------------------------------------------------------
 
 /** Mundo que muestran las imágenes de una instalación: donde trabajó el artefacto. */
-export type TemaInstalacion = 'luna' | 'marte';
+export type TemaInstalacion = 'luna' | 'marte' | 'saturno';
 
 interface ColoresTema {
   cielo: number;
@@ -674,12 +674,16 @@ interface ColoresTema {
   roca: number;
   /** Disco pequeño en el cielo de algunas imágenes (la Tierra vista desde la Luna); null si no hay. */
   astro: number | null;
+  /** Si algunas imágenes llevan un vehículo blanco en el suelo (en Titán no hubo ninguno). */
+  vehiculo: boolean;
 }
 
 /** Colores aproximados de cada mundo. Las imágenes son paisajes genéricos, no fotos ni lugares concretos. */
 const TEMAS: Record<TemaInstalacion, ColoresTema> = {
-  luna: { cielo: 0x04050a, cieloBajo: 0x090b12, suelo: 0x8f8c86, sueloLejos: 0x6c6a66, roca: 0x4a4845, astro: 0x3d7fd6 },
-  marte: { cielo: 0xc29870, cieloBajo: 0xd8b48c, suelo: 0xa4532c, sueloLejos: 0x7f3d22, roca: 0x5a2a18, astro: null },
+  luna: { cielo: 0x04050a, cieloBajo: 0x090b12, suelo: 0x8f8c86, sueloLejos: 0x6c6a66, roca: 0x4a4845, astro: 0x3d7fd6, vehiculo: true },
+  marte: { cielo: 0xc29870, cieloBajo: 0xd8b48c, suelo: 0xa4532c, sueloLejos: 0x7f3d22, roca: 0x5a2a18, astro: null, vehiculo: true },
+  // Titán, donde se posó Huygens: neblina naranja y suelo pardo con guijarros claros de hielo.
+  saturno: { cielo: 0xb5743a, cieloBajo: 0xcf9152, suelo: 0x7a5530, sueloLejos: 0x5f4328, roca: 0xb9a084, astro: null, vehiculo: false },
 };
 
 /** Radio exterior del mostrador (m). El jugador no puede atravesarlo. */
@@ -709,7 +713,7 @@ function paisaje(tema: ColoresTema, k: number, ancho: number, alto: number): Col
   const fase = rnd() * 6.3;
   const base = 0.38 + rnd() * 0.14;
   const astro = tema.astro !== null && k % 3 === 0 ? { u: 0.2 + rnd() * 0.6, v: 0.78 } : null;
-  const vehiculo = k % 4 === 1 ? 0.3 + rnd() * 0.4 : null;
+  const vehiculo = tema.vehiculo && k % 4 === 1 ? 0.3 + rnd() * 0.4 : null;
   return (c) => {
     const u = c.x / ancho + 0.5;
     const v = c.y / alto + 0.5;

@@ -9,6 +9,7 @@ Convención para el modelo final: 1 unidad de Blender = 1 metro, sin escalar en 
 | `museo` | `museo` | Sala circular oscura de 32 m generada en `arquitectura.ts`: suelo con órbitas de luz, paredes de pantallas LED con carteles, falso techo con focos, cúpula negra, planetas colgantes, Saturn V central y decoración (`props.ts`). | 1 |
 | `vitrina_lrv` | `vitrina_lrv` | Pedestal octogonal de 0.85 m con un emisor en lo alto y el LRV de exhibición como holograma azul que flota a 1.45 m, a tamaño real aproximado y girando despacio (`holograma.ts`). Sin cristal. | 1 |
 | `vitrina_perseverance` | `vitrina_perseverance` | Igual que `vitrina_lrv`, con Perseverance de exhibición (holograma a escala 0.85). A 9 m de distancia (x = +4.5 frente a x = −4.5). | 1 |
+| `vitrina_cassini` | `vitrina_cassini` | Igual que `vitrina_lrv`, con Cassini de exhibición tumbada (holograma a escala 0.45, acento magenta, paisajes de Titán en la corona). Al fondo de la sala, entre los dos cohetes (0, −10.5). Sin misión: el mentor la explica y se deselecciona sola. | 1 |
 | `mentor` | `mentor` | Robot compacto flotante: cuerpo azul facetado, visor oscuro, ojos y sonrisa claros, brazos cortos y sin piernas. | 0.8 |
 
 Notas:
@@ -23,6 +24,7 @@ Están en `src/visual/props.ts`. **Son formas simplificadas, con proporciones ap
 | --- | --- | --- |
 | LRV | Unos 3.1 m de largo, chasis en tres secciones, cuatro ruedas de malla con chevrones, dos asientos, mando en T, plato, antena helicoidal y cámara | Sin cableado ni instrumentos; ruedas macizas en vez de malla |
 | Perseverance | Unos 3 × 2.7 × 2.2 m, seis ruedas con balancín, mástil con cámaras, brazo con torreta, generador con aletas y antena hexagonal | Instrumentos reducidos a cajas; brazo plegado aproximado |
+| Cassini | Unos 6.8 m de alto, antena de alta ganancia de 4 m con subreflector en trípode, dos tanques envueltos en manta dorada, bus de doce bahías, sonda Huygens de 2.7 m a un lado, tres generadores con aletas, cubierta negra del motor y brazo del magnetómetro de 11 m | Tumbada (eje en horizontal) para caber en la vitrina; antenas RPWS acortadas de 10 m a 3.2 m; instrumentos reducidos a cajas y cilindros; manta térmica como ondas en el radio |
 | Traje A7LB | Traje blanco, visor dorado, mochila, conectores azul y rojo; franjas rojas del comandante en una de las dos cápsulas | Sin capa exterior de detalle; no representa un traje concreto de un astronauta |
 | Saturn V | Escala 1:13 (8.5 m), etapas, patrón negro y torre de escape | Patrón de balanceo aproximado |
 | Atlas V 541 | Escala 1:13 (4.48 m), etapa central naranja salmón, cuatro aceleradores y cofia blanca | Sin marcas ni detalle de superficie |

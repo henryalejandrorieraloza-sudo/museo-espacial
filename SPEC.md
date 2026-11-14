@@ -144,7 +144,7 @@ Parte visual: ver spec-visual-museo.md.
 
 ### 7.1 Escena
 
-- Museo con vitrinas. Cada vitrina contiene un artefacto (LRV, Perseverance y otros).
+- Museo con vitrinas. Cada vitrina contiene un artefacto (LRV, Perseverance, Cassini y otros).
 - El mentor está físicamente presente en el museo: flota siempre delante del jugador, a unos 2 m y un poco a la derecha del centro de la pantalla (para no tapar las vitrinas), a altura fija. Lo sigue al caminar y girar con un resorte suave (retraso corto, inclinación hacia donde se mueve), se acerca si hay una vitrina, la pared o la peana del cohete central en su sitio, y no aparece solo al señalar. Mientras habla gesticula sin parar con los brazos; los gestos del guion tienen prioridad sobre los de relleno.
 
 ### 7.2 Flujo de un artefacto
@@ -157,6 +157,7 @@ Parte visual: ver spec-visual-museo.md.
 6. El jugador aplaude o pulsa espacio. Se entra a la escena con fundido de 0.6 s:
    - Vitrina del LRV → presentación del LRV (sección 7.4) y, al terminar, Luna, junto al LRV.
    - Vitrina de Perseverance → Marte, solo con Perseverance visible.
+   - Vitrina de Cassini → todavía sin misión: al terminar la explicación no aparece el aviso de entrar, la vitrina se deselecciona y se puede elegir otra. No se vuelve a seleccionar hasta dejar de señalarla.
 7. Comienza la misión.
 
 **Reglas del flujo:**
