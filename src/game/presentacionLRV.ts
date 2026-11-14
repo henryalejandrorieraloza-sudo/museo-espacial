@@ -139,7 +139,6 @@ const CAMARA_TV: V3 = [0.1, 1.2, -1.46];
 const BATERIAS: V3 = [0, 0.55, -0.95];
 const MYLAR: V3 = [0.05, 0.92, -1.42];
 const MANDO: V3 = [0, 0.86, -0.07];
-const PANEL: V3 = [0, 0.95, -0.56];
 
 /** Distancias de la escena "Distancias" (km). Fuentes: NSSDC (NASA), ver el comentario del guion. */
 export const DISTANCIA_LRV_KM = 36;
@@ -354,20 +353,6 @@ export const GUION: readonly EscenaPresentacion[] = [
           { resalte: 'mando', rotulo: 'rot_atras', desde: 4.3, hasta: 6.0, rotuloPx: [0, -150], vista: 'derecha' },
           { resalte: 'interruptor', rotulo: null, desde: 6.0, hasta: 7.8, vista: 'derecha' },
           { resalte: 'mando', rotulo: 'rot_marcha_atras', desde: 6.2, hasta: Infinity, rotuloPx: [0, -150], sinContorno: true, vista: 'derecha' },
-        ],
-      },
-      {
-        // Panel de control, sin voz: con las filas de interruptores como en las referencias (ref 5 y 7).
-        narracion: null,
-        minS: 2.8,
-        tomas: [
-          { t: 2.2, az: 180, el: 26, dist: 0.8, mira: PANEL },
-          { t: 2.8, az: 177, el: 26, dist: 0.78, mira: PANEL },
-        ],
-        marcas: [
-          { resalte: 'panelPotencia', rotulo: 'rot_potencia', desde: 1.2, hasta: Infinity, rotuloPx: [-60, 52] },
-          { resalte: 'panelDireccion', rotulo: 'rot_direccion', desde: 1.5, hasta: Infinity, rotuloPx: [0, 100] },
-          { resalte: 'panelHabilitar', rotulo: 'rot_habilitar', desde: 1.8, hasta: Infinity, rotuloPx: [70, 52] },
         ],
       },
     ],
