@@ -354,6 +354,7 @@ No se guardan muestras recogidas como progreso.
 - [x] Caminar por rodillas implementado (`src/tracking/metrics.ts`) y visible en `/debug/`.
 - [ ] Umbrales de caminar por rodillas validados con cámara real.
 - [x] Pantalla de inicio con elección de control; la elección persiste al recargar. Si la cámara falla, se ofrece el modo teclado (verificado en Chrome sin webcam).
+- [x] Pantalla de inicio “The Museum of Stars” (`src/ui/inicioUi.ts`): portada con un remolino de estrellas animado (shader WebGL2 en `src/ui/remolinoEstelar.ts`, con degradado fijo si no hay WebGL2) y, en la misma página, nombre del viajero, idioma y control. El nombre se guarda en localStorage (`museo-espacial:viajero:v1`) y Robi lo usa al saludar.
 - [x] Modo teclado y ratón: W A S D, espacio (entrar y subir al LRV), E o clic izquierdo (señalar, golpear, agarrar con un segundo toque, y mantenida: desplegar, recoger y volver al museo), clic derecho y Esc. Verificado en Chrome sin interfaz: seleccionar la vitrina del LRV, entrar, sentarse, conducir hasta la roca, golpe, agarre y volver al museo. En modo teclado no se pide la cámara.
 - [ ] Mirar con el ratón con pointer lock real en un navegador con ventana (la lógica se probó simulando la captura del ratón).
 - [ ] Modo cámara después de separar la capa de entrada (`src/input/`): probado solo con la webcam simulada de Chrome (carga MediaPipe y pide encuadre). Falta probar calibración y gestos con cámara real.

@@ -1,4 +1,4 @@
-// Bucle principal del juego: pantalla de inicio (elección de control) → encuadre y calibración (solo con cámara)
+// Bucle principal del juego: pantalla de inicio (nombre, idioma y control) → encuadre y calibración (solo con cámara)
 // → museo y misiones (SPEC 2.1, 3, 7 y 8). Une la capa de entrada (input/), la lógica del museo (game/museo.ts),
 // la misión lunar (game/luna.ts) y la interfaz (ui/). No sabe si las acciones vienen de la cámara o del teclado:
 // en cada vuelta lee una LecturaEntrada y la reparte.
@@ -131,14 +131,22 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   luna_despegue_libre: 'luna_despegue_libre_teclado',
 };
 
+/** Nombre que el viajero escribió en la pantalla de inicio. Vacío = se usa "explorador" en el idioma activo. */
+let nombreViajero = '';
+
+/** Variables de los textos del mentor: por ahora, solo `{nombre}`. */
+function variablesTexto(): Record<string, string> {
+  return { nombre: nombreViajero || t('viajero_defecto') };
+}
+
 /** Texto según el control: con teclado usa la variante que nombra la tecla, si existe. */
 function texto(clave: ClaveTexto): string {
-  return t(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave);
+  return t(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave, variablesTexto());
 }
 
 /** Igual que `texto`, pero con las marcas de gesto del mentor: solo para pasarlo a la voz. */
 function textoGuion(clave: ClaveTexto): string {
-  return tGuion(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave);
+  return tGuion(modoControl === 'teclado' ? (TEXTO_TECLADO[clave] ?? clave) : clave, variablesTexto());
 }
 
 /**
@@ -374,13 +382,15 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     }
   });
 
-  // El museo carga mientras el jugador elige el control.
+  // El museo carga mientras el viajero recorre la pantalla de inicio.
   const escenaLista = visual.museo.iniciar(container);
   escenaLista.catch(() => {
     // El error se muestra al esperar la escena, más abajo.
   });
 
-  let modo = await inicio.elegir(cargarControl() ?? 'camara');
+  const viajero = await inicio.bienvenida(cargarControl());
+  nombreViajero = viajero.nombre;
+  let modo = viajero.modo;
   try {
     ui.aviso(t('cargando_museo'));
     await escenaLista;

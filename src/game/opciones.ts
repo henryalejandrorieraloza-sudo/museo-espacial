@@ -189,3 +189,44 @@ export function guardarControl(modo: ModoControl): void {
     // Sin localStorage: la elección vale solo para esta carga de la página.
   }
 }
+
+// ---------------------------------------------------------------------------
+// Nombre del viajero, que se pide en la pantalla de inicio. Clave propia, versionada.
+// ---------------------------------------------------------------------------
+
+const CLAVE_NOMBRE = 'museo-espacial:viajero:v1';
+/** Largo máximo del nombre (caracteres). */
+export const LARGO_MAX_NOMBRE = 24;
+
+/**
+ * Limpia el nombre escrito: sin espacios de más, sin llaves (marcarían gestos del mentor en los textos) ni
+ * caracteres de control, y como mucho LARGO_MAX_NOMBRE caracteres.
+ */
+export function limpiarNombre(nombre: string): string {
+  return Array.from(
+    nombre
+      .replace(/[{}<>\p{Cc}]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
+    .slice(0, LARGO_MAX_NOMBRE)
+    .join('')
+    .trim();
+}
+
+/** Nombre guardado, o cadena vacía si no hay. */
+export function cargarNombre(): string {
+  try {
+    return limpiarNombre(localStorage.getItem(CLAVE_NOMBRE) ?? '');
+  } catch {
+    return '';
+  }
+}
+
+export function guardarNombre(nombre: string): void {
+  try {
+    localStorage.setItem(CLAVE_NOMBRE, nombre);
+  } catch {
+    // Sin localStorage: el nombre vale solo para esta carga de la página.
+  }
+}

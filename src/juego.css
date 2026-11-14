@@ -245,108 +245,413 @@
   }
 }
 
-/* Pantalla de inicio: título, elección de control y botón "Empezar". Tapa la escena mientras carga. */
+/* Pantalla de inicio "The Museum of Stars": remolino de estelas de estrellas (src/ui/remolinoEstelar.ts) y, encima, la portada
+   y los pasos de nombre, idioma y control (src/ui/inicioUi.ts). Tapa la escena del museo mientras carga. */
 .inicio {
+  --inicio-azul: #8fb4ff;
+  --inicio-crema: #f3d6c2;
+  --inicio-naranja: #ff8a55;
+  --inicio-texto: #eef2ff;
+  --inicio-tenue: rgba(220, 228, 255, 0.72);
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: radial-gradient(circle at 50% 30%, #2a1450 0%, #0b0716 70%);
-  color: #fff;
-  font-family: system-ui, sans-serif;
+  background: #020309;
+  color: var(--inicio-texto);
+  font-family: 'Avenir Next', 'Avenir', 'Segoe UI', system-ui, sans-serif;
   z-index: 20;
-  overflow-y: auto;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.7s ease, transform 0.7s ease;
 }
 
-.inicio-caja {
+.inicio[hidden] {
+  display: none;
+}
+
+.inicio--saliendo {
+  opacity: 0;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+.inicio-remolino,
+.inicio-velo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Sin WebGL2: degradado fijo con los colores del remolino. */
+.inicio-remolino--fijo {
+  background:
+    radial-gradient(ellipse 45% 35% at 0% 56%, rgba(200, 220, 255, 0.6) 0%, rgba(60, 110, 200, 0.5) 40%, rgba(20, 45, 110, 0) 100%),
+    linear-gradient(180deg, #03050d 0%, #0d2252 35%, #1d3f86 70%, #b4483a 100%);
+}
+
+/* Oscurece arriba, donde va el texto, para que se lea sobre el remolino. */
+.inicio-velo {
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 34%, rgba(2, 3, 9, 0.55) 0%, rgba(2, 3, 9, 0) 70%),
+    linear-gradient(180deg, rgba(2, 3, 9, 0.35) 0%, rgba(2, 3, 9, 0) 40%, rgba(2, 3, 9, 0) 75%, rgba(2, 3, 9, 0.45) 100%);
+  pointer-events: none;
+}
+
+/* En los pasos (nombre, idioma, control) hay más texto: se oscurece más la zona del formulario. */
+.inicio-velo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 52% 48% at 50% 36%, rgba(2, 3, 9, 0.82) 0%, rgba(2, 3, 9, 0.5) 55%, rgba(2, 3, 9, 0) 85%);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.inicio--pasos .inicio-velo::after {
+  opacity: 1;
+}
+
+.inicio-contenido {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 100%;
+  overflow-y: auto;
+  /* Margen interno para que el brillo de los botones no se recorte en el borde del contenedor. */
+  padding: 32px 12px;
+  margin-bottom: 26vh;
+}
+
+.inicio-paso {
+  display: grid;
+  gap: 22px;
+  animation: inicio-entrar 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes inicio-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* Portada */
+.inicio-portada {
+  justify-items: center;
+  text-align: center;
+  gap: 18px;
+}
+
+.inicio-antetitulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--inicio-azul);
+  text-shadow: 0 0 18px rgba(80, 130, 255, 0.6);
+}
+
+.inicio-titulo {
+  margin: 0;
+  font-size: clamp(38px, 8.5vw, 76px);
+  font-weight: 200;
+  line-height: 1.02;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(100deg, #ffffff 0%, #c9dcff 38%, #f3d6c2 64%, #ff8a55 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 22px rgba(120, 160, 255, 0.35));
+  text-wrap: balance;
+}
+
+.inicio-lema {
+  margin: 0;
+  max-width: 440px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--inicio-tenue);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
+  text-wrap: pretty;
+}
+
+.inicio-pista {
+  margin: -6px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: rgba(220, 228, 255, 0.45);
+}
+
+/* Botón principal: cápsula transparente con borde fino claro. */
+.inicio-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 16px 34px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.8);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(140, 180, 255, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.inicio-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #fff;
+  box-shadow: 0 0 32px rgba(160, 195, 255, 0.45);
+}
+
+.inicio-cta:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.inicio-cta-flecha {
+  transition: transform 0.2s ease;
+}
+
+.inicio-cta:hover:not(:disabled) .inicio-cta-flecha {
+  transform: translateX(4px);
+}
+
+.inicio-portada .inicio-cta {
+  animation: inicio-latido 2.8s ease-in-out 1s infinite;
+}
+
+@keyframes inicio-latido {
+  0%,
+  100% {
+    box-shadow: 0 0 22px rgba(140, 180, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 38px rgba(170, 200, 255, 0.55);
+  }
+}
+
+/* Pasos */
+.inicio-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.inicio-atras {
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--inicio-tenue);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.inicio-atras:hover {
+  color: #fff;
+}
+
+.inicio-puntos {
+  display: flex;
+  gap: 6px;
+}
+
+.inicio-puntos i {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(220, 228, 255, 0.28);
+}
+
+.inicio-puntos i.activo {
+  background: linear-gradient(90deg, #8fb4ff, #ff8a55);
+}
+
+.inicio-pregunta {
+  margin: 0;
+  font-size: clamp(26px, 5.4vw, 38px);
+  font-weight: 300;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.9);
+  text-wrap: pretty;
+}
+
+.inicio-formulario {
   display: grid;
   gap: 18px;
+  justify-items: start;
+}
+
+.inicio-entrada {
   width: 100%;
-  max-width: 480px;
-}
-
-.inicio h1 {
-  margin: 0;
-  font-size: clamp(26px, 6vw, 38px);
-  font-weight: 700;
-  text-align: center;
-}
-
-.inicio fieldset {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
+  padding: 14px 4px;
   border: 0;
+  border-bottom: 1px solid rgba(220, 228, 255, 0.35);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: clamp(24px, 5vw, 32px);
+  font-weight: 300;
+  outline: none;
+  transition: border-color 0.2s ease;
 }
 
-.inicio legend {
-  margin-bottom: 10px;
-  font: 400 16px/1.4 system-ui, sans-serif;
-  color: rgba(255, 255, 255, 0.8);
+.inicio-entrada::placeholder {
+  color: rgba(220, 228, 255, 0.35);
+}
+
+.inicio-entrada:focus {
+  border-bottom-color: var(--inicio-azul);
+  box-shadow: 0 10px 18px -16px rgba(143, 180, 255, 0.9);
+}
+
+.inicio-opciones {
+  display: grid;
+  gap: 12px;
+}
+
+.inicio-opciones--dos {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .inicio-opcion {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 12px;
-  align-items: start;
-  padding: 14px 16px;
-  border: 2px solid #3a2c5c;
-  border-radius: 12px;
-  background: rgba(23, 18, 40, 0.85);
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 16px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
   cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
-.inicio-opcion:has(input:checked) {
-  border-color: #5cc8ff;
+.inicio-opcion:hover,
+.inicio-opcion:focus-visible {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateY(-1px);
+  outline: none;
 }
 
-.inicio-opcion input {
-  margin-top: 3px;
-  accent-color: #5cc8ff;
+.inicio-opcion.marcada {
+  border-color: rgba(255, 255, 255, 0.85);
 }
 
-.inicio-opcion span {
+.inicio-opcion--idioma {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 22px 20px;
+}
+
+.inicio-opcion--idioma strong {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.inicio-icono svg {
+  display: block;
+  width: 34px;
+  height: 34px;
+  fill: none;
+  stroke: var(--inicio-azul);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.inicio-icono circle {
+  fill: var(--inicio-azul);
+  stroke: none;
+}
+
+.inicio-opcion-texto {
   display: grid;
   gap: 4px;
 }
 
-.inicio-opcion strong {
+.inicio-opcion-texto strong {
   font-size: 17px;
+  font-weight: 600;
 }
 
-.inicio-opcion small {
+.inicio-opcion-texto small {
   font-size: 14px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.45;
+  color: var(--inicio-tenue);
+}
+
+.inicio-etiqueta {
+  justify-self: start;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--inicio-naranja);
 }
 
 .inicio-error {
   margin: 0;
   padding: 12px 14px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(200, 70, 60, 0.25);
   border: 1px solid rgba(255, 120, 110, 0.6);
-  font: 500 15px/1.4 system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
 }
 
-.inicio-empezar {
-  justify-self: center;
-  padding: 14px 40px;
-  border: 0;
-  border-radius: 10px;
-  background: #5cc8ff;
-  color: #0b0716;
-  font: 700 18px system-ui, sans-serif;
-  cursor: pointer;
-}
-
-.inicio-empezar:focus-visible {
-  outline: 3px solid #fff;
+.inicio button:focus-visible {
+  outline: 2px solid #fff;
   outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .inicio-contenido {
+    margin-bottom: 22vh;
+  }
+  .inicio-antetitulo {
+    letter-spacing: 0.28em;
+  }
+  .inicio-cta {
+    padding: 15px 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inicio-paso,
+  .inicio-portada .inicio-cta {
+    animation: none;
+  }
 }
 
 /* Fila de Opciones con el control actual y el botón "Cambiar control". */
