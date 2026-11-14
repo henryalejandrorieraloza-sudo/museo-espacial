@@ -107,6 +107,7 @@ let listoPendiente = false;
 const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   ayuda: 'ayuda_teclado',
   entrar_aplauso: 'entrar_teclado',
+  vitrina_lrv: 'vitrina_lrv_teclado',
   luna_entrando_museo: 'luna_entrando_museo_teclado',
   luna_lejos_LRV: 'luna_lejos_LRV_teclado',
   luna_LRV_desplegado: 'luna_LRV_desplegado_teclado',
