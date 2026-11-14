@@ -52,6 +52,8 @@ let instruccionDesplegarDicha = false;
 /** Frases que solo se dicen una vez en la sesión de la página (ver decirUnaVez). */
 const yaDichas = new Set<ClaveTexto>();
 /** La voz ya dijo "Aprieta espacio para subirte" en esta visita: hasta entonces, el aplauso no sube al LRV. */
+/** Robi ya saludó al visitante en esta visita (solo se saluda una vez, al empezar). */
+let saludoDado = false;
 let subidaLista = false;
 /** La voz ya explicó cómo conducir en esta visita: hasta entonces, caminar no mueve el LRV. */
 let conduccionLista = false;
@@ -109,6 +111,7 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   entrar_aplauso: 'entrar_teclado',
   vitrina_lrv: 'vitrina_lrv_teclado',
   luna_entrando_museo: 'luna_entrando_museo_teclado',
+  saludo_vitrinas: 'saludo_vitrinas_teclado',
   luna_lejos_LRV: 'luna_lejos_LRV_teclado',
   luna_LRV_desplegado: 'luna_LRV_desplegado_teclado',
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
@@ -461,6 +464,12 @@ interface Sesion {
   /** Anillo de mantener E para desplegar el LRV. */
   anillo: AnilloUi;
   /** Opciones vivas: el panel las modifica en el mismo objeto. */
+    // Saludo de Robi: en cuanto el visitante está listo (con cámara, ya encuadrado y calibrado; con teclado, al entrar).
+    if (lectura.listo && !saludoDado && !enCinematica && mision === null && reanudarCinematicaS === null) {
+      saludoDado = true;
+      decirFrase(voz, ui, 'saludo_bienvenida', undefined, true);
+      decirFrase(voz, ui, 'saludo_vitrinas', undefined, true);
+    }
   opciones: Opciones;
   voz: Voz;
   presUi: PresentacionUi;
