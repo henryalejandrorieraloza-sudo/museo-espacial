@@ -32,6 +32,11 @@ export const SEGUNDOS_LISTO = 2.5;
  * su propio respaldo (audio/voz.ts); esto es una segunda red para que la presentación nunca se quede parada.
  */
 export const MARGEN_VOZ_S = 20;
+/**
+ * Silencio (s) entre que termina la voz de un tramo y empieza el siguiente. Un tramo con frase acaba en cuanto
+ * termina la voz más esta pausa, sin esperar a su tiempo mínimo (que solo cuenta para los tramos sin voz).
+ */
+export const PAUSA_ENTRE_FRASES_S = 0.6;
 
 /** Piezas que se pueden resaltar. Las de la rueda son de la rueda delantera izquierda; `ruedas`, de las cuatro. */
 export type Resalte =
@@ -416,6 +421,8 @@ export class PresentacionLRV {
   private t = 0;
   private tSalida = 0;
   private vozPendiente = false;
+  /** Instante (s del tramo) en que terminó la voz del tramo actual; null mientras no haya terminado. */
+  private tVozFin: number | null = null;
   private eventos: EventoPresentacion[] = [];
   private readonly guion: readonly EscenaPresentacion[];
 
@@ -463,6 +470,7 @@ export class PresentacionLRV {
   /** La frase del tramo actual (o "Estás listo") terminó de sonar. */
   terminoVoz(): void {
     this.vozPendiente = false;
+    this.tVozFin = this.t;
   }
 
   /** Salta al final ("Estás listo para la misión"). Devuelve false si ahora no se puede. */
@@ -486,8 +494,13 @@ export class PresentacionLRV {
         this.t += dt;
         const tramo = this.tramoActual;
         if (!tramo) break;
-        const vozLista = !this.vozPendiente || this.t >= tramo.minS + MARGEN_VOZ_S;
-        if (this.t < tramo.minS || !vozLista) break;
+        // Con frase, el tramo acaba PAUSA_ENTRE_FRASES_S después de la voz; si la voz nunca avisa, pasa MARGEN_VOZ_S tras su tiempo mínimo.
+        const listo = tramo.narracion
+          ? this.tVozFin !== null
+            ? this.t >= this.tVozFin + PAUSA_ENTRE_FRASES_S
+            : this.t >= tramo.minS + MARGEN_VOZ_S
+          : this.t >= tramo.minS;
+        if (!listo) break;
         const escena = this.guion[this.indiceEscena];
         if (this.indiceTramo + 1 < escena.tramos.length) {
           this.empezarTramo(this.indiceEscena, this.indiceTramo + 1);
@@ -526,6 +539,7 @@ export class PresentacionLRV {
     this.indiceTramo = tramo;
     this.t = 0;
     this.vozPendiente = this.tramoActual?.narracion != null;
+    this.tVozFin = null;
     this.eventos.push({ tipo: 'tramo', escena, tramo });
   }
 
