@@ -12,8 +12,10 @@ import {
 } from './props';
 
 // Arquitectura del museo: sala circular oscura de 32 m, como las referencias de Henry de 2026-11-14. Paredes de
-// pantallas LED con nebulosas y carteles, techo negro con focos, suelo pulido con órbitas de luz, planetas colgantes
+// pantallas LED con nebulosas y carteles, techo negro sin luces, suelo pulido con órbitas de luz, planetas colgantes
 // y un Saturn V en el centro. Los objetos expuestos (vitrinas, trajes, cohetes, consolas) no cambian.
+// El techo y lo que cuelga de él no llevan luces (pedido de Henry, 2026-11-14): la luz de la sala viene de las
+// pantallas, los hologramas y las líneas del suelo, y todo lo demás queda en penumbra.
 // Convención: X a la derecha, Y arriba, −Z hacia donde mira el jugador al inicio.
 
 /** Colores de la sala oscura. Solo arquitectura: los objetos siguen con ARQ y HIST (paleta.ts). */
@@ -289,13 +291,6 @@ function bahia(l: Lote, i: number, rnd: () => number): void {
     l.emisiva(new THREE.PlaneGeometry(ANCHO_BAHIA - 0.06, alto, 16, filas), (c) => colorMural(a * RADIO_PARED + c.x, yc + c.y), 0.75, {
       p: [0, yc, 0.02],
     });
-    // Barrido de luz de los focos del techo sobre la parte alta de la pantalla.
-    l.aditiva(
-      new THREE.PlaneGeometry(2.6, 2.4, 6, 6),
-      (p) => tinte(0xdfe6ff, 0.05 * Math.max(0, 1 - Math.hypot(p.x / 1.3, (p.y - 1.2) / 2.4)) ** 1.5),
-      { p: [0, MURAL_Y1 - 1.2, 0.03] },
-    );
-
     if (esPuerta) {
       puerta(l);
     } else {
@@ -308,8 +303,6 @@ function bahia(l: Lote, i: number, rnd: () => number): void {
       if (ROTULOS.has(i)) rotulo(l, rnd);
     }
     l.aditiva(new THREE.PlaneGeometry(ANCHO_BAHIA, 1.6), degradado(SALA.azul, 0, 0.05, 1.6), { p: [0, 0.03, 1.0], r: [-Math.PI / 2, 0, 0] });
-    // Línea de luz violeta bajo el techo perimetral.
-    l.emisiva(new THREE.BoxGeometry(ANCHO_BAHIA, 0.04, 0.04), SALA.violetaLed, 0.9, { p: [0, MURAL_Y1 + 0.1, 0.06] });
   });
 
   // Junta oscura entre dos pantallas.
@@ -343,7 +336,7 @@ function crearEstrellasMural(): THREE.Points {
 }
 
 // ---------------------------------------------------------------------------
-// Techo: falso techo perimetral con focos y cúpula negra
+// Techo: falso techo perimetral y cúpula negra, sin luces
 // ---------------------------------------------------------------------------
 
 /** Altura de la cúpula a una distancia `r` del centro (m). */
@@ -351,43 +344,18 @@ function alturaCupula(r: number): number {
   return ALTURA_CORNISA + ALZADO_CUPULA * Math.sqrt(Math.max(0, 1 - (r / RADIO_CUPULA) ** 2));
 }
 
-/** Punto de la cúpula para un azimut y una elevación (0 = cornisa, π/2 = cima). */
-function puntoCupula(azimut: number, elevacion: number, radio = RADIO_CUPULA): V3 {
-  return [
-    Math.cos(azimut) * Math.cos(elevacion) * radio,
-    ALTURA_CORNISA + Math.sin(elevacion) * ALZADO_CUPULA * (radio / RADIO_CUPULA),
-    Math.sin(azimut) * Math.cos(elevacion) * radio,
-  ];
-}
-
-/** Foco empotrado que mira hacia abajo: aro oscuro y lente que florece con el bloom. */
-function foco(l: Lote, x: number, y: number, z: number): void {
-  l.pieza(new THREE.CylinderGeometry(0.16, 0.16, 0.05, 8), SALA.marco, { p: [x, y, z] });
-  l.emisiva(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 8), SALA.led, 3.2, { p: [x, y - 0.03, z] });
-}
-
 function crearTecho(l: Lote): void {
   for (let i = 0; i < LADOS; i++) {
     const a0 = i * PASO_ANGULO;
     const a1 = a0 + PASO_ANGULO;
-    // Falso techo perimetral, con un faldón en el borde interior y una línea de luz azul.
+    // Falso techo perimetral, con un faldón en el borde interior. Sin focos ni líneas de luz.
     l.emisiva(segmentoAnillo(RADIO_TECHO_BAJO, RADIO_PARED + 0.1, a0, a1, ALTURA_TECHO_BAJO, ALTURA_TECHO_BAJO + 0.2), SALA.techo, 1, { v: 0.4 });
     l.emisiva(segmentoAnillo(RADIO_TECHO_BAJO, RADIO_TECHO_BAJO + 0.12, a0, a1, ALTURA_TECHO_BAJO - 0.25, ALTURA_TECHO_BAJO + 1.1), SALA.marco, 0.7);
-    l.emisiva(segmentoAnillo(RADIO_TECHO_BAJO - 0.02, RADIO_TECHO_BAJO, a0 + 0.004, a1 - 0.004, ALTURA_TECHO_BAJO - 0.2, ALTURA_TECHO_BAJO - 0.16), SALA.azul, 1.3);
-    // Cornisa de la cúpula con su línea de luz blanca.
+    // Cornisa de la cúpula.
     l.emisiva(segmentoAnillo(14.9, RADIO_PARED + 0.2, a0, a1, ALTURA_CORNISA - 0.3, ALTURA_CORNISA), SALA.techo);
-    l.emisiva(segmentoAnillo(14.86, 14.92, a0 + 0.004, a1 - 0.004, ALTURA_CORNISA - 0.2, ALTURA_CORNISA - 0.14), SALA.led, 1.0);
-    // Dos focos por bahía en el falso techo.
-    for (const [r, desfase] of [
-      [13.6, 0.3],
-      [15.1, 0.75],
-    ] as const) {
-      const a = a0 + PASO_ANGULO * desfase;
-      foco(l, Math.cos(a) * r, ALTURA_TECHO_BAJO - 0.03, Math.sin(a) * r);
-    }
   }
 
-  // Cúpula negra facetada: el techo alto de la sala. Sin iluminar: con las luces de la sala se veía gris.
+  // Cúpula negra facetada: el techo alto de la sala. Sin luces y sin iluminar: con las luces de la sala se veía gris.
   const boveda = new THREE.SphereGeometry(RADIO_CUPULA, LADOS, 7, 0, Math.PI * 2, 0, Math.PI / 2);
   boveda.scale(1, ALZADO_CUPULA / RADIO_CUPULA, 1);
   const noIndexada = boveda.toNonIndexed();
@@ -399,19 +367,6 @@ function crearTecho(l: Lote): void {
     pos.setXYZ(i + 2, x, y, z);
   }
   l.emisiva(noIndexada, SALA.techo, 1, { p: [0, ALTURA_CORNISA, 0], v: 0.5 });
-
-  // Focos en la cúpula: puntos de luz en anillos, como los de las referencias.
-  for (const [elevacion, n] of [
-    [0.28, 22],
-    [0.62, 16],
-    [0.95, 11],
-    [1.25, 6],
-  ] as const) {
-    for (let i = 0; i < n; i++) {
-      const [x, y, z] = puntoCupula((i + elevacion * 3) * ((Math.PI * 2) / n), elevacion, RADIO_CUPULA - 0.08);
-      l.emisiva(new THREE.IcosahedronGeometry(0.07, 0), SALA.led, 3.2, { p: [x, y, z] });
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -428,8 +383,6 @@ interface PlanetaColgante {
   detalle: number;
   /** Anillos (radios interior y exterior relativos al planeta) y sus colores. */
   anillos?: { r0: number; r1: number; color: number }[];
-  /** Aro de luz blanca que cuelga sobre el astro, como el de la Luna de la segunda referencia. */
-  aro?: boolean;
 }
 
 /** Bandas horizontales según la latitud. */
@@ -447,7 +400,6 @@ const PLANETAS_COLGANTES: readonly PlanetaColgante[] = [
     posicion: [-7.2, 12.4, -6.6],
     inclinacion: 0.1,
     detalle: 3,
-    aro: true,
     color: (d) => {
       if (Math.sin(d.x * 23) * Math.sin(d.y * 19) * Math.sin(d.z * 21) > 0.3) return 0x87847e;
       return Math.sin(d.x * 4.6 + d.y * 2.8) + Math.sin(d.z * 3.9 - d.y * 5.2) > 0.75 ? 0x5e5c59 : 0xaaa7a1;
@@ -500,12 +452,16 @@ const PLANETAS_COLGANTES: readonly PlanetaColgante[] = [
   { radio: 0.38, posicion: [5.6, 9.6, 8.4], inclinacion: 0, detalle: 2, color: (d) => (Math.sin(d.x * 13) * Math.sin(d.z * 11) > 0.3 ? 0x7e7266 : 0x9a8c7c) },
 ];
 
-/** Hacia dónde llega la luz de los focos a los planetas: desde abajo y desde el lado del jugador al empezar. */
+/** Hacia dónde llega a los planetas el resplandor de la sala (pantallas y suelo): desde abajo y desde el lado del jugador al empezar. */
 const LUZ_PLANETAS = new THREE.Vector3(0.25, -0.55, 0.8).normalize();
+/** Brillo horneado de los planetas (0–1): el del lado a oscuras y el añadido en el lado que da al resplandor. Cuelgan en penumbra. */
+const BRILLO_PLANETA_SOMBRA = 0.1;
+const BRILLO_PLANETA_LUZ = 0.7;
+const BRILLO_ANILLO_PLANETA = 0.5;
 
 /**
- * Los planetas colgantes, en un lote. La luz de los focos va horneada en el color de cada cara (lado iluminado y lado
- * en sombra, como en la primera referencia): así se leen en la sala oscura sin añadir más luces. No giran.
+ * Los planetas colgantes, en un lote. Ese resplandor va horneado en el color de cada cara (lado iluminado y lado en
+ * sombra, como en la primera referencia): así se leen en la sala oscura sin añadir luces. No giran.
  */
 function crearPlanetasColgantes(): THREE.Group {
   const l = new Lote(false);
@@ -516,22 +472,6 @@ function crearPlanetasColgantes(): THREE.Group {
     const r = Math.hypot(x, z);
     // Cable fino hasta la cúpula.
     l.pieza(tuboEntre([x, y + p.radio * 0.98, z], [x, alturaCupula(r) - 0.05, z], 0.012, 4, false), SALA.metal);
-    if (p.aro) {
-      const yAro = y + p.radio + 1.0;
-      const ra = p.radio + 1.1;
-      l.en([x, 0, z], [0, 0, 0], () => {
-        for (let i = 0; i < 32; i++) {
-          const a0 = (i / 32) * Math.PI * 2;
-          l.emisiva(segmentoAnillo(ra - 0.25, ra + 0.05, a0, a0 + Math.PI / 16, yAro, yAro + 0.12), SALA.marco, 0.6);
-        }
-      });
-      l.emisiva(new THREE.TorusGeometry(ra, 0.045, 4, 64), SALA.led, 2.6, { p: [x, yAro - 0.01, z], r: [Math.PI / 2, 0, 0] });
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + 0.4;
-        const [cx, cz] = [x + Math.cos(a) * ra, z + Math.sin(a) * ra];
-        l.pieza(tuboEntre([cx, yAro + 0.12, cz], [cx, alturaCupula(Math.hypot(cx, cz)) - 0.05, cz], 0.012, 4, false), SALA.metal);
-      }
-    }
     // La luz, en los ejes del planeta inclinado: hacia la luz es el sentido contrario a LUZ_PLANETAS.
     const haciaLuz = LUZ_PLANETAS.clone().negate().applyEuler(new THREE.Euler(0, 0, -p.inclinacion));
     l.en([x, y, z], [0, 0, p.inclinacion], () => {
@@ -539,14 +479,14 @@ function crearPlanetasColgantes(): THREE.Group {
         new THREE.IcosahedronGeometry(p.radio, p.detalle),
         (c) => {
           d.copy(c).normalize();
-          return iluminado(p.color(d), 0.12 + 0.95 * Math.max(0, d.dot(haciaLuz)) ** 0.8);
+          return iluminado(p.color(d), BRILLO_PLANETA_SOMBRA + BRILLO_PLANETA_LUZ * Math.max(0, d.dot(haciaLuz)) ** 0.8);
         },
         1,
         { v: 0.1 },
       );
       for (const anillo of p.anillos ?? []) {
         for (const giroAnillo of [-Math.PI / 2, Math.PI / 2]) {
-          l.emisiva(new THREE.RingGeometry(p.radio * anillo.r0, p.radio * anillo.r1, 40), iluminado(anillo.color, 0.7), 1, { r: [giroAnillo, 0, 0], v: 0.15 });
+          l.emisiva(new THREE.RingGeometry(p.radio * anillo.r0, p.radio * anillo.r1, 40), iluminado(anillo.color, BRILLO_ANILLO_PLANETA), 1, { r: [giroAnillo, 0, 0], v: 0.15 });
         }
       }
     });
@@ -558,13 +498,9 @@ function crearPlanetasColgantes(): THREE.Group {
 // Cohete central
 // ---------------------------------------------------------------------------
 
-/** Altura del aro de luz que rodea la punta del cohete (m). */
-const Y_ARO_COHETE = 12.5;
-const RADIO_ARO_COHETE = 3.6;
-
 /**
  * Saturn V en el centro de la sala, como en la segunda referencia: peana negra de dos escalones con anillos LED,
- * barandilla de cristal, mesa de lanzamiento oscura y un aro de luz colgado alrededor de la punta.
+ * barandilla de cristal y mesa de lanzamiento oscura. Nada de luz arriba: la punta queda en penumbra.
  */
 function crearCoheteCentral(l: Lote): void {
   l.pieza(new THREE.CylinderGeometry(2.95, 3.0, 0.5, 32), SALA.zocalo, { p: [0, 0.25, 0] });
@@ -591,18 +527,6 @@ function crearCoheteCentral(l: Lote): void {
   }
   l.en([0, ALTURA_MESA_COHETE, 0], [0, Math.PI / 4, 0], () => crearSaturnV(l), [ESCALA_COHETE, ESCALA_COHETE, ESCALA_COHETE]);
   charco(l, 0, 0, 6.5, SALA.azul, 0.35);
-
-  // Aro colgante alrededor de la punta: banda oscura con LED blanco por debajo, y sus cables.
-  for (let i = 0; i < 40; i++) {
-    const a0 = (i / 40) * Math.PI * 2;
-    l.pieza(segmentoAnillo(RADIO_ARO_COHETE - 0.3, RADIO_ARO_COHETE, a0, a0 + Math.PI / 20, Y_ARO_COHETE, Y_ARO_COHETE + 0.16), SALA.marco);
-  }
-  l.emisiva(new THREE.TorusGeometry(RADIO_ARO_COHETE - 0.15, 0.05, 4, 72), SALA.led, 2.6, { p: [0, Y_ARO_COHETE - 0.01, 0], r: [Math.PI / 2, 0, 0] });
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const [x, z] = [Math.cos(a) * (RADIO_ARO_COHETE - 0.15), Math.sin(a) * (RADIO_ARO_COHETE - 0.15)];
-    l.pieza(tuboEntre([x, Y_ARO_COHETE + 0.16, z], [x, alturaCupula(RADIO_ARO_COHETE) - 0.05, z], 0.012, 4, false), SALA.metal);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -845,10 +769,7 @@ function coronaEnLote(l: Lote, tema: ColoresTema): void {
       l.emisiva(new THREE.PlaneGeometry(ancho, alto, 10, 6), paisaje(tema, i, ancho, alto), 1, { p: [0, (y0 + y1) / 2, apotema + 0.005] });
     });
   }
-  // Bordes de luz arriba y abajo.
-  for (const y of [y0, y1]) {
-    l.emisiva(new THREE.TorusGeometry(RADIO_CORONA - 0.03, 0.012, 4, n), 0xdff4ff, 1.8, { p: [0, y, 0], r: [Math.PI / 2, 0, PASO_MOSTRADOR / 2] });
-  }
+  // Sin bordes de luz: las pantallas se recortan solas sobre la banda oscura.
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2;
     const [x, z] = [Math.cos(a) * (RADIO_CORONA - 0.03), Math.sin(a) * (RADIO_CORONA - 0.03)];
@@ -856,7 +777,7 @@ function coronaEnLote(l: Lote, tema: ColoresTema): void {
   }
 }
 
-/** Anillo colgante: banda oscura con rótulo claro, banda luminosa con rótulo oscuro y una línea de LED por debajo. */
+/** Anillo colgante: banda oscura con rótulo claro, banda clara tenue con rótulo oscuro y un filete de color. Sin LED por debajo. */
 function anilloColganteEnLote(l: Lote, acento: number): void {
   const n = 24;
   const paso = (Math.PI * 2) / n;
@@ -869,10 +790,9 @@ function anilloColganteEnLote(l: Lote, acento: number): void {
     const a0 = i * paso;
     const a1 = a0 + paso;
     l.pieza(segmentoAnillo(r - 0.42, r, a0, a1, y, y + 0.06), ARQ.oscuro);
-    l.emisiva(segmentoAnillo(r - 0.36, r - 0.28, a0, a1, y - 0.012, y), 0xeaf6ff, 2.6);
-    l.emisiva(segmentoAnillo(r - grueso, r, a0, a1, y + 0.06, y + 0.32), 0xe6eaf2, 0.85);
+    l.emisiva(segmentoAnillo(r - grueso, r, a0, a1, y + 0.06, y + 0.32), 0xe6eaf2, 0.16);
     l.pieza(segmentoAnillo(r - grueso, r, a0, a1, y + 0.32, y + 0.7), ARQ.indigo);
-    l.emisiva(segmentoAnillo(r - grueso - 0.002, r + 0.002, a0, a1, y + 0.315, y + 0.335), acento, 2);
+    l.emisiva(segmentoAnillo(r - grueso - 0.002, r + 0.002, a0, a1, y + 0.315, y + 0.335), acento, 1.1);
     // Rótulos por fuera (lado cercano) y por dentro (lado lejano). Barras sin texto real.
     const ancho = 2 * r * Math.sin(paso / 2) * 0.98;
     for (const [dentro, apo] of [
@@ -923,10 +843,7 @@ export function crearInstalacionHolograma(
   // Luz azul sobre el holograma: tiñe el suelo y el mostrador, sin iluminar el modelo (que es luz pura).
   const luz = new THREE.PointLight(0x62c8ff, 6, LADO_VITRINA * 2, 1.7);
   luz.position.set(0, ALTURA_HOLOGRAMA + 0.4, 0);
-  // Luz blanca suave del anillo LED sobre el tablero, para que la falda no quede negra.
-  const led = new THREE.PointLight(0xeaf6ff, 5, 6, 1.7);
-  led.position.set(0, Y_ANILLO - 0.3, 0);
-  grupo.add(luz, led);
+  grupo.add(luz);
 
   const alto = ALTURA_HOLOGRAMA + 2.2;
   const volumen = new THREE.Mesh(
@@ -999,13 +916,6 @@ function mirandoAlCentro(l: Lote, x: number, z: number, fn: () => void): void {
   l.en([x, 0, z], [0, Math.atan2(-x, -z), 0], fn);
 }
 
-/** Focos que iluminan el cohete central desde el falso techo: posición del foco y punto al que apunta. */
-const FOCOS_COHETE: readonly [V3, V3][] = [
-  [[9.1, ALTURA_TECHO_BAJO - 0.1, 9.6], [0, 5.2, 0]],
-  [[-10.2, ALTURA_TECHO_BAJO - 0.1, 8.1], [0, 7.5, 0]],
-  [[2.1, ALTURA_TECHO_BAJO - 0.1, -13.1], [0, 4.0, 0]],
-];
-
 /** La sala completa con su decoración. Lo seleccionable (vitrinas de artefacto) va aparte, en sus propios nodos. */
 export function crearRotonda(): THREE.Object3D {
   const l = new Lote();
@@ -1014,7 +924,6 @@ export function crearRotonda(): THREE.Object3D {
   for (let i = 0; i < LADOS; i++) bahia(l, i, rnd);
   crearTecho(l);
   crearCoheteCentral(l);
-  for (const [desde] of FOCOS_COHETE) foco(l, desde[0], desde[1] + 0.07, desde[2]);
 
   // Cohetes reales a la misma escala 1:13, al fondo de la sala.
   l.en([-6.5, 0, -9], [0, 0.5, 0], () => expositorCohete(l, () => crearSaturnV(l), 9.1, ARQ.violeta));
@@ -1073,13 +982,6 @@ export function crearRotonda(): THREE.Object3D {
   // Luz neutra compartida por las dos cápsulas, para que los trajes se vean blancos.
   const luzTrajes = new THREE.PointLight(0xffffff, 12, 6, 1.7);
   luzTrajes.position.set(9.7, 2.9, -1.2);
-  // Focos blancos sobre el cohete central: en la sala oscura, es lo más iluminado.
-  for (const [desde, hacia] of FOCOS_COHETE) {
-    const luz = new THREE.SpotLight(0xe8eeff, 260, 26, 0.27, 0.5, 1.6);
-    luz.position.set(...desde);
-    luz.target.position.set(...hacia);
-    grupo.add(luz, luz.target);
-  }
   grupo.add(crearEstrellasMural(), crearPlanetasColgantes(), luzTrajes);
   grupo.userData.actualizar = (t: number): void => {
     for (const h of hologramas) h.userData.actualizar(t);

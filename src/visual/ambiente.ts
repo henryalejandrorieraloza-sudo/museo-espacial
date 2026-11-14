@@ -5,7 +5,9 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 // Ambiente del museo: luces, niebla, fondo y bloom. La sala es oscura (como las referencias de Henry de 2026-11-14):
-// luz de relleno azul baja, y lo que brilla son las pantallas, los LED y los focos.
+// luz de relleno azul baja, y lo que brilla son las pantallas, los hologramas y los LED del suelo. El techo no lleva
+// luces ni focos (pedido de Henry, 2026-11-14): no queda ningún SpotLight en la sala, solo este relleno y las luces
+// puntuales de las vitrinas y las cápsulas.
 // Nada de esto se aplica en las misiones: museo.ts lo activa solo mientras se está en el museo.
 
 /** Niebla azul casi negra: da profundidad sin tapar la sala. */

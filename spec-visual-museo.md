@@ -23,7 +23,7 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 
 ## 3. Sala
 - Rotonda de 32 m de diámetro con 24 caras. Pasarela a 5.2 m de altura, sobre columnas y sin acceso para el jugador. Ventanales de 5.7 a 10.5 m.
-- **Planetario visto desde dentro:** el techo es una cúpula facetada con estrellas (decorativas, sin constelaciones reales). De ella cuelga un sistema solar con los ocho planetas en su orden real y color aproximado. Tamaños y órbitas no están a escala.
+- **Planetario visto desde dentro:** el techo es una cúpula facetada negra, sin luces, focos ni estrellas (decisión de Henry del 14 de noviembre de 2026: el techo y lo que cuelga de él no llevan luces, y la sala queda en penumbra; la luz viene de las pantallas, los hologramas y las líneas del suelo). De ella cuelga un sistema solar con los ocho planetas en su orden real y color aproximado. Tamaños y órbitas no están a escala.
 - La cúpula es baja a propósito: con cabeceo de ±35° y 60° de campo vertical, la vista llega a 65° sobre el horizonte.
 - El jugador camina hasta 15 m del centro y no puede atravesar el proyector central. Las misiones conservan su límite anterior.
 
