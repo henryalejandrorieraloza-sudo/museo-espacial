@@ -3,22 +3,22 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { Lote, azar, geometriaRoca, tinte } from './paleta';
 
-// Ambiente del museo: luces, niebla, nebulosa, asteroides, astro de fondo y bloom.
+// Ambiente del museo: luces, niebla, fondo y bloom. La sala es oscura (como las referencias de Henry de 2026-11-14):
+// luz de relleno azul baja, y lo que brilla son las pantallas, los LED y los focos.
 // Nada de esto se aplica en las misiones: museo.ts lo activa solo mientras se está en el museo.
 
-/** Niebla púrpura: da profundidad sin tapar la sala. */
-const COLOR_NIEBLA = 0x2a1458;
-const DENSIDAD_NIEBLA = 0.016;
+/** Niebla azul casi negra: da profundidad sin tapar la sala. */
+const COLOR_NIEBLA = 0x04050d;
+const DENSIDAD_NIEBLA = 0.018;
 /** Bloom: solo florece lo que supera el umbral, es decir, los materiales emisivos del lote. */
-const BLOOM_FUERZA = 0.3;
-const BLOOM_RADIO = 0.5;
+const BLOOM_FUERZA = 0.4;
+const BLOOM_RADIO = 0.3;
 const BLOOM_UMBRAL = 1.2;
 export const EXPOSICION = 1.0;
 /** Tope de resolución del museo: el bloom y el antialias a resolución Retina competirían con el seguimiento. */
 const PIXELES_MAXIMOS = 1.25;
-/** Dirección del sol visible por los ventanales (hacia él). */
+/** Dirección del resplandor cálido de la nebulosa de fondo (hacia él). */
 const POSICION_SOL = new THREE.Vector3(-40, 23, -46);
 
 export interface AmbienteMuseo {
@@ -116,76 +116,16 @@ function hornearNebulosa(renderer: THREE.WebGLRenderer): THREE.Texture {
   return destino.texture;
 }
 
-/** Cinturón de asteroides con InstancedMesh: tres formas, muchas copias. */
-function crearAsteroides(): THREE.Group {
-  const grupo = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.85, metalness: 0.15, fog: false });
-  const colores = [0xc9913f, 0xe0b35a, 0x7a5a48, 0x5d4c6e, 0x3f8f7c, 0xa0693f];
-  const rnd = azar(42);
-  const matriz = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const e = new THREE.Euler();
-  const color = new THREE.Color();
-  for (const [semilla, cantidad] of [
-    [3, 70],
-    [5, 60],
-    [11, 50],
-  ] as const) {
-    const instancias = new THREE.InstancedMesh(geometriaRoca(semilla, 1), material, cantidad);
-    for (let i = 0; i < cantidad; i++) {
-      const angulo = rnd() * Math.PI * 2;
-      const radio = 31 + rnd() * 41;
-      const y = 3 + rnd() * 42;
-      // Muchas piedras pequeñas y pocas grandes.
-      const tam = 0.3 + Math.pow(rnd(), 3) * 3.1;
-      e.set(rnd() * 6, rnd() * 6, rnd() * 6);
-      q.setFromEuler(e);
-      matriz.compose(
-        new THREE.Vector3(Math.cos(angulo) * radio, y, Math.sin(angulo) * radio),
-        q,
-        new THREE.Vector3(tam * (0.8 + rnd() * 0.5), tam * (0.7 + rnd() * 0.4), tam),
-      );
-      instancias.setMatrixAt(i, matriz);
-      instancias.setColorAt(i, color.setHex(colores[Math.floor(rnd() * colores.length)]));
-    }
-    instancias.frustumCulled = false;
-    grupo.add(instancias);
-  }
-  return grupo;
-}
-
-/** Sol y gigante gaseosa de fondo. Son decoración del espacio exterior, no representan astros concretos. */
-function crearAstros(): THREE.Group {
-  const l = new Lote(false);
-  l.emisiva(new THREE.IcosahedronGeometry(4.2, 2), 0xffb860, 4, { p: POSICION_SOL.toArray(), v: 0.15 });
-  const halo = new THREE.CircleGeometry(21, 32);
-  const anillo = (p: THREE.Vector3): THREE.Color => tinte(0xff6a20, Math.pow(Math.max(0, 1 - p.length() / 21), 3.4) * 0.24);
-  const q = new THREE.Object3D();
-  q.position.copy(POSICION_SOL);
-  q.lookAt(0, 0, 0);
-  l.aditiva(halo, anillo, { p: POSICION_SOL.toArray(), r: [q.rotation.x, q.rotation.y, q.rotation.z] });
-
-  const posGigante: [number, number, number] = [46, 28, -50];
-  const bandas = (c: THREE.Vector3): number => {
-    const fila = Math.floor((c.y + 10) * 0.65);
-    return [0xd98a48, 0xe9b873, 0xb9603a, 0xf0cf98][fila % 4];
-  };
-  l.pieza(new THREE.IcosahedronGeometry(9, 3), bandas, { p: posGigante, r: [0.3, 0, 0.25], v: 0.1 });
-  l.pieza(new THREE.TorusGeometry(15, 2.6, 2, 40), 0x9d6a8c, { p: posGigante, r: [Math.PI / 2 + 0.3, 0.25, 0], e: [1, 1, 0.08], v: 0.25 });
-  return l.construir();
-}
-
 export function crearAmbienteMuseo(renderer: THREE.WebGLRenderer, camara: THREE.Camera): AmbienteMuseo {
   const grupo = new THREE.Group();
 
-  // Luz principal ámbar. Va en diagonal desde atrás del jugador para que caliente lo que mira;
-  // el sol visible por los ventanales queda en otra dirección a propósito (licencia artística).
-  const principal = new THREE.DirectionalLight(0xffb566, 1.9);
+  // Luz principal fría y tenue, en diagonal desde atrás del jugador: los objetos se leen sin aclarar la sala.
+  const principal = new THREE.DirectionalLight(0xc8d2ff, 0.75);
   principal.position.set(-7, 10, 6);
-  // Relleno púrpura: nunca deja una cara en negro.
-  const relleno = new THREE.HemisphereLight(0xd090ff, 0x5a2a78, 1.05);
-  // Contorno cian desde el lado contrario.
-  const contorno = new THREE.DirectionalLight(0x5fe4ff, 0.28);
+  // Relleno azul bajo: nunca deja una cara en negro, pero la sala queda oscura.
+  const relleno = new THREE.HemisphereLight(0x5a66d0, 0x120a28, 0.6);
+  // Contorno violeta desde el lado contrario.
+  const contorno = new THREE.DirectionalLight(0x7b6bff, 0.35);
   contorno.position.set(8, 3, -7);
   grupo.add(principal, relleno, contorno);
 
@@ -193,17 +133,12 @@ export function crearAmbienteMuseo(renderer: THREE.WebGLRenderer, camara: THREE.
   luzManos.position.set(0, 0.25, 0.15);
   camara.add(luzManos);
 
-  const asteroides = crearAsteroides();
-  grupo.add(asteroides, crearAstros());
-
   return {
     grupo,
     luzManos,
     fondo: hornearNebulosa(renderer),
     niebla: new THREE.FogExp2(COLOR_NIEBLA, DENSIDAD_NIEBLA),
-    actualizar(t) {
-      asteroides.rotation.y = t * 0.006;
-    },
+    actualizar() {},
   };
 }
 

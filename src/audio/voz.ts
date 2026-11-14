@@ -39,6 +39,8 @@ export interface Voz {
    * "Mira {directo} esto"; se quitan antes de mostrar o hablar, así que los subtítulos no cambian.
    */
   escuchar(oyente: OyenteVoz): void;
+  /** Pausa o reanuda la voz (tecla 7). Mientras está pausada, no avanzan las frases ni sus temporizadores. */
+  pausar(pausado: boolean): void;
 }
 
 /** Divide un texto en frases, conservando el signo de puntuación final. */
@@ -85,10 +87,15 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
   let oyente: OyenteVoz = {};
   let sincActual: Sincronia | undefined;
   let grabada: Reproduccion | undefined;
+  /** Pausa total: los temporizadores de la frase esperan a reanudar. */
+  let enPausa = false;
+  /** Temporizador pendiente de la frase (para volver a programarlo al reanudar). */
+  let pendiente: { ms: number; fn: () => void } | undefined;
 
   const detener = (): void => {
     window.clearTimeout(temporizador);
     temporizador = undefined;
+    pendiente = undefined;
   };
   const limpiarCues = (): void => {
     temporizadoresCue.forEach((id) => window.clearTimeout(id));
@@ -96,7 +103,13 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
   };
   const programar = (ms: number, fn: () => void): void => {
     detener();
-    temporizador = window.setTimeout(fn, ms);
+    pendiente = { ms, fn };
+    if (!enPausa) {
+      temporizador = window.setTimeout(() => {
+        pendiente = undefined;
+        fn();
+      }, ms);
+    }
   };
   const hayVoces = (): boolean => {
     try {
@@ -109,6 +122,30 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
   return {
     escuchar(nuevo) {
       oyente = nuevo;
+    },
+    pausar(pausado) {
+      enPausa = pausado;
+      if (pausado) {
+        window.clearTimeout(temporizador);
+        temporizador = undefined;
+        try {
+          sintesis?.pause();
+        } catch {
+          // Sin síntesis, no hay nada que pausar.
+        }
+        grabada?.pausar(true);
+      } else {
+        try {
+          sintesis?.resume();
+        } catch {
+          // Sin síntesis, no hay nada que reanudar.
+        }
+        grabada?.pausar(false);
+        if (pendiente) {
+          const p = pendiente;
+          programar(p.ms, p.fn);
+        }
+      }
     },
     hablar(texto, alTerminar, alFrase) {
       const id = ++vigente;
@@ -167,7 +204,7 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
         /** Gestos a tiempo estimado (CARACTERES_POR_SEGUNDO) para las palabras de esta frase que tienen marca. */
         const programarEstimados = (yaPasadoMs: number): void => {
           for (let w = frase.primera; w <= frase.ultima; w++) {
-            if (guion.palabras[w].cues.length === 0) continue;
+            if (guion.palabras[w].cues.length === 0 && guion.palabras[w].planos.length === 0) continue;
             const ms = duracionRespaldoMs(guion.texto.slice(frase.inicio, guion.palabras[w].inicio)) - yaPasadoMs;
             temporizadoresCue.push(
               window.setTimeout(() => {
@@ -221,7 +258,7 @@ export function crearVoz(idioma: string | (() => string) = 'es-ES', catalogo?: C
           // Si la frase no ha empezado a sonar, se cancela y se pide otra vez una sola vez.
           temporizadoresCue.push(
             window.setTimeout(() => {
-              if (id !== vigente || hecha || comenzada) return;
+              if (id !== vigente || hecha || comenzada || enPausa) return;
               console.warn('Voz: la frase no empezó, se vuelve a pedir:', frase.texto);
               try {
                 sintesis.cancel();

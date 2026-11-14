@@ -6,15 +6,14 @@ Convención para el modelo final: 1 unidad de Blender = 1 metro, sin escalar en 
 
 | id | Nombre del nodo | Placeholder actual | Escala esperada (modelo final) |
 | --- | --- | --- | --- |
-| `museo` | `museo` | Rotonda de 32 m generada en `arquitectura.ts`: suelo, paredes, pasarela, ventanales, cúpula con sistema solar, proyector y decoración (`props.ts`). | 1 |
-| `vitrina_lrv` | `vitrina_lrv` | Pedestal octogonal de 0.6 m y cubo de cristal de 3.5 m, con el LRV de exhibición a tamaño real aproximado. | 1 |
-| `vitrina_perseverance` | `vitrina_perseverance` | Igual que `vitrina_lrv`, con Perseverance de exhibición. A 9 m de distancia (x = +4.5 frente a x = −4.5). | 1 |
+| `museo` | `museo` | Sala circular oscura de 32 m generada en `arquitectura.ts`: suelo con órbitas de luz, paredes de pantallas LED con carteles, falso techo con focos, cúpula negra, planetas colgantes, Saturn V central y decoración (`props.ts`). | 1 |
+| `vitrina_lrv` | `vitrina_lrv` | Pedestal octogonal de 0.85 m con un emisor en lo alto y el LRV de exhibición como holograma azul que flota a 1.45 m, a tamaño real aproximado y girando despacio (`holograma.ts`). Sin cristal. | 1 |
+| `vitrina_perseverance` | `vitrina_perseverance` | Igual que `vitrina_lrv`, con Perseverance de exhibición (holograma a escala 0.85). A 9 m de distancia (x = +4.5 frente a x = −4.5). | 1 |
 | `mentor` | `mentor` | Robot compacto flotante: cuerpo azul facetado, visor oscuro, ojos y sonrisa claros, brazos cortos y sin piernas. | 0.8 |
-| `halo_senalar` | `halo_senalar` | Anillo amarillo delgado (radio 0.96 m con la escala 1.6), de cara al jugador, a 4.6 m de altura sobre la vitrina. | 1.6 |
 
 Notas:
-- Las vitrinas no están en `config.ts` porque su posición es de diseño: se fija en `POSICION_VITRINA` de `src/visual/museo.ts`.
-- El origen de cada modelo debe quedar en el suelo y centrado en la vitrina; el punto de apuntado es el centro del cubo (2.35 m).
+- Los pedestales (los ids siguen llamándose `vitrina_*`) no están en `config.ts` porque su posición es de diseño: se fija en `POSICION_VITRINA` de `src/visual/museo.ts`.
+- El origen de cada modelo debe quedar en el suelo y centrado en la vitrina; el punto de apuntado es el centro del holograma (2.2 m). El volumen invisible que prueba el cursor es de 4 m de lado.
 
 ## Objetos de exhibición
 

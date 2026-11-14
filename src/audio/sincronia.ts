@@ -10,6 +10,8 @@ export interface OyenteVoz {
   alInicioFrase?(info: { indice: number; pregunta: boolean; cueEnPrimeraPalabra: boolean }): void;
   /** Una palabra con marca de gesto acaba de empezar a sonar. */
   alCue?(cue: CueNombre, palabra: string): void;
+  /** Una palabra con marca de plano de cámara ("{@id}") acaba de empezar a sonar (presentación del LRV). */
+  alPlano?(id: string, palabra: string): void;
   alFinFrase?(info: { indice: number; pregunta: boolean }): void;
   /** Amplitud real (0..1) del audio, una vez por fotograma. Solo con audio grabado. */
   alAmplitud?(amplitud: number): void;
@@ -55,6 +57,7 @@ export class Sincronia {
       const fr = this.fraseDe[w];
       if (fr >= 0) this.frase(fr);
       for (const cue of this.guion.palabras[w].cues) this.oyente().alCue?.(cue, this.guion.palabras[w].texto);
+      for (const id of this.guion.palabras[w].planos) this.oyente().alPlano?.(id, this.guion.palabras[w].texto);
     }
     this.siguientePalabra = Math.max(this.siguientePalabra, hasta + 1);
   }

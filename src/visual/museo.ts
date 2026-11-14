@@ -2,7 +2,15 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { assetUrl } from '../tracking/assets';
 import { EXPOSICION, crearAmbienteMuseo, crearPostproceso, type AmbienteMuseo } from './ambiente';
-import { ALTURA_PEDESTAL, LADO_VITRINA, RADIO_CAMINABLE, RADIO_PROYECTOR, crearRotonda, crearVitrinaArtefacto } from './arquitectura';
+import {
+  ALTURA_CENTRO_EXHIBICION,
+  LADO_VITRINA,
+  RADIO_CAMINABLE,
+  RADIO_MOSTRADOR,
+  RADIO_PEANA_COHETE,
+  crearInstalacionHolograma,
+  crearRotonda,
+} from './arquitectura';
 import { ESCENAS, MODELOS, type ConfigModelo } from './config';
 import type { PosturaCaminata } from '../game/balanceo';
 import { EXPOSICION_LUNA, LEJANO_CAMARA_LUNA_M, aplicarRecogidaSueloNaranja, colocarLRV, crearEscenaLuna, crearPostprocesoLuna, ojosEnLRV } from './lunaEscena';
@@ -58,21 +66,21 @@ const POSICION_VITRINA: Record<string, { x: number; z: number }> = {
   vitrina_lrv: { x: -4.5, z: 3 },
   vitrina_perseverance: { x: 4.5, z: 3 },
 };
-/** Punto al que apunta el rayo: el centro del cubo. */
-const ALTURA_PUNTO_VITRINA = ALTURA_PEDESTAL + LADO_VITRINA / 2;
-/** Altura del halo: encima del borde superior del cubo. */
-const ALTURA_HALO = ALTURA_PEDESTAL + LADO_VITRINA + 0.5;
+/** Punto al que apunta el rayo: el centro del holograma. */
+const ALTURA_PUNTO_VITRINA = ALTURA_CENTRO_EXHIBICION;
+/** Distancia mínima entre el jugador y el borde de un mostrador (m). */
+const MARGEN_JUGADOR = 0.35;
 /** Altura fija del robot-mentor (m): no sube ni baja ni flota. */
 const ALTURA_MENTOR = 1.3;
 /**
- * El mentor flota delante del jugador, a unos 2 m y un poco a la derecha del centro de la pantalla, para no tapar las vitrinas. Si ahí hay una vitrina, una pared o el
- * proyector, se acerca al jugador hasta quedar libre (no menos de DISTANCIA_MIN_MENTOR).
+ * El mentor flota delante del jugador, a unos 2 m y un poco a la derecha del centro de la pantalla, para no tapar las vitrinas. Si ahí hay una vitrina, una pared o la
+ * peana del cohete, se acerca al jugador hasta quedar libre (no menos de DISTANCIA_MIN_MENTOR).
  */
 const DISTANCIA_MENTOR = 2.0;
 const DISTANCIA_MIN_MENTOR = 1.4;
 /** Desplazamiento a la derecha del eje de la mirada (m). A 2 m son unos 8° de la vista. */
 const LADO_MENTOR = 0.3;
-/** Margen del mentor alrededor de las vitrinas, el proyector y la pared (m). */
+/** Margen del mentor alrededor de las vitrinas, el cohete central y la pared (m). */
 const MARGEN_MENTOR = 0.5;
 /**
  * Resorte amortiguado con el que el mentor alcanza su sitio: frecuencia (rad/s) y amortiguación. Con ζ < 1 se pasa un
@@ -88,7 +96,6 @@ const TOLERANCIA_RAD = THREE.MathUtils.degToRad(12);
 
 /** Colores del mentor, el halo y las escenas de misión. La paleta del museo está en paleta.ts. */
 const COLOR = {
-  halo: 0xffd60a,
   /** Acento de Perseverance en la escena de Marte. */
   acentoPerseverance: 0xff8a3d,
   cieloLuna: 0x000000,
@@ -112,10 +119,9 @@ type Constructor = () => THREE.Object3D;
 /** Placeholders generados en código. Las claves son las rutas "placeholder:…" de config.ts. */
 const PLACEHOLDERS: Record<string, Constructor> = {
   'placeholder:sala': crearRotonda,
-  'placeholder:vitrina_lrv': () => crearVitrinaArtefacto(crearLRVExhibicion, ARQ.cian, -2.5),
-  'placeholder:vitrina_perseverance': () => crearVitrinaArtefacto(crearPerseveranceExhibicion, ARQ.ambar, 2.5),
+  'placeholder:vitrina_lrv': () => crearInstalacionHolograma(crearLRVExhibicion, 'luna', ARQ.cian, -2.5),
+  'placeholder:vitrina_perseverance': () => crearInstalacionHolograma(crearPerseveranceExhibicion, 'marte', ARQ.ambar, 2.5, 0.85),
   'placeholder:mentor': crearMentor,
-  'placeholder:anillo': crearAnillo,
   'placeholder:escena_luna': crearEscenaLuna,
   'placeholder:escena_marte': crearEscenaMarte,
 };
@@ -140,15 +146,6 @@ function malla(
   objeto.position.set(...posicion);
   objeto.rotation.set(...giro);
   return objeto;
-}
-
-/** Anillo amarillo delgado de 0.6 m de radio, en el plano XY (su normal apunta a +Z). */
-function crearAnillo(): THREE.Object3D {
-  const malla = new THREE.Mesh(
-    new THREE.RingGeometry(0.6, 0.64, 48),
-    new THREE.MeshBasicMaterial({ color: COLOR.halo, side: THREE.DoubleSide }),
-  );
-  return malla;
 }
 
 /** Suelo plano grande (60 × 60 m) a nivel del suelo. */
@@ -221,9 +218,6 @@ const nodos = new Map<string, THREE.Object3D>();
 let camara: THREE.PerspectiveCamera | null = null;
 /** Manos del avatar, colgadas de la cámara (SPEC 5.5). */
 let manosAvatar: ManosAvatar | null = null;
-let halo: THREE.Object3D | null = null;
-/** Vitrina a la que está anclado el halo; null si el halo está oculto. */
-let haloEn: string | null = null;
 let mentor: THREE.Object3D | null = null;
 /** Velocidad horizontal del mentor (m/s) en su resorte de seguimiento. La altura nunca cambia. */
 const velocidadMentor = new THREE.Vector3();
@@ -423,8 +417,6 @@ async function iniciar(container: HTMLElement): Promise<void> {
     const p = POSICION_VITRINA[id];
     if (obj) obj.position.set(p.x, 0, p.z);
   }
-  halo = nodos.get('halo_senalar') ?? null;
-  if (halo) halo.visible = false;
   mentor = nodos.get('mentor') ?? null;
   // El mentor acompaña al jugador desde el inicio del museo (no solo al señalar una vitrina).
   mentorAparece();
@@ -462,12 +454,13 @@ async function iniciar(container: HTMLElement): Promise<void> {
       if (enMuseo) inclinarMentor();
       mentor.userData.actualizar?.(t);
     }
-    // El halo siempre se gira hacia el jugador para que se vea como anillo.
-    if (halo?.visible) halo.lookAt(camaraNueva.position);
+    // El halo de la roca siempre se gira hacia el jugador para que se vea como anillo.
     if (haloRoca?.visible) haloRoca.lookAt(camaraNueva.position);
     if (enMuseo) {
       ambiente.actualizar(t);
       nodos.get('museo')?.userData.actualizar?.(t);
+      // Los hologramas de las exhibiciones giran y parpadean.
+      for (const id of Object.keys(POSICION_VITRINA)) nodos.get(id)?.userData.actualizar?.(t);
       post.render();
     } else if (escenaActual === 'luna' && postLuna) {
       nodos.get('escena_luna')?.userData.actualizar?.(camaraNueva);
@@ -483,14 +476,12 @@ function fundido(opacidad: number): void {
   if (fundidoEl) fundidoEl.style.opacity = String(THREE.MathUtils.clamp(opacidad, 0, 1));
 }
 
-/** Oculta o muestra todo el museo (vitrinas, sala y mentor). El halo se oculta siempre. */
+/** Oculta o muestra todo el museo (vitrinas, sala y mentor). */
 function mostrarMuseo(visible: boolean): void {
   for (const modelo of MODELOS) {
     const obj = nodos.get(modelo.id);
     if (obj) obj.visible = visible;
   }
-  if (halo) halo.visible = false;
-  haloEn = null;
   if (mentor) mentor.visible = false;
 }
 
@@ -582,22 +573,6 @@ function mostrarVitrina(id: string): void {
 }
 
 /**
- * Resalta (o quita el resaltado de) una vitrina con el halo amarillo.
- * Solo hay un halo: resaltar otra vitrina lo mueve.
- */
-function resaltarVitrina(id: string, activa: boolean): void {
-  if (!halo) return;
-  if (activa) {
-    halo.position.copy(vitrinaAim(id)).setY(ALTURA_HALO);
-    halo.visible = true;
-    haloEn = id;
-  } else if (haloEn === id) {
-    halo.visible = false;
-    haloEn = null;
-  }
-}
-
-/**
  * Mueve la cámara.
  * - dx: giro en grados alrededor de la vertical. Positivo = a la derecha del jugador.
  * - dy: avance en metros hacia donde mira el jugador. Negativo = retroceso.
@@ -616,11 +591,22 @@ function moverCamara(dx: number, dy: number, dCabeceo = 0, dLateral = 0): void {
     posicion.addScaledVector(adelante(), dy);
     posicion.addScaledVector(derecha(), dLateral);
     if (enMuseo) {
-      // Entre la pared y el proyector central. Al limitar solo el radio, el jugador se desliza por el borde.
+      // Entre la pared y la peana del cohete central. Al limitar solo el radio, el jugador se desliza por el borde.
       const radio = Math.hypot(posicion.x, posicion.z) || 1;
-      const limitado = THREE.MathUtils.clamp(radio, RADIO_PROYECTOR, RADIO_CAMINABLE);
+      const limitado = THREE.MathUtils.clamp(radio, RADIO_PEANA_COHETE, RADIO_CAMINABLE);
       posicion.x *= limitado / radio;
       posicion.z *= limitado / radio;
+      // Los mostradores de las vitrinas tampoco se atraviesan: el jugador se desliza por su borde.
+      for (const v of Object.values(POSICION_VITRINA)) {
+        const ox = posicion.x - v.x;
+        const oz = posicion.z - v.z;
+        const d = Math.hypot(ox, oz);
+        const minimo = RADIO_MOSTRADOR + MARGEN_JUGADOR;
+        if (d < minimo && d > 1e-6) {
+          posicion.x = v.x + (ox / d) * minimo;
+          posicion.z = v.z + (oz / d) * minimo;
+        }
+      }
     } else {
       posicion.x = THREE.MathUtils.clamp(posicion.x, -LIMITE_MISION_X_Z, LIMITE_MISION_X_Z);
       posicion.z = THREE.MathUtils.clamp(posicion.z, -LIMITE_MISION_X_Z, LIMITE_MISION_X_Z);
@@ -684,10 +670,10 @@ function mentorAmplitud(amplitud: number | null): void {
   mentor?.userData.setAmplitud?.(amplitud);
 }
 
-/** ¿Puede estar el mentor en (x, z)? Dentro de la rotonda, fuera del proyector y de las vitrinas (que son cubos). */
+/** ¿Puede estar el mentor en (x, z)? Dentro de la rotonda, fuera de la peana del cohete y de las vitrinas (que son cubos). */
 function sitioLibreMentor(x: number, z: number): boolean {
   const radio = Math.hypot(x, z);
-  if (radio < RADIO_PROYECTOR || radio > RADIO_CAMINABLE - MARGEN_MENTOR) return false;
+  if (radio < RADIO_PEANA_COHETE || radio > RADIO_CAMINABLE - MARGEN_MENTOR) return false;
   const medio = LADO_VITRINA / 2 + MARGEN_MENTOR;
   return !Object.values(POSICION_VITRINA).some((v) => Math.abs(x - v.x) < medio && Math.abs(z - v.z) < medio);
 }
@@ -1018,7 +1004,6 @@ export const visual = {
     actualizarManos,
     ocultarManos,
     mostrarVitrina,
-    resaltarVitrina,
     moverCamara,
     fijarBalanceo,
     posicionJugador,

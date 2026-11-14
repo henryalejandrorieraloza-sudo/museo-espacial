@@ -94,6 +94,13 @@ export interface EntradaLuna {
   velocidadGolpeHombrosS: number;
   /** El pellizco de la otra mano se acaba de cerrar en este fotograma. */
   agarreNuevo: boolean;
+  /**
+   * El aplauso también vuelve al museo (cámara) cuando no puede sentar al jugador. Opcional: true. Con teclado es false:
+   * ahí se vuelve manteniendo E (`volver`) y espacio solo sube al LRV.
+   */
+  aplausoVuelve?: boolean;
+  /** El jugador pidió volver al museo sin aplauso (E mantenida con el anillo lleno). Opcional: false. */
+  volver?: boolean;
   /** Bajarse del LRV en este fotograma (tecla B o pellizco sostenido con las dos manos). Opcional: false. */
   bajarse?: boolean;
   /**
@@ -291,6 +298,11 @@ export class MisionLuna {
 
     // El aplauso sienta al jugador si está junto al LRV, o vuelve al museo en cualquier otro estado (SPEC 8.3 y 8.4).
     // Bajado del LRV con la muestra ya recogida, el aplauso vuelve al museo esté donde esté.
+    if (entrada.volver) {
+      ir('volviendo');
+      eventos.push({ tipo: 'volver' });
+      return eventos;
+    }
     if (entrada.aplauso) {
       if (this.aPie && !this.bloqueadaMision && !(this.estadoActual === 'a_pie' && this.conMuestra)) {
         if (entrada.lrvDesplegado === false) {
@@ -301,7 +313,7 @@ export class MisionLuna {
         } else {
           eventos.push({ tipo: 'lejosDelLRV' });
         }
-      } else {
+      } else if (entrada.aplausoVuelve !== false) {
         ir('volviendo');
         eventos.push({ tipo: 'volver' });
       }

@@ -29,6 +29,7 @@ const CUES = ['heroico', 'exacto', 'directo', 'poderoso', 'honesto', 'cercano'];
 const limpiar = (crudo) =>
   crudo
     .replace(new RegExp(`\\s*\\{(${CUES.join('|')})\\}`, 'g'), '')
+    .replace(/\{@[a-z0-9_]+\}/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 

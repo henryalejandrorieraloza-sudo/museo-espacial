@@ -99,6 +99,8 @@ const fuentes = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
 export interface Reproduccion {
   /** Corta el audio sin avisar a nadie (quien cancela ya sabe que cancela). */
   cancelar(): void;
+  /** Pausa o reanuda el audio (tecla 7). */
+  pausar(pausado: boolean): void;
 }
 
 /**
@@ -120,6 +122,8 @@ export function reproducirLinea(
   let vivo = true;
   let cuadro = 0;
   let vigilante: number | undefined;
+  let enPausa = false;
+  let ultimaVigilanciaMs = 0;
 
   // Amplitud real con AnalyserNode. Si el navegador no lo permite, el audio suena igual y los LED usan su pulso propio.
   let analizador: AnalyserNode | null = null;
@@ -155,6 +159,7 @@ export function reproducirLinea(
     }
   };
   const vigilar = (ms: number): void => {
+    ultimaVigilanciaMs = ms;
     window.clearTimeout(vigilante);
     vigilante = window.setTimeout(() => {
       if (!vivo) return;
@@ -189,7 +194,7 @@ export function reproducirLinea(
   });
   audio.addEventListener('pause', () => {
     // Pausa (no fin): el mentor se queda donde está y vuelve a neutro despacio.
-    if (vivo && !audio.ended) sync.cancelar();
+    if (vivo && !audio.ended && !enPausa) sync.cancelar();
   });
   audio.addEventListener('ended', () => {
     if (!vivo) return;
@@ -213,6 +218,18 @@ export function reproducirLinea(
   return {
     cancelar() {
       if (vivo) limpiar();
+    },
+    pausar(pausado: boolean) {
+      if (!vivo) return;
+      enPausa = pausado;
+      if (pausado) {
+        window.clearTimeout(vigilante);
+        cancelAnimationFrame(cuadro);
+        audio.pause();
+      } else {
+        if (ultimaVigilanciaMs > 0) vigilar(ultimaVigilanciaMs);
+        void audio.play().catch(() => {});
+      }
     },
   };
 }

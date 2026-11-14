@@ -5,7 +5,8 @@
 
 import { visual } from '../visual/museo';
 import { crearVoz, dividirFrases, type Voz } from '../audio/voz';
-import { cargarCatalogoVoz, type CatalogoVoz } from '../audio/lineaGrabada';
+import { alinearTiempos, cargarCatalogoVoz, claveTexto, type CatalogoVoz } from '../audio/lineaGrabada';
+import { parsearGuion } from '../audio/guion';
 import { crearOyenteMentor } from './mentorVoz';
 import { assetUrl } from '../tracking/assets';
 import { alCambiarIdioma, idioma, LENGUA_VOZ, t, tGuion, type ClaveTexto } from '../i18n';
@@ -16,16 +17,16 @@ import { crearOpcionesUi } from '../ui/opcionesUi';
 import { crearUi, type JuegoUi } from '../ui/juegoUi';
 import { FuenteCamara } from '../input/camaraFuente';
 import { FuenteTeclado } from '../input/tecladoFuente';
-import type { FuenteEntrada, LecturaEntrada, Senal } from '../input/fuente';
+import { enCampoDeTexto, type FuenteEntrada, type LecturaEntrada, type Senal } from '../input/fuente';
 import { cargarControl, cargarOpciones, guardarControl, guardarOpciones, type ModoControl, type Opciones } from './opciones';
 import { Museo, type EventoMuseo } from './museo';
 import { MisionLuna, metrosAPieLuna, type EntradaLuna, type EstadoLuna } from './luna';
-import { DespliegueLRV } from './despliegueLRV';
+import { avanzarAnilloMantener, DespliegueLRV } from './despliegueLRV';
 import { SueloNaranja } from './sueloNaranja';
 import { BalanceoCaminata, type EntradaBalanceo } from './balanceo';
 import type { FaseDespliegueLRV } from '../visual/despliegueApollo17';
 import { crearAnillo, type AnilloUi } from '../ui/anillo';
-import { GUION, PresentacionLRV, opacidadMarca, type EventoPresentacion } from './presentacionLRV';
+import { GUION, PresentacionLRV, infoNarracion, opacidadMarca, type EventoPresentacion, type InfoNarracion } from './presentacionLRV';
 import { crearPresentacionUi, type PresentacionUi, type RotuloUi } from '../ui/presentacionUi';
 import { CinematicaDespegue, borrarProgresoDespegue, cargarProgresoDespegue, type EventoCinematica } from './cinematicaDespegue';
 import { crearCinematicaUi, type CinematicaUi } from '../ui/cinematicaUi';
@@ -51,12 +52,20 @@ let sueloRecogidoEnSesion = false;
 let instruccionDesplegarDicha = false;
 /** Frases que solo se dicen una vez en la sesión de la página (ver decirUnaVez). */
 const yaDichas = new Set<ClaveTexto>();
-/** La voz ya dijo "Aprieta espacio para subirte" en esta visita: hasta entonces, el aplauso no sube al LRV. */
 /** Robi ya saludó al visitante en esta visita (solo se saluda una vez, al empezar). */
 let saludoDado = false;
+/** La voz ya dijo "Aprieta espacio para subirte" en esta visita: hasta entonces, el aplauso no sube al LRV. */
 let subidaLista = false;
 /** La voz ya explicó cómo conducir en esta visita: hasta entonces, caminar no mueve el LRV. */
 let conduccionLista = false;
+/** Llenado (0–1) del anillo de mantener E para volver al museo desde una misión. */
+let volverAnillo = 0;
+/** E ya se soltó desde la última acción de carga: solo entonces mantenerla empieza el anillo de volver. */
+let volverArmado = true;
+/** Instante (s) de la última vuelta del anillo de volver. */
+let ultimoVolverS: number | null = null;
+/** El anillo de volver se completó: la próxima lectura con datos se lo pasa a la misión. */
+let volverPedido = false;
 /** Tiempo máximo (s) que avanza el despliegue en una vuelta, para no saltar tras una pausa. */
 const DT_MAX_DESPLIEGUE_S = 0.1;
 
@@ -110,8 +119,8 @@ const TEXTO_TECLADO: Partial<Record<ClaveTexto, ClaveTexto>> = {
   ayuda: 'ayuda_teclado',
   entrar_aplauso: 'entrar_teclado',
   vitrina_lrv: 'vitrina_lrv_teclado',
-  luna_entrando_museo: 'luna_entrando_museo_teclado',
   saludo_vitrinas: 'saludo_vitrinas_teclado',
+  luna_entrando_museo: 'luna_entrando_museo_teclado',
   luna_lejos_LRV: 'luna_lejos_LRV_teclado',
   luna_LRV_desplegado: 'luna_LRV_desplegado_teclado',
   luna_cerca_de_roca: 'luna_cerca_de_roca_teclado',
@@ -246,13 +255,17 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
       mentorHablando = estado === 'hablando';
       oyenteMentor.alEstado?.(estado);
     },
+    // Presentación del LRV: la palabra marcada con {@id} empieza a sonar y el plano de cámara de esa palabra, con ella.
+    alPlano(id) {
+      presentacion?.planoDicho(id);
+    },
   });
   const museo = new Museo();
   const ui = crearUi(() => museo.volver());
   const presUi = crearPresentacionUi();
   const cineUi = crearCinematicaUi();
-  /** Fuente de entrada, cuando ya exista (se elige después de montar los eventos). */
-  let fuenteActiva: FuenteEntrada | null = null;
+  /** Pausa total con la tecla 7: congela el mundo, la voz y la entrada. */
+  let pausaTotal = false;
   const cursorUi = crearCursor();
   const anillo = crearAnillo();
   const inicio = crearInicioUi();
@@ -313,6 +326,9 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
           ultimoDespliegueS = null;
           sueloNaranja = new SueloNaranja(sueloRecogidoEnSesion);
           ultimoSueloS = null;
+          volverAnillo = 0;
+          volverArmado = false;
+          volverPedido = false;
           visual.museo.recogerSueloNaranja(sueloRecogidoEnSesion ? 1 : 0);
           listoPendiente = false;
           // E no despliega nada hasta que la voz y los subtítulos hayan dicho cómo hacerlo.
@@ -343,7 +359,7 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
           cinematica = null;
           cineUi.mostrar(false);
           borrarProgresoDespegue();
-          fuenteActiva?.pausar(false);
+          pausarEntrada('cinematica', false);
         }
         reanudarCinematicaS = null;
         anillo.mostrar(null);
@@ -401,10 +417,10 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   const fuente: FuenteEntrada = camara ?? new FuenteTeclado(container, opciones, opcionesUi);
   fuenteActiva = fuente;
   video.hidden = fuente.modo !== 'camara';
-  opcionesUi.onVisibilidad((abierto) => fuente.pausar(abierto));
+  opcionesUi.onVisibilidad((abierto) => pausarEntrada('opciones', abierto));
   requireEl('ayuda').textContent = texto('ayuda');
 
-  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz, presUi, cineUi, fuente };
+  const sesion: Sesion = { museo, ui, cursorUi, anillo, opciones, voz, presUi, cineUi, fuente, catalogoVoz };
   // Omitir (botón o Enter): salta al modo libre, con la pantalla en negro.
   cineUi.alOmitir(() => {
     if (cinematica) eventosCinematica(sesion, cinematica.saltar());
@@ -428,9 +444,22 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
   alCambiarIdioma(() => releerTextos(sesion));
   let avisoActual: string | null | undefined;
   const balanceo = new BalanceoCaminata();
+  window.addEventListener('keydown', (ev) => {
+    if (ev.code !== 'Digit7' || ev.repeat || enCampoDeTexto(ev.target)) return;
+    pausaTotal = !pausaTotal;
+    pausarEntrada('total', pausaTotal);
+    sesion.voz.pausar(pausaTotal);
+    avisoActual = undefined;
+    sesion.ui.aviso(pausaTotal ? t('pausa') : null);
+  });
   const bucle = (): void => {
     const ahoraS = performance.now() / 1000;
     museo.tick(ahoraS);
+    // Pausa total: el mundo y la voz se quedan quietos; la escena sigue visible.
+    if (pausaTotal) {
+      requestAnimationFrame(bucle);
+      return;
+    }
     const lectura = fuente.leer(ahoraS);
     if (lectura.aviso !== avisoActual) {
       avisoActual = lectura.aviso;
@@ -444,8 +473,15 @@ export async function iniciarJuego(container: HTMLElement): Promise<void> {
     }
     actualizarDespliegue(sesion, lectura);
     actualizarSueloNaranja(sesion, lectura);
+    actualizarVolver(sesion, lectura, enCinematica);
     actualizarPresentacion(sesion, ahoraS);
     actualizarCinematica(sesion, ahoraS);
+    // Saludo de Robi: en cuanto el visitante está listo (con cámara, ya encuadrado y calibrado; con teclado, al entrar).
+    if (lectura.listo && !saludoDado && !enCinematica && mision === null && reanudarCinematicaS === null) {
+      saludoDado = true;
+      decirFrase(voz, ui, 'saludo_bienvenida', undefined, true);
+      decirFrase(voz, ui, 'saludo_vitrinas', undefined, true);
+    }
     if (lectura.listo && lectura.hayDatos && !enCinematica) aplicarLectura(sesion, lectura);
     requestAnimationFrame(bucle);
   };
@@ -464,17 +500,13 @@ interface Sesion {
   /** Anillo de mantener E para desplegar el LRV. */
   anillo: AnilloUi;
   /** Opciones vivas: el panel las modifica en el mismo objeto. */
-    // Saludo de Robi: en cuanto el visitante está listo (con cámara, ya encuadrado y calibrado; con teclado, al entrar).
-    if (lectura.listo && !saludoDado && !enCinematica && mision === null && reanudarCinematicaS === null) {
-      saludoDado = true;
-      decirFrase(voz, ui, 'saludo_bienvenida', undefined, true);
-      decirFrase(voz, ui, 'saludo_vitrinas', undefined, true);
-    }
   opciones: Opciones;
   voz: Voz;
   presUi: PresentacionUi;
   cineUi: CinematicaUi;
   fuente: FuenteEntrada;
+  /** Líneas de voz grabadas (si las hay): su duración real manda sobre la estimada. */
+  catalogoVoz: CatalogoVoz;
 }
 
 /** La cinemática del despegue lleva la cámara (hasta el modo libre; su fundido de salida ya deja jugar). */
@@ -487,7 +519,7 @@ function cinematicaActiva(): boolean {
  * se calla el mentor y se pausa la entrada del jugador. Si la escena no la puede mostrar, pasa directo al modo libre.
  */
 function iniciarCinematica(sesion: Sesion, desdeS: number): void {
-  const { voz, ui, anillo, cursorUi, cineUi, fuente } = sesion;
+  const { voz, ui, anillo, cursorUi, cineUi } = sesion;
   if (mision === null || cinematica !== null) return;
   mision.estacionarLRV(LRV_DESPEGUE, LRV_DESPEGUE.rumbo);
   colaFrases.length = 0;
@@ -507,16 +539,27 @@ function iniciarCinematica(sesion: Sesion, desdeS: number): void {
   ultimaCinematicaS = null;
   requireEl('ayuda').hidden = true;
   // Pausada, la entrada no captura el ratón ni cuenta gestos; con teclado, suelta el puntero para poder pulsar Omitir.
-  fuente.pausar(true);
+  pausarEntrada('cinematica', true);
   cineUi.mostrar(true);
   cineUi.omitible(true);
   // Al reanudar en mitad, la escena ya muestra la toma mientras termina el fundido del museo.
   visual.museo.actualizarDespegue(c.estado);
 }
 
+/** Fuente de entrada, cuando ya exista (se elige después de montar los eventos). */
+let fuenteActiva: FuenteEntrada | null = null;
+/** Motivos por los que la entrada está pausada: opciones, cinemática y pausa total (tecla 7). */
+const motivosPausaEntrada = new Set<string>();
+/** Pausa o reanuda la entrada según los motivos activos; sin ninguno, vuelve a contar gestos y teclas. */
+function pausarEntrada(motivo: 'opciones' | 'cinematica' | 'total', activo: boolean): void {
+  if (activo) motivosPausaEntrada.add(motivo);
+  else motivosPausaEntrada.delete(motivo);
+  fuenteActiva?.pausar(motivosPausaEntrada.size > 0);
+}
+
 /** Eventos de la cinemática: al pasar al modo libre (con la pantalla en negro) y al terminar el fundido de salida. */
 function eventosCinematica(sesion: Sesion, eventos: readonly EventoCinematica[]): void {
-  const { cineUi, voz, ui, fuente } = sesion;
+  const { cineUi, voz, ui } = sesion;
   for (const evento of eventos) {
     if (evento.tipo === 'texto') {
       // El mentor lee el texto que aparece en pantalla (el texto ya hace de subtítulo, abajo a la izquierda).
@@ -534,7 +577,7 @@ function eventosCinematica(sesion: Sesion, eventos: readonly EventoCinematica[])
       // Modo libre: el módulo de ascenso ya se fue y el jugador puede caminar por el valle.
       visual.museo.terminarDespegue();
       mision?.liberar();
-      fuente.pausar(false);
+      pausarEntrada('cinematica', false);
       cineUi.omitible(false);
       cineUi.texto(null, 0);
       cineUi.aspecto(null, 0);
@@ -600,11 +643,25 @@ function narrarPresentacion(sesion: Sesion, clave: ClaveTexto, alTerminar: () =>
       alTerminar();
     },
     (frase) => {
+      // La primera frase en sonar fija el origen de los tiempos del texto (marcas de plano) en la presentación.
+      presentacion?.vozEmpezo();
       if (!conSubtitulos) return;
       frasePresentacion = frase;
       ui.subtitulos(opciones.subtitulosPresentacion ? frase : null);
     },
   );
+}
+
+/**
+ * Qué se va a decir en un tramo, para el reloj de la presentación: dónde están las marcas de plano del texto en este
+ * idioma y cuánto mide. Con audio grabado, los tiempos reales de sus palabras.
+ */
+function infoDelTexto(clave: ClaveTexto, catalogo: CatalogoVoz): InfoNarracion {
+  const guion = parsearGuion(tGuion(clave));
+  const linea = catalogo.get(claveTexto(guion.texto));
+  if (!linea || linea.words.length === 0) return infoNarracion(guion);
+  const ultima = linea.words[linea.words.length - 1];
+  return infoNarracion(guion, { inicios: alinearTiempos(guion, linea.words).inicios, fin: ultima.end ?? ultima.start });
 }
 
 /** Reacciona a los eventos de la presentación: frase de cada tramo, "Estás listo" y paso a la misión. */
@@ -617,6 +674,7 @@ function eventosPresentacion(sesion: Sesion, p: PresentacionLRV, eventos: readon
     if (evento.tipo === 'tramo') {
       const clave = GUION[evento.escena]?.tramos[evento.tramo]?.narracion ?? null;
       if (clave) {
+        p.fijarNarracion(infoDelTexto(clave, sesion.catalogoVoz));
         narrarPresentacion(sesion, clave, alTerminar);
       } else {
         voz.cancelar();
@@ -649,11 +707,17 @@ function actualizarPresentacion(sesion: Sesion, ahoraS: number): void {
   ultimaPresentacionS = ahoraS;
   const dtS = previo === null ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, ahoraS - previo));
   eventosPresentacion(sesion, p, p.fase === 'espera' ? p.iniciar() : p.actualizar(dtS));
-  if (presentacion !== p || p.fase === 'listo' || p.fase === 'terminada') return;
+  if (presentacion !== p || p.fase === 'terminada') return;
 
   const tramo = p.tramoActual;
   if (!tramo) return;
-  const tiempo = p.tiempoTramo;
+  // "Estás listo": la escena sigue en su plano de revelación (órbita lenta) bajo el mensaje, sin rótulos.
+  if (p.fase === 'listo') {
+    visual.museo.actualizarPresentacion({ tramo, t: p.tiempoTramo, dtS });
+    return;
+  }
+  // Tomas, marcas, mando y avance van con el tiempo del guion, que el reloj ajusta a la voz real de este idioma.
+  const tiempo = p.tiempoNominal;
   const posiciones = visual.museo.actualizarPresentacion({ tramo, t: tiempo, dtS });
   const rotulos: RotuloUi[] = [];
   tramo.marcas.forEach((m, i) => {
@@ -718,11 +782,15 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
     if (lectura.conMovimiento && !sesion.museo.enTransicion) {
       visual.museo.moverCamara(lectura.giroGrados, avancePie, lectura.cabeceoGrados, puedeCaminar ? lectura.lateralM : 0);
     }
+    const volver = volverPedido;
+    volverPedido = false;
     aplicarLuna(sesion, {
       ahoraS,
       dtS: lectura.dtS,
       // A pie con el LRV ya desplegado, el aplauso no sube hasta que la voz diga cómo hacerlo.
       aplauso: lectura.aplauso && (!aPie || subidaLista || despliegue?.desplegado !== true),
+      aplausoVuelve: lectura.aplausoVuelve,
+      volver,
       // Sentado, caminar mueve el LRV solo cuando la voz ya explicó cómo conducir.
       metros: aPie || !conduccionLista ? 0 : lectura.avanceM,
       jugador: visual.museo.posicionJugador(),
@@ -739,7 +807,7 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
   // Sin datos de movimiento (p. ej. sin cara), el movimiento se congela (SPEC 6). El aplauso sí cuenta.
   if (!lectura.conMovimiento) {
     if (lectura.aplauso) {
-      sesion.museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, lateralMetros: 0, apuntando: null, accion: true });
+      sesion.museo.actualizar({ ahoraS, giroGrados: 0, cabeceoGrados: 0, metros: 0, lateralMetros: 0, apuntando: null, accion: accionDeAplauso(sesion, lectura) });
     }
     return;
   }
@@ -751,9 +819,49 @@ function aplicarLectura(sesion: Sesion, lectura: LecturaEntrada): void {
     metros: lectura.avanceM,
     lateralMetros: lectura.lateralM,
     apuntando,
-    // Entrar y volver a la escena solo con aplauso o barra espaciadora (SPEC 5.2 y 7.2).
-    accion: lectura.aplauso,
+    // Entrar a la escena con aplauso o barra espaciadora (SPEC 5.2). Volver desde una misión sin Luna (Marte): aplauso,
+    // o E mantenida con teclado (actualizarVolver).
+    accion: accionDeAplauso(sesion, lectura),
   });
+}
+
+/** ¿Cuenta el aplauso como acción de museo? Dentro de una misión solo vuelve si la fuente lo permite (cámara). */
+function accionDeAplauso(sesion: Sesion, lectura: LecturaEntrada): boolean {
+  return lectura.aplauso && (sesion.museo.pantalla.tipo !== 'mision' || lectura.aplausoVuelve);
+}
+
+/**
+ * Volver al museo manteniendo E, en cada vuelta del bucle (como el despliegue). Es la acción de carga por defecto de la
+ * misión: solo cuenta cuando E no está desplegando el LRV, recogiendo el suelo naranja ni golpeando la roca, y hay que
+ * soltarla entre una acción y otra (si no, al terminar de desplegar o recoger volverías sin querer).
+ */
+function actualizarVolver(sesion: Sesion, lectura: LecturaEntrada, enCinematica: boolean): void {
+  const { anillo, museo } = sesion;
+  const previo = ultimoVolverS;
+  ultimoVolverS = lectura.ahoraS;
+  const dtS = previo === null ? 0 : Math.min(DT_MAX_DESPLIEGUE_S, Math.max(0, lectura.ahoraS - previo));
+  const mantenida = lectura.listo && lectura.desplegarMantenido;
+  if (!mantenida) volverArmado = true;
+  const enMision = museo.pantalla.tipo === 'mision' && !enCinematica && !museo.enTransicion;
+  const ocupada =
+    mision !== null &&
+    (despliegue?.estado !== 'desplegado' ||
+      (sueloNaranja?.anilloProgreso ?? 0) > 0 ||
+      mision.estado === 'cerca_de_roca' ||
+      mision.estado === 'golpeando' ||
+      mision.estado === 'volviendo');
+  if (mantenida && (ocupada || !enMision)) volverArmado = false;
+  const cargando = enMision && mantenida && volverArmado;
+  const antes = volverAnillo;
+  volverAnillo = avanzarAnilloMantener(volverAnillo, dtS, cargando);
+  if (volverAnillo >= 1) {
+    volverAnillo = 0;
+    volverArmado = false;
+    if (mision === null) museo.volver();
+    else volverPedido = true;
+  }
+  if (volverAnillo > 0) anillo.mostrar(volverAnillo);
+  else if (antes > 0) anillo.mostrar(null);
 }
 
 /**
@@ -904,14 +1012,27 @@ function aplicarLuna(sesion: Sesion, entrada: EntradaLuna): void {
  * Fuera del museo no hay vitrinas que señalar: el cursor se oculta.
  */
 function senalar(sesion: Sesion, senal: Senal | null): string | null {
-  const { cursorUi } = sesion;
+  const { cursorUi, anillo } = sesion;
   if (sesion.museo.pantalla.tipo !== 'museo' || senal === null) {
     cursorUi.mostrar(false);
+    // En la misión el anillo es del despliegue del LRV y de la recogida; solo se apaga el de señalar vitrinas.
+    if (sesion.museo.pantalla.tipo !== 'mision') anillo.mostrar(null);
     return null;
   }
   if (senal.tipo === 'rayo') {
     cursorUi.mostrar(false);
+    anillo.mostrar(null);
     return senal.direccion ? visual.museo.vitrinaEnDireccion(senal.direccion) : null;
+  }
+  // Con teclado, el anillo con la E solo aparece mientras se señala una vitrina (E o clic mantenidos sobre ella);
+  // sin vitrina apuntada no sale nada y queda la mira.
+  if (modoControl === 'teclado') {
+    const vitrina = senal.activo ? visual.museo.vitrinaEnPantalla(senal.x, senal.y) : null;
+    const mantenida = vitrina !== null && sesion.museo.vitrinaSeleccionada === null;
+    anillo.mostrar(mantenida ? sesion.museo.progresoSenalar : null);
+    cursorUi.mostrar(!mantenida);
+    cursorUi.mover(senal.x, senal.y, true);
+    return vitrina;
   }
   // Cursor: sigue la punta del índice (cámara) o es la mira del centro (teclado). Atenuado, no señala.
   cursorUi.mostrar(true);

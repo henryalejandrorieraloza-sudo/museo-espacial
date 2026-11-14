@@ -228,3 +228,19 @@ test('con teclado se puede retroceder desde parado', () => {
   assert.equal(m.estado, 'conduciendo');
   assert.ok(m.posicion.z > antes.z, 'con rumbo 0, retroceder va hacia +Z');
 });
+
+test('con teclado, espacio sentado no vuelve al museo; la E mantenida (volver) sí', () => {
+  const m = sentada();
+  const sinVolver = m.update(entrada({ aplauso: true, aplausoVuelve: false, jugador: m.posicion }));
+  assert.equal(sinVolver.some((e) => e.tipo === 'volver'), false);
+  assert.notEqual(m.estado, 'volviendo');
+  const eventos = m.update(entrada({ volver: true, jugador: m.posicion }));
+  assert.equal(eventos.some((e) => e.tipo === 'volver'), true);
+  assert.equal(m.estado, 'volviendo');
+});
+
+test('con cámara, el aplauso sentado sigue volviendo al museo', () => {
+  const m = sentada();
+  const eventos = m.update(entrada({ aplauso: true, jugador: m.posicion }));
+  assert.equal(eventos.some((e) => e.tipo === 'volver'), true);
+});

@@ -4,11 +4,13 @@
 //   W / S           caminar hacia delante / atrás (misma velocidad máxima y aceleración que en Opciones)
 //   A / D           paso lateral en el museo; volante del LRV en la misión lunar
 //   Ratón           mirar (pointer lock); equivale a inclinar y cabecear la cabeza
-//   Espacio         aplaudir
-//   E o clic izq.   mantener para señalar la vitrina del centro de la pantalla; en la Luna, golpe
-//   E mantenida     en la Luna, con el LRV plegado: desplegarlo (solo la tecla, no el clic)
-//   F o clic der.   pellizco y agarre
-//   B               bajarse del LRV (misión lunar). La E ya es señalar y golpe, y la F el agarre
+//   Espacio         aplaudir: entrar a la vitrina y subir al LRV (ya no vuelve al museo)
+//   E o clic izq.   mantener para señalar la vitrina del centro de la pantalla; en la Luna, golpe y, con un
+//                   segundo toque, agarre de la muestra
+//   E mantenida     acción de carga: desplegar el LRV, recoger el suelo naranja o, si no hay otra cosa que cargar
+//                   en la misión, volver al museo (solo la tecla, no el clic)
+//   Clic der.       pellizco y agarre
+//   B               bajarse del LRV (misión lunar)
 //   Esc             abrir Opciones
 
 import { TIEMPO_FRENADO_S } from '../game/caminata';
@@ -132,6 +134,7 @@ export class FuenteTeclado implements FuenteEntrada {
     // Mira fija en el centro de la pantalla. Solo señala mientras E o el botón izquierdo están pulsados.
     lectura.senal = { tipo: 'cursor', x: 0.5, y: 0.5, activo: this.senalarTecla || this.senalarRaton };
     lectura.aplauso = this.espacioPendiente;
+    lectura.aplausoVuelve = false;
     lectura.golpeHombrosS = this.golpePendiente ? GOLPE_TECLADO_HOMBROS_S : 0;
     lectura.pellizcoNuevo = this.agarrePendiente;
     lectura.agarreNuevo = this.agarrePendiente;
@@ -191,10 +194,13 @@ export class FuenteTeclado implements FuenteEntrada {
       ev.preventDefault();
       if (!ev.repeat) this.espacioPendiente = true;
     } else if (ev.code === 'KeyE') {
-      if (!ev.repeat) this.golpePendiente = true;
+      // Cada toque de E es golpe y agarre a la vez: la misión usa el primero para golpear la roca y el siguiente toque
+      // para agarrar la muestra (en el mismo fotograma, el golpe gana).
+      if (!ev.repeat) {
+        this.golpePendiente = true;
+        this.agarrePendiente = true;
+      }
       this.senalarTecla = true;
-    } else if (ev.code === 'KeyF') {
-      if (!ev.repeat) this.agarrePendiente = true;
     } else if (ev.code === 'KeyB') {
       if (!ev.repeat) this.bajarsePendiente = true;
     } else if (TECLAS_MOVIMIENTO.has(ev.code)) {
@@ -216,6 +222,7 @@ export class FuenteTeclado implements FuenteEntrada {
     if (ev.button === 0) {
       this.senalarRaton = true;
       this.golpePendiente = true;
+      this.agarrePendiente = true;
     } else if (ev.button === 2) {
       this.agarrePendiente = true;
     }

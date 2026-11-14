@@ -5,13 +5,17 @@
 export const CUES = ['heroico', 'exacto', 'directo', 'poderoso', 'honesto', 'cercano'] as const;
 export type CueNombre = (typeof CUES)[number];
 
-const MARCA = new RegExp(`\\{(${CUES.join('|')})\\}`, 'g');
+// Dos tipos de marca: de gesto del mentor ("{directo}", se pega a la palabra que la precede) y de plano de cámara
+// ("{@malla}", la usa la presentación del LRV y se pega a la palabra que la sigue: el plano empieza con ella).
+const MARCA = new RegExp(`\\{(${CUES.join('|')})\\}|\\{@([a-z0-9_]+)\\}`, 'g');
 
 export interface PalabraGuion {
   texto: string;
   /** Posición de la palabra en el texto limpio. */
   inicio: number;
   cues: CueNombre[];
+  /** Planos de cámara ("{@id}") que empiezan con esta palabra. */
+  planos: string[];
 }
 
 export interface FraseGuion {
@@ -46,16 +50,18 @@ export function quitarCues(crudo: string): string {
 export function parsearGuion(crudo: string): Guion {
   let texto = '';
   const marcas: { pos: number; cue: CueNombre }[] = [];
+  const marcasPlano: { pos: number; id: string }[] = [];
   let ultimo = 0;
   for (const m of crudo.matchAll(MARCA)) {
     texto = unir(texto, crudo.slice(ultimo, m.index));
-    marcas.push({ pos: texto.trimEnd().length, cue: m[1] as CueNombre });
+    if (m[2] !== undefined) marcasPlano.push({ pos: texto.length, id: m[2] });
+    else marcas.push({ pos: texto.trimEnd().length, cue: m[1] as CueNombre });
     ultimo = m.index + m[0].length;
   }
   texto = unir(texto, crudo.slice(ultimo));
 
   const palabras: PalabraGuion[] = [];
-  for (const m of texto.matchAll(/\S+/g)) palabras.push({ texto: m[0], inicio: m.index, cues: [] });
+  for (const m of texto.matchAll(/\S+/g)) palabras.push({ texto: m[0], inicio: m.index, cues: [], planos: [] });
   // Cada marca va a la palabra que la precede: la última que empieza antes de la marca (o la primera si no hay ninguna).
   for (const { pos, cue } of marcas) {
     let destino = 0;
@@ -63,6 +69,12 @@ export function parsearGuion(crudo: string): Guion {
       if (palabras[i].inicio < pos) destino = i;
     }
     palabras[destino]?.cues.push(cue);
+  }
+
+  // Cada plano va a la palabra que lo sigue: la primera que empieza en su posición o después (o la última si no hay).
+  for (const { pos, id } of marcasPlano) {
+    const destino = palabras.find((p) => p.inicio >= pos) ?? palabras[palabras.length - 1];
+    destino?.planos.push(id);
   }
 
   // Frases: mismo corte que `dividirFrases` de voz.ts, pero conservando posiciones.

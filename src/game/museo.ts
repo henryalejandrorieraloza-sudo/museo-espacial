@@ -80,6 +80,8 @@ export class Museo {
   private fase: Fase | null = null;
   private candidata: VitrinaId | null = null;
   private inicioCandidata = 0;
+  /** Tiempo del último fotograma procesado: sirve para calcular el progreso de la selección. */
+  private ultimoAhoraS = 0;
   private transicion: Transicion | null = null;
   private readonly oyentes: Oyente[] = [];
 
@@ -123,8 +125,15 @@ export class Museo {
     visual.museo.fundido(Math.min(progreso, 1 - progreso) * 2);
   }
 
+  /** Llenado (0–1) del tiempo de señalar la vitrina apuntada. 0 si no se apunta a ninguna o ya hay una seleccionada. */
+  get progresoSenalar(): number {
+    if (this.candidata === null || this.seleccionada !== null) return 0;
+    return Math.min(1, Math.max(0, (this.ultimoAhoraS - this.inicioCandidata) / SEGUNDOS_SENALAR));
+  }
+
   /** Procesa un fotograma. Solo mueve la cámara y señala mientras se está en el museo. */
   actualizar(entrada: EntradaMuseo): void {
+    this.ultimoAhoraS = entrada.ahoraS;
     // Durante un fundido no hay entradas: evita disparos dobles y movimiento a mitad de transición.
     if (this.transicion) return;
 
@@ -204,7 +213,6 @@ export class Museo {
   private seleccionar(id: VitrinaId): void {
     this.seleccionada = id;
     this.fase = 'hablando';
-    visual.museo.resaltarVitrina(id, true);
     this.emitir({ tipo: 'vitrinaSeleccionada', id });
   }
 
@@ -212,7 +220,6 @@ export class Museo {
   private deseleccionar(): void {
     if (this.seleccionada === null) return;
     const id = this.seleccionada;
-    visual.museo.resaltarVitrina(id, false);
     this.seleccionada = null;
     this.fase = null;
     this.emitir({ tipo: 'vitrinaDeseleccionada', id });

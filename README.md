@@ -75,8 +75,9 @@ El juego ofrece dos formas de control. Se elige al inicio y se recuerda al recar
 | ------------------------------- | ------------------------------------ |
 | Moverse                         | W A S D                              |
 | Mirar                           | Ratón                                |
-| Acción principal                | Espacio, E o clic izquierdo          |
-| Acción secundaria               | F o clic derecho                     |
+| Entrar a la vitrina, subir al LRV | Espacio                            |
+| Señalar, golpear y agarrar      | E o clic izquierdo (agarrar: E otra vez) |
+| Volver al museo (misión)        | Mantener E                           |
 | Salir o cancelar                | Esc                                  |
 | Desplegar el LRV (Apollo 17)    | Mantener E durante 3 s               |
 

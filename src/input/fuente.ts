@@ -47,6 +47,11 @@ export interface LecturaEntrada {
   lateralM: number;
   /** Aplauso (o barra espaciadora) en este fotograma. */
   aplauso: boolean;
+  /**
+   * El aplauso también vuelve al museo desde una misión: la cámara sí; el teclado no (ahí se vuelve manteniendo E y la
+   * barra espaciadora solo entra a la vitrina o sube al LRV).
+   */
+  aplausoVuelve: boolean;
   /** Señal de la mano que señala, o null si no hay nada que mostrar. */
   senal: Senal | null;
   /** El pellizco de la mano que señala se acaba de cerrar. */
@@ -89,6 +94,7 @@ export function lecturaVacia(ahoraS: number): LecturaEntrada {
     avanceM: 0,
     lateralM: 0,
     aplauso: false,
+    aplausoVuelve: true,
     senal: null,
     pellizcoNuevo: false,
     agarreNuevo: false,

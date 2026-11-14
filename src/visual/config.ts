@@ -18,7 +18,6 @@ export const MODELOS: readonly ConfigModelo[] = [
   { id: 'vitrina_lrv', ruta: 'placeholder:vitrina_lrv', nodo: 'vitrina_lrv', escala: 1 },
   { id: 'vitrina_perseverance', ruta: 'placeholder:vitrina_perseverance', nodo: 'vitrina_perseverance', escala: 1 },
   { id: 'mentor', ruta: 'placeholder:mentor', nodo: 'mentor', escala: 0.8 },
-  { id: 'halo_senalar', ruta: 'placeholder:anillo', nodo: 'halo_senalar', escala: 1.6 },
 ];
 
 // Escenas de misión. Cada escena es un grupo con el nombre `nodo`. La lunar (Apollo 17) se construye en
