@@ -62,10 +62,27 @@ const POSICION_VITRINA: Record<string, { x: number; z: number }> = {
 const ALTURA_PUNTO_VITRINA = ALTURA_PEDESTAL + LADO_VITRINA / 2;
 /** Altura del halo: encima del borde superior del cubo. */
 const ALTURA_HALO = ALTURA_PEDESTAL + LADO_VITRINA + 0.5;
-/** Altura media del robot-mentor (m) y amplitud del flotado (m). */
+/** Altura fija del robot-mentor (m): no sube ni baja ni flota. */
 const ALTURA_MENTOR = 1.3;
-const AMPLITUD_FLOTADO = 0.06;
-const VELOCIDAD_FLOTADO = 1.6;
+/**
+ * El mentor flota delante del jugador, a unos 2 m y un poco a la derecha del centro de la pantalla, para no tapar las vitrinas. Si ahí hay una vitrina, una pared o el
+ * proyector, se acerca al jugador hasta quedar libre (no menos de DISTANCIA_MIN_MENTOR).
+ */
+const DISTANCIA_MENTOR = 2.0;
+const DISTANCIA_MIN_MENTOR = 1.4;
+/** Desplazamiento a la derecha del eje de la mirada (m). A 2 m son unos 8° de la vista. */
+const LADO_MENTOR = 0.3;
+/** Margen del mentor alrededor de las vitrinas, el proyector y la pared (m). */
+const MARGEN_MENTOR = 0.5;
+/**
+ * Resorte amortiguado con el que el mentor alcanza su sitio: frecuencia (rad/s) y amortiguación. Con ζ < 1 se pasa un
+ * poco y vuelve, como un dron; con ω ≈ 3,5 el retraso al girar o caminar es de unas décimas de segundo.
+ */
+const OMEGA_SEGUIR_MENTOR = 3.5;
+const ZETA_SEGUIR_MENTOR = 0.8;
+/** Inclinación del cuerpo hacia donde se mueve (rad por m/s) y su tope (rad). */
+const INCLINA_MENTOR = 0.07;
+const INCLINA_MAX_MENTOR = 0.2;
 /** Ángulo máximo entre el rayo y la vitrina para considerar que la apunta. */
 const TOLERANCIA_RAD = THREE.MathUtils.degToRad(12);
 
@@ -208,6 +225,8 @@ let halo: THREE.Object3D | null = null;
 /** Vitrina a la que está anclado el halo; null si el halo está oculto. */
 let haloEn: string | null = null;
 let mentor: THREE.Object3D | null = null;
+/** Velocidad horizontal del mentor (m/s) en su resorte de seguimiento. La altura nunca cambia. */
+const velocidadMentor = new THREE.Vector3();
 /** Yaw de la cámara (rad): giro lateral con la inclinación de la cabeza. */
 let yaw = 0;
 /** Cabeceo de la cámara (rad): mirar arriba (+) o abajo (−) con el cabeceo de la cabeza. Limitado a ±LIMITE_CABECEO. */
@@ -407,7 +426,8 @@ async function iniciar(container: HTMLElement): Promise<void> {
   halo = nodos.get('halo_senalar') ?? null;
   if (halo) halo.visible = false;
   mentor = nodos.get('mentor') ?? null;
-  if (mentor) mentor.visible = false;
+  // El mentor acompaña al jugador desde el inicio del museo (no solo al señalar una vitrina).
+  mentorAparece();
 
   const resize = (): void => {
     const width = container.clientWidth || window.innerWidth;
@@ -425,16 +445,21 @@ async function iniciar(container: HTMLElement): Promise<void> {
   resize();
 
   const reloj = new THREE.Clock();
+  let tPrevio = 0;
   renderer.setAnimationLoop(() => {
     const t = reloj.getElapsedTime();
+    const dt = Math.min(t - tPrevio, 0.1);
+    tPrevio = t;
     if (enPresentacion && presentacion) {
       presentacion.render();
       return;
     }
-    // El robot flota (sube y baja suave) y siempre gira hacia el jugador.
+    // El robot sigue al jugador (cerca del centro de la pantalla, con retraso de resorte), a altura fija, y siempre gira hacia él.
     if (mentor?.visible) {
-      mentor.position.y = ALTURA_MENTOR + Math.sin(t * VELOCIDAD_FLOTADO) * AMPLITUD_FLOTADO;
+      if (enMuseo) seguirMentor(dt);
+      mentor.position.y = ALTURA_MENTOR;
       mentor.lookAt(posicion.x, mentor.position.y, posicion.z);
+      if (enMuseo) inclinarMentor();
       mentor.userData.actualizar?.(t);
     }
     // El halo siempre se gira hacia el jugador para que se vea como anillo.
@@ -659,10 +684,63 @@ function mentorAmplitud(amplitud: number | null): void {
   mentor?.userData.setAmplitud?.(amplitud);
 }
 
-/** Hace aparecer al mentor junto al jugador, a su derecha y un poco delante. El flotado lo anima el bucle. */
+/** ¿Puede estar el mentor en (x, z)? Dentro de la rotonda, fuera del proyector y de las vitrinas (que son cubos). */
+function sitioLibreMentor(x: number, z: number): boolean {
+  const radio = Math.hypot(x, z);
+  if (radio < RADIO_PROYECTOR || radio > RADIO_CAMINABLE - MARGEN_MENTOR) return false;
+  const medio = LADO_VITRINA / 2 + MARGEN_MENTOR;
+  return !Object.values(POSICION_VITRINA).some((v) => Math.abs(x - v.x) < medio && Math.abs(z - v.z) < medio);
+}
+
+/**
+ * Sitio del mentor: delante del jugador y un poco a su derecha, a altura fija. Si el sitio está ocupado, se acerca al
+ * jugador hasta encontrar uno libre.
+ */
+function posicionMentor(): { x: number; z: number } {
+  const dir = adelante();
+  const der = derecha();
+  let d = DISTANCIA_MENTOR;
+  const en = (dist: number): { x: number; z: number } => ({
+    x: posicion.x + dir.x * dist + der.x * LADO_MENTOR,
+    z: posicion.z + dir.z * dist + der.z * LADO_MENTOR,
+  });
+  while (d > DISTANCIA_MIN_MENTOR && !sitioLibreMentor(en(d).x, en(d).z)) d -= 0.1;
+  return en(d);
+}
+
+/** Mueve al mentor hacia su sitio con un resorte amortiguado (aceleración suave, sin seguir la cámara a tirones). */
+function seguirMentor(dt: number): void {
+  if (!mentor || dt <= 0) return;
+  const objetivo = posicionMentor();
+  const k = OMEGA_SEGUIR_MENTOR * OMEGA_SEGUIR_MENTOR;
+  const c = 2 * ZETA_SEGUIR_MENTOR * OMEGA_SEGUIR_MENTOR;
+  const pasos = Math.ceil(dt / (1 / 120));
+  const h = dt / pasos;
+  for (let i = 0; i < pasos; i++) {
+    velocidadMentor.x += (k * (objetivo.x - mentor.position.x) - c * velocidadMentor.x) * h;
+    velocidadMentor.z += (k * (objetivo.z - mentor.position.z) - c * velocidadMentor.z) * h;
+    mentor.position.x += velocidadMentor.x * h;
+    mentor.position.z += velocidadMentor.z * h;
+  }
+}
+
+const cuaternioInverso = new THREE.Quaternion();
+const velocidadLocal = new THREE.Vector3();
+
+/** Inclina al mentor hacia donde se mueve (como un dron): hacia delante al acelerar, de lado al desplazarse. */
+function inclinarMentor(): void {
+  if (!mentor) return;
+  cuaternioInverso.copy(mentor.quaternion).invert();
+  velocidadLocal.copy(velocidadMentor).applyQuaternion(cuaternioInverso);
+  mentor.rotateX(THREE.MathUtils.clamp(velocidadLocal.z * INCLINA_MENTOR, -INCLINA_MAX_MENTOR, INCLINA_MAX_MENTOR));
+  mentor.rotateZ(THREE.MathUtils.clamp(-velocidadLocal.x * INCLINA_MENTOR, -INCLINA_MAX_MENTOR, INCLINA_MAX_MENTOR));
+}
+
+/** Coloca al mentor en su sitio de golpe (al empezar y al volver al museo). Después lo sigue el bucle. */
 function mentorAparece(): void {
   if (!mentor) return;
-  const pos = posicion.clone().addScaledVector(derecha(), 1.0).addScaledVector(adelante(), 1.2);
+  const pos = posicionMentor();
+  velocidadMentor.set(0, 0, 0);
   mentor.position.set(pos.x, ALTURA_MENTOR, pos.z);
   mentor.lookAt(posicion.x, ALTURA_MENTOR, posicion.z);
   mentor.visible = true;

@@ -456,6 +456,8 @@ export function crearMentor(): THREE.Object3D {
   // Gestos de orador. Solo uno a la vez: mientras uno está activo (anticipación + entrada + mantenida + salida) los demás se
   // descartan, porque cada gesto empieza en su palabra y no podría empezar a media palabra más tarde. Máximo uno por frase.
   let activo: DefGesto | null = null;
+  /** El gesto activo es de relleno (lo eligió el mentor, no el guion) y una marca del guion lo puede interrumpir. */
+  let activoAuto = false;
   /** Tiempo del gesto: negativo durante la anticipación. */
   let tGesto = 0;
   let saliendo = false;
@@ -506,13 +508,23 @@ export function crearMentor(): THREE.Object3D {
       return;
     }
     if (estado !== 'speaking' || gestoEnFrase) return;
-    // Con otro gesto en curso se descarta, salvo que ya haya vuelto al reposo en más de un 60 % de su salida.
-    if (activo !== null && !(saliendo && tGesto >= activo.entrada + activo.sosten + activo.salida * 0.6)) return;
+    // Con otro gesto en curso se descarta, salvo que sea uno de relleno o que ya haya vuelto al reposo en más de un 60 % de su salida.
+    if (activo !== null && !activoAuto && !(saliendo && tGesto >= activo.entrada + activo.sosten + activo.salida * 0.6)) return;
+    lanzar(g, false);
+  };
+  /** Gestos que usa el mentor por su cuenta mientras habla y la voz no le pide ninguno (heroico, el más teatral, casi no sale). */
+  const GESTOS_AUTO: CueNombre[] = ['directo', 'honesto', 'exacto', 'cercano', 'directo', 'poderoso', 'honesto', 'heroico'];
+  let ultimoAuto: CueNombre | null = null;
+  let sinGesto = 0;
+  let esperaAuto = 0.3;
+  function lanzar(g: CueNombre, auto: boolean): void {
     const def = GESTOS[g];
     activo = def;
+    activoAuto = auto;
     saliendo = false;
     pulsoHecho = false;
-    gestoEnFrase = true;
+    // Los gestos de relleno no cuentan como "el gesto de la frase": una marca del guion siempre puede ir después.
+    if (!auto) gestoEnFrase = true;
     let inv = false;
     if (def.ambos) {
       alternarAmbos = !alternarAmbos;
@@ -535,7 +547,7 @@ export function crearMentor(): THREE.Object3D {
       anticOff[o + 2] = -limitar(0.25 * (objPose[o + 2] - objPrevio[o + 2]), -14 * GRAD, 14 * GRAD);
     }
     tGesto = -ANTICIPACION_S;
-  };
+  }
   /** Amplitud real (0..1) del audio que suena; `null` devuelve los LED a su pulso propio. */
   grupo.userData.setAmplitud = (a: number | null): void => {
     amplitud = a;
@@ -544,6 +556,22 @@ export function crearMentor(): THREE.Object3D {
     const dt = Math.min(Math.max(t - ultimo, 0), 0.1);
     ultimo = t;
     habla += ((estado === 'speaking' ? 1 : 0) - habla) * (1 - Math.exp(-6 * dt));
+
+    // Mientras habla, gesticula sin parar: si no hay gesto, tras una pausa corta elige uno de relleno (nunca el mismo dos veces).
+    if (estado === 'speaking' && activo === null) {
+      sinGesto += dt;
+      if (sinGesto >= esperaAuto) {
+        let g = GESTOS_AUTO[Math.floor(azar() * GESTOS_AUTO.length) % GESTOS_AUTO.length];
+        if (g === ultimoAuto) g = GESTOS_AUTO[(GESTOS_AUTO.indexOf(g) + 1) % GESTOS_AUTO.length];
+        if (g === ultimoAuto) g = GESTOS_AUTO[(GESTOS_AUTO.indexOf(g) + 1) % GESTOS_AUTO.length];
+        ultimoAuto = g;
+        lanzar(g, true);
+        sinGesto = 0;
+        esperaAuto = 0.3 + 0.7 * azar();
+      }
+    } else {
+      sinGesto = 0;
+    }
 
     // Línea de tiempo del gesto activo: anticipación, formación, mantenida (con el pulso de "exacto") y vuelta al reposo.
     if (activo) {

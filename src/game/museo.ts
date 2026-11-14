@@ -205,7 +205,6 @@ export class Museo {
     this.seleccionada = id;
     this.fase = 'hablando';
     visual.museo.resaltarVitrina(id, true);
-    visual.museo.mentorAparece();
     this.emitir({ tipo: 'vitrinaSeleccionada', id });
   }
 
