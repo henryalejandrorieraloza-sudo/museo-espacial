@@ -22,10 +22,10 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Lo estático se fusiona por material (una llamada de dibujo por tipo) y los asteroides usan `InstancedMesh`. La nebulosa se pinta una vez en un cubemap. Render del museo: resolución limitada a 1.25×, MSAA 2× y bloom a un cuarto de resolución. Estos valores están al inicio de `src/visual/ambiente.ts`.
 
 ## 3. Sala
-- Rotonda de 32 m de diámetro con 24 caras. Pasarela a 5.2 m de altura, sobre columnas y sin acceso para el jugador. Ventanales de 5.7 a 10.5 m.
-- **Planetario visto desde dentro:** el techo es una cúpula facetada negra, sin luces, focos ni estrellas (decisión de Henry del 14 de noviembre de 2026: el techo y lo que cuelga de él no llevan luces, y la sala queda en penumbra; la luz viene de las pantallas, los hologramas y las líneas del suelo). De ella cuelga un sistema solar con los ocho planetas en su orden real y color aproximado. Tamaños y órbitas no están a escala.
+- Rotonda de 32 m de diámetro con 24 caras. Pasarela a 5.2 m de altura, sobre columnas y sin acceso para el jugador. **Paredes negras** (decisión de Henry del 14 de noviembre de 2026): lisas y sin nada encima: ni pantallas LED, ni estrellas, ni carteles, ni rótulos, ni puertas, ni zócalo.
+- **Planetario visto desde dentro:** el techo es una cúpula facetada negra, sin luces, focos ni estrellas (decisión de Henry del 14 de noviembre de 2026: el techo y lo que cuelga de él no llevan luces, y la sala queda en penumbra; la luz viene de los planetas, los hologramas y las líneas del suelo). De ella cuelga un sistema solar con los ocho planetas en su orden real y color aproximado y, entre ellos, una cascada de unos 33 planetas decorativos inventados (no representan cuerpos reales y no llevan rótulos), como la de la foto de referencia de Henry del 14 de noviembre de 2026. Todos brillan con suavidad, con un halo tenue de su color, y el más grande de varios estilos alumbra la sala con una luz puntual apenas perceptible de su color. **Jerarquía de luces** (decisión de Henry del 14 de noviembre de 2026): las de los objetos expuestos (vitrinas, hologramas, cápsulas) son las más intensas de la sala, y las de los planetas son tenues, lo justo para alumbrar un poco. Tamaños y órbitas no están a escala.
 - La cúpula es baja a propósito: con cabeceo de ±35° y 60° de campo vertical, la vista llega a 65° sobre el horizonte.
-- El jugador camina hasta 15 m del centro y no puede atravesar el proyector central. Las misiones conservan su límite anterior.
+- El jugador camina hasta 15 m del centro y no puede atravesar la peana del Saturn V central. Las misiones conservan su límite anterior.
 
 ## 4. Vitrinas de artefactos
 - Forma: cubo de cristal de 3.5 m con bordes cian y luz interior neutra, para que el artefacto se vea de su color.
@@ -52,7 +52,7 @@ Fuente: entrevista con Henry (/interview). Alcance: solo la parte visual del mus
 - Globos de la Luna y Marte sobre peanas, con colores aproximados a los reales.
 - Rocas en vitrinas pequeñas: muestras facetadas sin identificar, no piezas de catálogo.
 - Consolas de laboratorio con hologramas y gráficas abstractas, sin datos reales.
-- Una torre de comunicaciones junto a la pared, cajas de equipo y proyector central.
+- Una torre de comunicaciones junto a la pared, cajas de equipo y el Saturn V central (1:10) sobre una peana oscura con barandilla de cristal, sin luz en la base: ni anillos LED ni resplandor en el suelo (decisión de Henry del 14 de noviembre de 2026).
 - No incluir plataformas flotantes.
 
 ## 7. Transición museo a misión

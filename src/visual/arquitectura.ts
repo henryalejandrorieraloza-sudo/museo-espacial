@@ -11,16 +11,20 @@ import {
   crearTrajeApollo,
 } from './props';
 
-// Arquitectura del museo: sala circular oscura de 32 m, como las referencias de Henry de 2026-11-14. Paredes de
-// pantallas LED con nebulosas y carteles, techo negro sin luces, suelo pulido con órbitas de luz, planetas colgantes
-// y un Saturn V en el centro. Los objetos expuestos (vitrinas, trajes, cohetes, consolas) no cambian.
-// El techo y lo que cuelga de él no llevan luces (pedido de Henry, 2026-11-14): la luz de la sala viene de las
-// pantallas, los hologramas y las líneas del suelo, y todo lo demás queda en penumbra.
+// Arquitectura del museo: sala circular oscura de 32 m, como las referencias de Henry de 2026-11-14. Paredes negras
+// y lisas, techo negro sin luces, suelo pulido con órbitas de luz, una cascada de planetas luminosos colgando de la
+// cúpula y un Saturn V en el centro. Los objetos expuestos (vitrinas, trajes, cohetes, consolas) no cambian.
+// Pedidos de Henry (2026-11-14): el techo no lleva luces ni focos; las paredes son negras y no llevan nada (ni
+// pantallas, ni carteles, ni puertas, ni zócalo); la base del Saturn V central no lleva luz; y la jerarquía de luces es
+// esta: las de los objetos expuestos (hologramas, anillos, vitrinas, cápsulas) son las más intensas, y los planetas
+// colgantes (como los de su foto de referencia, una cascada de planetas luminosos) brillan con suavidad y alumbran
+// solo un poco. Todo lo demás queda en penumbra.
 // Convención: X a la derecha, Y arriba, −Z hacia donde mira el jugador al inicio.
 
 /** Colores de la sala oscura. Solo arquitectura: los objetos siguen con ARQ y HIST (paleta.ts). */
 const SALA = {
-  pared: 0x06070e,
+  /** Paredes: negro puro. */
+  pared: 0x000000,
   zocalo: 0x0b0d18,
   marco: 0x151929,
   suelo: 0x080912,
@@ -29,11 +33,6 @@ const SALA = {
   techo: 0x040509,
   /** Pasamanos, cables y postes. */
   metal: 0x9aa0b4,
-  /** LED blanco frío. */
-  led: 0xdfe8ff,
-  /** Luz azul de zócalos y peanas. */
-  azul: 0x3d5cff,
-  violetaLed: 0x7a5cff,
   /** Órbitas dibujadas en el suelo. */
   linea: 0xb8c2ff,
 } as const;
@@ -47,10 +46,7 @@ export const RADIO_CAMINABLE = 15;
 /** Radio de la peana del cohete central: está en el camino recto desde el inicio y no se puede atravesar. */
 export const RADIO_PEANA_COHETE = 3.3;
 
-/** Pantallas LED de la pared: de encima del zócalo hasta bajo el techo perimetral (m). */
-const MURAL_Y0 = 0.75;
-const MURAL_Y1 = 6.6;
-/** Techo perimetral (falso techo con focos) y su borde interior (m). */
+/** Techo perimetral (falso techo) y su borde interior (m). */
 const ALTURA_TECHO_BAJO = 7.4;
 const RADIO_TECHO_BAJO = 12.6;
 const ALTURA_CORNISA = 11.6;
@@ -71,6 +67,14 @@ export const ALTURA_PEDESTAL = 0.85;
 export const ALTURA_HOLOGRAMA = 1.45;
 /** Altura del punto de apuntado de un holograma de artefacto: su centro aproximado (m). */
 export const ALTURA_CENTRO_EXHIBICION = 2.2;
+
+/**
+ * Jerarquía de las luces puntuales de la sala (pedido de Henry, 2026-11-14): las de los objetos expuestos son las más
+ * intensas (la de cada vitrina, sobre su holograma, y la de las cápsulas de los trajes) y las de los planetas
+ * colgantes son tenues, lo justo para alumbrar un poco el cohete y el suelo (`INTENSIDAD_LUZ_PLANETA`, más abajo).
+ */
+const INTENSIDAD_LUZ_VITRINA = 11;
+const INTENSIDAD_LUZ_TRAJES = 20;
 
 /** Coloca `fn` en el sistema local de una cara de la pared: X a lo largo (sentido de giro creciente), +Z hacia el centro, origen en el suelo. */
 function enPared(l: Lote, angulo: number, radio: number, fn: () => void): void {
@@ -97,22 +101,6 @@ const _otro = new THREE.Color();
 /** Mezcla dos colores hex (t de 0 a 1). */
 function mezcla(a: number, b: number, t: number): number {
   return _mezcla.setHex(a).lerp(_otro.setHex(b), THREE.MathUtils.clamp(t, 0, 1)).getHex();
-}
-
-/** Ruido suave hecho con senos (−1 a 1): basta para manchas de nebulosa sin texturas. */
-function ondas(u: number, v: number, semilla: number): number {
-  return (
-    Math.sin(u * 2.3 + v * 0.8 + semilla) * 0.5 +
-    Math.sin(u * 5.1 - v * 1.3 + semilla * 2.1) * 0.3 +
-    Math.sin(u * 11.7 + v * 2.6 - semilla) * 0.2
-  );
-}
-
-/** Brillo de una galaxia espiral (0 a ~1.5) en un punto relativo a su centro, con dos brazos. */
-function galaxia(dx: number, dy: number, fase: number, tam: number): number {
-  const r = Math.hypot(dx, dy * 1.7) / tam;
-  const brazo = Math.max(0, Math.cos(2 * Math.atan2(dy * 1.7, dx) - r * 3.2 + fase));
-  return Math.exp(-r * r * 9) * 1.4 + Math.pow(brazo, 3) * Math.exp(-r * 1.6) * 0.75;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,181 +146,19 @@ function crearSuelo(l: Lote): void {
 }
 
 // ---------------------------------------------------------------------------
-// Paredes: pantallas LED, carteles y puertas
+// Paredes: negras y lisas, sin nada encima
 // ---------------------------------------------------------------------------
 
-type TipoCartel = 'sol' | 'planeta' | 'galaxia' | 'cometa';
-
-/** Puertas al sur y al norte (la del norte queda de frente al empezar). */
-const PUERTAS = new Set([5, 6, 17, 18]);
-/** Carteles enmarcados delante de la pantalla, como los paneles de la primera referencia. */
-const CARTELES: Partial<Record<number, TipoCartel>> = { 1: 'galaxia', 9: 'cometa', 13: 'planeta', 15: 'sol', 20: 'galaxia', 23: 'cometa' };
-/** Rótulos grandes escritos sobre la pantalla, como el de la segunda referencia. Barras sin texto real. */
-const ROTULOS = new Set([3, 11, 16, 19]);
-/** Galaxias espirales pintadas en la pantalla continua: posición (en bahías), altura (m), fase y tamaño (m). */
-const GALAXIAS_MURAL = [
-  { bahia: 14.3, y: 3.9, fase: 0, tam: 2.6 },
-  { bahia: 21.6, y: 3.4, fase: 1.7, tam: 2.2 },
-  { bahia: 7.4, y: 4.1, fase: 3.1, tam: 2.4 },
-  { bahia: 2.2, y: 3.3, fase: 4.4, tam: 1.8 },
-] as const;
-const PERIMETRO = PASO_ANGULO * LADOS * RADIO_PARED;
-
 /**
- * Color de la pantalla LED en un punto: `s` es la distancia a lo largo de la pared (m) e `y` la altura. Es una sola
- * imagen continua alrededor de la sala: fondo azul noche, nubes de nebulosa púrpura y azul, y galaxias espirales.
- * Es decorativa: no reproduce ninguna región real del cielo.
+ * Las 24 caras de la pared: cajas negras sin pantallas, carteles, rótulos, puertas ni zócalo (pedido de Henry,
+ * 2026-11-14). Siguen siendo sólidas para que no se vea el fondo del cielo por detrás.
  */
-function colorMural(s: number, y: number): number {
-  const u = s / 6;
-  const n = ondas(u, y * 0.45, 1.7);
-  const m = ondas(u * 1.9 + 7, y * 0.8, 4.2);
-  let color = mezcla(0x040720, mezcla(0x15277a, 0x46208a, (m + 0.3) * 0.8), THREE.MathUtils.smoothstep(n, -0.2, 0.9) * 0.85);
-  if (n > 0.65 && m > 0.3) color = mezcla(color, 0x9b7cf0, 0.35);
-  for (const g of GALAXIAS_MURAL) {
-    const ds = ((((s - g.bahia * PASO_ANGULO * RADIO_PARED) % PERIMETRO) + PERIMETRO * 1.5) % PERIMETRO) - PERIMETRO / 2;
-    const b = galaxia(ds, y - g.y, g.fase, g.tam);
-    if (b > 0.05) color = mezcla(color, b > 0.9 ? 0xffe6c8 : 0x8f7ce0, b > 0.9 ? 1 : b * 0.6);
-  }
-  return color;
-}
-
-/** Imagen de un cartel (plano `ancho` × `alto` centrado en el origen). Ilustraciones genéricas, no fotos reales. */
-function imagenCartel(tipo: TipoCartel, ancho: number, alto: number): ColorCara {
-  return (c) => {
-    const u = c.x / ancho + 0.5;
-    const v = c.y / alto + 0.5;
-    const asp = alto / ancho;
-    const fondo = mezcla(0x04050c, 0x101a48, ondas(u * 2, v * 2, 2.2) * 0.5 + 0.2);
-    if (tipo === 'sol') {
-      // Superficie del Sol en primer plano: rojos y naranjas que hierven, más claros hacia el centro.
-      const r = Math.hypot(u - 0.45, (v - 0.4) * asp);
-      const fuego = ondas(u * 4, v * 5, 0.8) * 0.5 + 0.5;
-      if (r < 0.62) return mezcla(mezcla(0x8a1a05, 0xff6a1a, fuego), 0xffc65a, Math.max(0, 0.5 - r) * 1.6);
-      return mezcla(0x1a0503, 0x6a1406, Math.max(0, fuego - 0.45));
-    }
-    if (tipo === 'planeta') {
-      // Planeta enano gris iluminado de lado, sobre el negro.
-      const [dx, dy] = [u - 0.5, (v - 0.5) * asp];
-      const r = Math.hypot(dx, dy);
-      if (r < 0.34) {
-        const luz = THREE.MathUtils.clamp(0.75 - (dx + dy * 0.4) * 2.4, 0, 1);
-        const manchas = ondas(dx * 9, dy * 9, 5) > 0.35 ? 0x8a7a6a : 0xc8bfb2;
-        return mezcla(0x14120f, manchas, luz);
-      }
-      return Math.sin(u * 91) * Math.sin(v * 77) > 0.97 ? 0xe0e6ff : 0x03040a;
-    }
-    if (tipo === 'cometa') {
-      // Núcleo brillante arriba a la derecha y cola que se abre hacia abajo a la izquierda.
-      const [dx, dy] = [u - 0.72, (v - 0.74) * asp];
-      const largo = -(dx * 0.7 + dy * 0.7);
-      const ancho2 = Math.abs(dx * 0.7 - dy * 0.7);
-      const cola = largo > 0 ? Math.max(0, 1 - ancho2 / (0.04 + largo * 0.25)) * Math.max(0, 1 - largo * 1.1) : 0;
-      const cabeza = Math.exp(-(dx * dx + dy * dy) * 900);
-      return mezcla(mezcla(fondo, 0x9fd8ff, cola * 0.8), 0xffffff, cabeza);
-    }
-    const b = galaxia((u - 0.5) * 2, (v - 0.5) * asp * 2, 0.9, 0.9);
-    return mezcla(fondo, b > 0.9 ? 0xffe6c8 : 0xc9b4ff, Math.min(1, b));
-  };
-}
-
-/** Cartel enmarcado delante de la pantalla: imagen arriba, titular, texto y un borde de luz de color. */
-function cartel(l: Lote, tipo: TipoCartel, rnd: () => number): void {
-  const [w, h, y, z] = [2.5, 3.7, 3.05, 0.1];
-  const acento = { sol: ARQ.ambar, planeta: SALA.led, galaxia: SALA.violetaLed, cometa: ARQ.dorado }[tipo];
-  l.pieza(cajaBiselada(w + 0.14, h + 0.14, 0.1, 0.02), SALA.marco, { p: [0, y, z] });
-  l.emisiva(new THREE.BoxGeometry(0.05, h + 0.14, 0.06), acento, 1.6, { p: [-w / 2 - 0.1, y, z] });
-  const [wi, hi] = [w - 0.16, h * 0.52];
-  l.emisiva(new THREE.PlaneGeometry(wi, hi, 10, 9), imagenCartel(tipo, wi, hi), 0.9, { p: [0, y + h * 0.22, z + 0.052] });
-  l.emisiva(new THREE.PlaneGeometry(w, h * 0.44), 0x0d1230, 1, { p: [0, y - h * 0.27, z + 0.051] });
-  l.emisiva(new THREE.PlaneGeometry(w * 0.55, 0.16), SALA.led, 1.05, { p: [-w * 0.17, y - h * 0.09, z + 0.056] });
-  l.emisiva(new THREE.PlaneGeometry(w * 0.3, 0.05), acento, 1.1, { p: [-w * 0.3, y - h * 0.135, z + 0.056] });
-  for (let f = 0; f < 6; f++) {
-    l.en([0, y - h * 0.19 - f * 0.17, 0], [0, 0, 0], () => renglon(l, w * 0.84, 0, 0.05, 0xaab4e0, 0.85, rnd, z + 0.056));
-  }
-}
-
-/** Rótulo grande sobre la pantalla: titular en dos líneas, subtítulo y un dibujo de líneas (una órbita con su planeta). */
-function rotulo(l: Lote, rnd: () => number): void {
-  const z = 0.035;
-  l.emisiva(new THREE.PlaneGeometry(1.9, 0.26), SALA.led, 1.1, { p: [-0.55, 5.0, z] });
-  l.emisiva(new THREE.PlaneGeometry(1.4, 0.26), SALA.led, 1.1, { p: [-0.8, 4.6, z] });
-  for (let f = 0; f < 2; f++) {
-    l.en([-0.65, 4.18 - f * 0.15, 0], [0, 0, 0], () => renglon(l, 1.6, 0, 0.065, 0xc7d0f5, 0.9, rnd, z));
-  }
-  l.emisiva(new THREE.TorusGeometry(0.75, 0.012, 3, 48), SALA.linea, 1.0, { p: [0.75, 2.9, z], r: [0, 0, 0.35], e: [1, 0.42, 1] });
-  l.emisiva(new THREE.TorusGeometry(0.22, 0.012, 3, 20), SALA.linea, 1.0, { p: [0.75, 2.9, z] });
-  l.emisiva(new THREE.IcosahedronGeometry(0.06, 0), SALA.led, 2.4, { p: [1.42, 3.15, z] });
-}
-
-/** Puerta: marco oscuro con contorno de luz azul y dos hojas. */
-function puerta(l: Lote): void {
-  l.pieza(cajaBiselada(3.5, 4.3, 0.24, 0.03), SALA.marco, { p: [0, 2.15, 0.12] });
-  for (const lado of [-1, 1]) {
-    l.pieza(cajaBiselada(1.5, 3.85, 0.1, 0.02), SALA.zocalo, { p: [lado * 0.78, 1.95, 0.27] });
-    l.pieza(cajaBiselada(0.06, 0.5, 0.06, 0.01), SALA.metal, { p: [lado * 0.14, 1.55, 0.35] });
-    l.emisiva(new THREE.BoxGeometry(0.04, 4.1, 0.04), SALA.azul, 2.0, { p: [lado * 1.72, 2.05, 0.26] });
-  }
-  l.emisiva(new THREE.BoxGeometry(3.48, 0.04, 0.04), SALA.azul, 2.0, { p: [0, 4.12, 0.26] });
-}
-
-/** Una cara de la pared: zócalo con luz azul, pantalla LED y, según la bahía, un cartel, un rótulo o una puerta. */
-function bahia(l: Lote, i: number, rnd: () => number): void {
-  const a = i * PASO_ANGULO + PASO_ANGULO / 2;
-  const esPuerta = PUERTAS.has(i);
-  enPared(l, a, RADIO_PARED, () => {
-    l.emisiva(new THREE.BoxGeometry(ANCHO_BAHIA + 0.06, ALTURA_CORNISA, 0.3), SALA.pared, 1, { p: [0, ALTURA_CORNISA / 2, -0.15] });
-
-    // Pantalla LED: una imagen continua alrededor de la sala (sobre las puertas solo la franja alta).
-    const y0 = esPuerta ? 4.45 : MURAL_Y0;
-    const alto = MURAL_Y1 - y0;
-    const filas = Math.max(3, Math.round(alto / 0.3));
-    const yc = (y0 + MURAL_Y1) / 2;
-    l.emisiva(new THREE.PlaneGeometry(ANCHO_BAHIA - 0.06, alto, 16, filas), (c) => colorMural(a * RADIO_PARED + c.x, yc + c.y), 0.75, {
-      p: [0, yc, 0.02],
-    });
-    if (esPuerta) {
-      puerta(l);
-    } else {
-      // Zócalo negro con línea de luz azul que baña el suelo.
-      l.pieza(new THREE.BoxGeometry(ANCHO_BAHIA, 0.72, 0.22), SALA.zocalo, { p: [0, 0.36, 0.11] });
-      l.emisiva(new THREE.BoxGeometry(ANCHO_BAHIA - 0.1, 0.03, 0.03), SALA.azul, 1.2, { p: [0, 0.73, 0.2] });
-      l.emisiva(new THREE.BoxGeometry(ANCHO_BAHIA - 0.1, 0.03, 0.03), SALA.azul, 1.3, { p: [0, 0.04, 0.24] });
-      const t = CARTELES[i];
-      if (t) cartel(l, t, rnd);
-      if (ROTULOS.has(i)) rotulo(l, rnd);
-    }
-    l.aditiva(new THREE.PlaneGeometry(ANCHO_BAHIA, 1.6), degradado(SALA.azul, 0, 0.05, 1.6), { p: [0, 0.03, 1.0], r: [-Math.PI / 2, 0, 0] });
-  });
-
-  // Junta oscura entre dos pantallas.
-  enPared(l, i * PASO_ANGULO, RADIO_PARED / Math.cos(PASO_ANGULO / 2) - 0.02, () => {
-    l.pieza(new THREE.BoxGeometry(0.1, MURAL_Y1 + 0.2, 0.1), SALA.marco, { p: [0, (MURAL_Y1 + 0.2) / 2, 0.03] });
-  });
-}
-
-/** Estrellas de la pantalla LED: puntos que brillan con el bloom. Decorativas. */
-function crearEstrellasMural(): THREE.Points {
-  const rnd = azar(99);
-  const posiciones: number[] = [];
-  const colores: number[] = [];
+function crearParedes(l: Lote): void {
   for (let i = 0; i < LADOS; i++) {
-    const a = i * PASO_ANGULO + PASO_ANGULO / 2;
-    const y0 = PUERTAS.has(i) ? 4.5 : MURAL_Y0 + 0.05;
-    const centro = new THREE.Vector3(Math.cos(a) * (RADIO_PARED - 0.04), 0, Math.sin(a) * (RADIO_PARED - 0.04));
-    const largo = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));
-    for (let k = 0; k < 46; k++) {
-      const p = centro.clone().addScaledVector(largo, (rnd() - 0.5) * (ANCHO_BAHIA - 0.2));
-      p.y = y0 + rnd() * (MURAL_Y1 - 0.1 - y0);
-      posiciones.push(p.x, p.y, p.z);
-      const brillo = 0.8 + Math.pow(rnd(), 4) * 3;
-      colores.push(brillo * 0.9, brillo * 0.92, brillo);
-    }
+    enPared(l, i * PASO_ANGULO + PASO_ANGULO / 2, RADIO_PARED, () => {
+      l.emisiva(new THREE.BoxGeometry(ANCHO_BAHIA + 0.06, ALTURA_CORNISA, 0.3), SALA.pared, 1, { p: [0, ALTURA_CORNISA / 2, -0.15] });
+    });
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(posiciones, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colores, 3));
-  return new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.05, vertexColors: true, fog: false, sizeAttenuation: true }));
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +209,8 @@ interface PlanetaColgante {
   detalle: number;
   /** Anillos (radios interior y exterior relativos al planeta) y sus colores. */
   anillos?: { r0: number; r1: number; color: number }[];
+  /** Si el planeta alumbra la sala: color e intensidad de su luz puntual, invisible, en el centro del planeta. */
+  luz?: { color: number; intensidad: number };
 }
 
 /** Bandas horizontales según la latitud. */
@@ -390,10 +218,11 @@ const bandas = (colores: readonly number[], n: number) => (d: THREE.Vector3): nu
   colores[Math.floor(THREE.MathUtils.clamp((d.y + 1) / 2, 0, 0.999) * n) % colores.length];
 
 /**
- * Planetas y Luna colgados del techo, con su color aproximado y la inclinación real del eje en los anillos de Saturno
- * (26.7°). Tamaños y posiciones no están a escala: son la decoración de la sala, como en las referencias.
+ * El sistema solar colgado del techo: los planetas y la Luna, con su color aproximado y la inclinación real del eje en
+ * los anillos de Saturno (26.7°). Tamaños y posiciones no están a escala: son la decoración de la sala. Entre ellos
+ * cuelga además una cascada de planetas decorativos inventados (`crearCascada`).
  */
-const PLANETAS_COLGANTES: readonly PlanetaColgante[] = [
+const PLANETAS_SISTEMA_SOLAR: readonly PlanetaColgante[] = [
   {
     // Luna: tierras altas claras y mares oscuros.
     radio: 2.2,
@@ -452,22 +281,259 @@ const PLANETAS_COLGANTES: readonly PlanetaColgante[] = [
   { radio: 0.38, posicion: [5.6, 9.6, 8.4], inclinacion: 0, detalle: 2, color: (d) => (Math.sin(d.x * 13) * Math.sin(d.z * 11) > 0.3 ? 0x7e7266 : 0x9a8c7c) },
 ];
 
-/** Hacia dónde llega a los planetas el resplandor de la sala (pantallas y suelo): desde abajo y desde el lado del jugador al empezar. */
+/** Hacia dónde cae la luz horneada en los planetas: desde abajo y desde el lado del jugador al empezar. */
 const LUZ_PLANETAS = new THREE.Vector3(0.25, -0.55, 0.8).normalize();
-/** Brillo horneado de los planetas (0–1): el del lado a oscuras y el añadido en el lado que da al resplandor. Cuelgan en penumbra. */
-const BRILLO_PLANETA_SOMBRA = 0.1;
-const BRILLO_PLANETA_LUZ = 0.7;
-const BRILLO_ANILLO_PLANETA = 0.5;
+/**
+ * Brillo de los planetas: suave, para que las luces de los objetos expuestos sean siempre las más intensas. Cada cara
+ * lleva su color casi entero (0–1, donde 1 es el color del planeta), con algo más de brillo en el lado que da al
+ * resplandor del suelo, y `INTENSIDAD_PLANETA` lo multiplica: por debajo de 1 los planetas no florecen con el bloom,
+ * que queda para los objetos. Cada planeta lleva además un halo tenue de su color (`ESCALA_HALO` veces su diámetro y
+ * `FUERZA_HALO` de intensidad), y el más grande de algunos estilos alumbra la sala con una luz puntual de su color,
+ * apenas perceptible: lo justo para teñir un poco el cohete y el suelo (`INTENSIDAD_LUZ_PLANETA` por metro de radio).
+ */
+const BRILLO_PLANETA_SOMBRA = 0.7;
+const BRILLO_PLANETA_LUZ = 0.3;
+const BRILLO_ANILLO_PLANETA = 0.85;
+const INTENSIDAD_PLANETA = 0.7;
+const ESCALA_HALO = 2.3;
+const FUERZA_HALO = 0.14;
+const INTENSIDAD_LUZ_PLANETA = 4;
+/** Cuántos planetas decorativos se intentan colgar además de los del sistema solar: los que chocan con algo se descartan (cuelgan unos 33). */
+const PLANETAS_DECORATIVOS = 48;
+
+// Cascada de planetas decorativos ------------------------------------------
+
+/** Ruido suave de senos sobre la esfera (−1 a 1): remolinos y manchas sin texturas. */
+function remolino(d: THREE.Vector3, fase: number): number {
+  return (
+    Math.sin(d.x * 5 + d.y * 3 + fase) * 0.5 +
+    Math.sin(d.y * 9 - d.z * 4 + fase * 1.7) * 0.3 +
+    Math.sin(d.z * 13 + d.x * 7 - fase) * 0.2
+  );
+}
+
+type ColorPlaneta = PlanetaColgante['color'];
+
+/** Gigante gaseoso: bandas por latitud con ondulación. */
+const gigante = (paleta: readonly number[]) => (fase: number, rnd: () => number): ColorPlaneta => {
+  const franjas = 7 + Math.floor(rnd() * 6);
+  return (d) => paleta[Math.floor(THREE.MathUtils.clamp((d.y + 0.1 * remolino(d, fase) + 1) / 2, 0, 0.999) * franjas) % paleta.length];
+};
+/** Mundo de hielo: remolinos blancos sobre azul. */
+const hielo = (fase: number): ColorPlaneta => (d) => mezcla(0x2a63d8, 0xeaf4ff, THREE.MathUtils.smoothstep(remolino(d, fase), 0, 0.55));
+/** Mundo de lava: amarillos y naranjas que hierven sobre rojo oscuro. */
+const lava = (fase: number): ColorPlaneta => (d) => {
+  const r = remolino(d, fase);
+  return r > 0.45 ? 0xffe27a : r > 0.05 ? 0xff9a2e : r > -0.35 ? 0xe85a14 : 0x9c2a0c;
+};
+/** Mundo rocoso, de tierras claras y llanuras oscuras como la Luna. */
+const roca = (fase: number): ColorPlaneta => (d) => {
+  if (Math.sin(d.x * 23 + fase) * Math.sin(d.y * 19) * Math.sin(d.z * 21) > 0.3) return 0x8c8780;
+  return remolino(d, fase) > 0.35 ? 0x5e5c59 : 0xaaa7a1;
+};
+/** Mundo de océanos turquesa y continentes violeta, con nubes y casquetes blancos: no se parece a la Tierra. */
+const oceano = (fase: number): ColorPlaneta => (d) => {
+  if (Math.abs(d.y) > 0.88 || remolino(d, fase + 2) > 0.62) return 0xeef4f8;
+  return remolino(d, fase) > 0.3 ? 0x7a4fb8 : 0x1fa6b8;
+};
+/** Mundo apagado, casi negro azulado, como las esferas oscuras de la referencia: da contraste a los luminosos. */
+const oscuro = (fase: number): ColorPlaneta => (d) => mezcla(0x0a0f22, 0x2b3768, THREE.MathUtils.smoothstep(remolino(d, fase), -0.2, 0.6));
+
+/** Un estilo de planeta decorativo: cómo se colorea, si lleva anillos y qué luz da. */
+interface EstiloDecorativo {
+  /** Peso en el sorteo. */
+  peso: number;
+  /** Función de color, con una fase al azar para que no salgan dos iguales. */
+  color: (fase: number, rnd: () => number) => ColorPlaneta;
+  /** Colores de los dos anillos (el ancho y el fino), si puede llevarlos. */
+  anillos?: readonly [number, number];
+  /** Color de la luz que da el más grande de su estilo. */
+  luz?: number;
+}
+
+const ESTILOS_DECORATIVOS: readonly EstiloDecorativo[] = [
+  { peso: 3, color: gigante([0xe8e2cf, 0xb7c7e0, 0xf3ead2, 0x9db4d8, 0xe9dcc0]), anillos: [0xd9d2bc, 0xa8b8d0] },
+  { peso: 2, color: gigante([0x2f4fd0, 0x3f64e0, 0x2a43b0, 0x5a7ef0]) },
+  { peso: 2, color: gigante([0x7fd6d0, 0x5bb5c4, 0x9be3dc, 0x4a98b0]) },
+  { peso: 2, color: gigante([0x8a5fd0, 0xb48be8, 0x6b46b8, 0xcaa6f0]), anillos: [0xcaa6f0, 0x8a5fd0], luz: 0xa070ff },
+  { peso: 2, color: gigante([0xd98a6a, 0xf0b898, 0xb8654a, 0xe8a888]) },
+  { peso: 3, color: hielo, luz: 0x4a86ff },
+  { peso: 3, color: lava, luz: 0xff9a40 },
+  { peso: 3, color: roca },
+  { peso: 2, color: oceano },
+  { peso: 3, color: oscuro },
+];
+
+/** Posiciones (x, z) de las tres vitrinas, las de `POSICION_VITRINA` en museo.ts: sus aros y cables llegan a 8.05 m. */
+const VITRINAS_XZ: readonly (readonly [number, number])[] = [
+  [-4.5, 3],
+  [4.5, 3],
+  [0, -10.5],
+];
+/** Peanas de los cohetes del fondo (Saturn V y Atlas V a 1:13): el más alto llega a unos 9.8 m. */
+const COHETES_FONDO_XZ: readonly (readonly [number, number])[] = [
+  [-6.5, -9],
+  [6.5, -9],
+];
+
+interface Ocupado {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+}
+
+/** Hasta dónde llega un planeta desde su centro: su radio o, si lleva anillos, el de su anillo exterior (m). */
+function alcance(p: PlanetaColgante): number {
+  return p.radio * Math.max(1, ...(p.anillos ?? []).map((a) => a.r1));
+}
+
+/** ¿Cabe un planeta de alcance `r` en (x, y, z) sin chocar con nada de la sala ni con los que ya cuelgan? */
+function cabe(x: number, y: number, z: number, r: number, ocupados: readonly Ocupado[]): boolean {
+  const rh = Math.hypot(x, z);
+  // Lejos del cohete central, de la pared y de la cúpula, y por encima de la cabeza del jugador.
+  if (rh - r < 1.8 || rh + r > 14.2 || y - r < 6.6 || y + r > alturaCupula(rh + r) - 0.9) return false;
+  // Lejos de los aros y cables de las vitrinas y de los cohetes del fondo.
+  if (y - r < 8.8 && VITRINAS_XZ.some(([vx, vz]) => Math.hypot(x - vx, z - vz) < 3.4 + r)) return false;
+  if (y - r < 10.4 && COHETES_FONDO_XZ.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 2.4 + r)) return false;
+  // No se tocan entre sí, y el cable del de abajo no atraviesa al de arriba.
+  return ocupados.every((o) => {
+    const dh = Math.hypot(x - o.x, z - o.z);
+    return Math.hypot(dh, y - o.y) > r + o.r + 0.7 && dh > (y > o.y ? r : o.r) + 0.15;
+  });
+}
 
 /**
- * Los planetas colgantes, en un lote. Ese resplandor va horneado en el color de cada cara (lado iluminado y lado en
- * sombra, como en la primera referencia): así se leen en la sala oscura sin añadir luces. No giran.
+ * La cascada de planetas decorativos (inventados: no representan cuerpos reales), como la de la foto de referencia de
+ * Henry. Cuelgan en una espiral que se ensancha hacia arriba alrededor del cohete: los pequeños abajo y los grandes
+ * cerca de la cúpula. Las posiciones salen de un generador con semilla, así la sala se ve igual en cada carga.
+ */
+function crearCascada(fijos: readonly PlanetaColgante[]): PlanetaColgante[] {
+  const rnd = azar(1114);
+  const ocupados: Ocupado[] = fijos.map((p) => ({ x: p.posicion[0], y: p.posicion[1], z: p.posicion[2], r: alcance(p) }));
+  const pesoTotal = ESTILOS_DECORATIVOS.reduce((suma, e) => suma + e.peso, 0);
+  const hechos: { planeta: PlanetaColgante; estilo: EstiloDecorativo }[] = [];
+
+  for (let k = 0; k < PLANETAS_DECORATIVOS; k++) {
+    for (let intento = 0; intento < 160; intento++) {
+      const u = (k + rnd()) / PLANETAS_DECORATIVOS; // 0 abajo, 1 arriba
+      const radio = THREE.MathUtils.lerp(0.32, 2.0, u ** 0.9) * (0.75 + rnd() * 0.5);
+      const angulo = u * Math.PI * 5.2 + (rnd() - 0.5) * 1.4;
+      const distancia = THREE.MathUtils.lerp(4.0, 11.0, u) + (rnd() - 0.5) * 2.8;
+      const x = Math.cos(angulo) * distancia;
+      const z = Math.sin(angulo) * distancia - 1;
+      const y = THREE.MathUtils.lerp(7.6, 16.8, u) + (rnd() - 0.5) * 2.0;
+
+      let sorteo = rnd() * pesoTotal;
+      const estilo = ESTILOS_DECORATIVOS.find((e) => (sorteo -= e.peso) < 0) ?? ESTILOS_DECORATIVOS[0];
+      const anillos = estilo.anillos && radio > 0.8 && rnd() < 0.6 ? estilo.anillos : undefined;
+      const planeta: PlanetaColgante = {
+        radio,
+        posicion: [x, y, z],
+        inclinacion: (rnd() - 0.5) * 1.2,
+        detalle: radio > 1.3 ? 3 : radio > 0.55 ? 2 : 1,
+        color: estilo.color(rnd() * 6.3, rnd),
+        ...(anillos ? { anillos: [{ r0: 1.3, r1: 1.9, color: anillos[0] }, { r0: 1.98, r1: 2.2, color: anillos[1] }] } : {}),
+      };
+      if (!cabe(x, y, z, alcance(planeta), ocupados)) continue;
+      hechos.push({ planeta, estilo });
+      ocupados.push({ x, y, z, r: alcance(planeta) });
+      break;
+    }
+  }
+
+  // El más grande de cada estilo con luz alumbra la sala con su color.
+  for (const estilo of ESTILOS_DECORATIVOS) {
+    if (estilo.luz === undefined) continue;
+    const mayor = hechos.filter((h) => h.estilo === estilo).sort((a, b) => b.planeta.radio - a.planeta.radio)[0];
+    if (mayor) mayor.planeta.luz = { color: estilo.luz, intensidad: INTENSIDAD_LUZ_PLANETA * mayor.planeta.radio };
+  }
+  return hechos.map((h) => h.planeta);
+}
+
+// Halos ---------------------------------------------------------------------
+
+/** Direcciones de una esfera facetada, para promediar el color de un planeta. */
+const MUESTRAS_ESFERA = new THREE.IcosahedronGeometry(1, 2).getAttribute('position');
+
+/** Color medio de un planeta (promedio de su color en esas direcciones): el de su halo. */
+function colorMedio(p: PlanetaColgante): THREE.Color {
+  const d = new THREE.Vector3();
+  const c = new THREE.Color();
+  let [r, g, b] = [0, 0, 0];
+  for (let i = 0; i < MUESTRAS_ESFERA.count; i++) {
+    c.setHex(p.color(d.fromBufferAttribute(MUESTRAS_ESFERA, i).normalize()));
+    r += c.r;
+    g += c.g;
+    b += c.b;
+  }
+  const n = MUESTRAS_ESFERA.count;
+  return c.setRGB(r / n, g / n, b / n);
+}
+
+// El centro y el tamaño de cada halo salen de la matriz de su instancia, y su color, del color de la instancia. El
+// cuadrado se abre en el plano de la vista, así que siempre mira a la cámara, y se apaga hacia el borde.
+const HALO_VS = /* glsl */ `
+  varying vec2 vPos;
+  varying vec3 vTinte;
+  void main() {
+    vPos = position.xy * 2.0;
+    #ifdef USE_INSTANCING_COLOR
+      vTinte = instanceColor;
+    #else
+      vTinte = vec3(1.0);
+    #endif
+    vec4 centro = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    centro.xy += position.xy * length(instanceMatrix[0].xyz);
+    gl_Position = projectionMatrix * centro;
+  }
+`;
+const HALO_FS = /* glsl */ `
+  varying vec2 vPos;
+  varying vec3 vTinte;
+  void main() {
+    float a = max(0.0, 1.0 - length(vPos));
+    gl_FragColor = vec4(vTinte * a * a, 1.0);
+  }
+`;
+
+/**
+ * Los halos de todos los planetas, en una sola malla instanciada (una llamada de dibujo): un resplandor aditivo del
+ * color de cada planeta. El planeta tapa el centro de su halo, así que solo se ve el contorno.
+ */
+function crearHalos(planetas: readonly PlanetaColgante[]): THREE.InstancedMesh {
+  const material = new THREE.ShaderMaterial({
+    vertexShader: HALO_VS,
+    fragmentShader: HALO_FS,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const malla = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, planetas.length);
+  const matriz = new THREE.Matrix4();
+  const sinGiro = new THREE.Quaternion();
+  for (const [i, p] of planetas.entries()) {
+    const lado = p.radio * 2 * ESCALA_HALO;
+    malla.setMatrixAt(i, matriz.compose(new THREE.Vector3(...p.posicion), sinGiro, new THREE.Vector3(lado, lado, lado)));
+    malla.setColorAt(i, colorMedio(p).multiplyScalar(FUERZA_HALO));
+  }
+  // La malla tiene que dibujarse siempre: el cuadrado se abre en el espacio de la vista, no en el del objeto.
+  malla.frustumCulled = false;
+  return malla;
+}
+
+/**
+ * Los planetas colgantes (el sistema solar y la cascada decorativa), en un lote. El resplandor va horneado en el color
+ * de cada cara, así que son emisivos y no dependen de las luces de la sala. No giran. Los halos y las luces de color
+ * de los más grandes van aparte, en el mismo grupo.
  */
 function crearPlanetasColgantes(): THREE.Group {
+  const planetas = [...PLANETAS_SISTEMA_SOLAR, ...crearCascada(PLANETAS_SISTEMA_SOLAR)];
   const l = new Lote(false);
   const d = new THREE.Vector3();
   const iluminado = (hex: number, brillo: number): number => mezcla(0x000000, hex, brillo);
-  for (const p of PLANETAS_COLGANTES) {
+  for (const p of planetas) {
     const [x, y, z] = p.posicion;
     const r = Math.hypot(x, z);
     // Cable fino hasta la cúpula.
@@ -481,17 +547,25 @@ function crearPlanetasColgantes(): THREE.Group {
           d.copy(c).normalize();
           return iluminado(p.color(d), BRILLO_PLANETA_SOMBRA + BRILLO_PLANETA_LUZ * Math.max(0, d.dot(haciaLuz)) ** 0.8);
         },
-        1,
+        INTENSIDAD_PLANETA,
         { v: 0.1 },
       );
       for (const anillo of p.anillos ?? []) {
         for (const giroAnillo of [-Math.PI / 2, Math.PI / 2]) {
-          l.emisiva(new THREE.RingGeometry(p.radio * anillo.r0, p.radio * anillo.r1, 40), iluminado(anillo.color, BRILLO_ANILLO_PLANETA), 1, { r: [giroAnillo, 0, 0], v: 0.15 });
+          l.emisiva(new THREE.RingGeometry(p.radio * anillo.r0, p.radio * anillo.r1, 40), iluminado(anillo.color, BRILLO_ANILLO_PLANETA), INTENSIDAD_PLANETA, { r: [giroAnillo, 0, 0], v: 0.15 });
         }
       }
     });
   }
-  return l.construir();
+  const grupo = l.construir();
+  grupo.add(crearHalos(planetas));
+  for (const p of planetas) {
+    if (!p.luz) continue;
+    const luz = new THREE.PointLight(p.luz.color, p.luz.intensidad, 28, 1.6);
+    luz.position.set(...p.posicion);
+    grupo.add(luz);
+  }
+  return grupo;
 }
 
 // ---------------------------------------------------------------------------
@@ -499,15 +573,13 @@ function crearPlanetasColgantes(): THREE.Group {
 // ---------------------------------------------------------------------------
 
 /**
- * Saturn V en el centro de la sala, como en la segunda referencia: peana negra de dos escalones con anillos LED,
- * barandilla de cristal y mesa de lanzamiento oscura. Nada de luz arriba: la punta queda en penumbra.
+ * Saturn V en el centro de la sala, como en la segunda referencia: peana negra de dos escalones, barandilla de cristal
+ * y mesa de lanzamiento oscura. La base no lleva luz (pedido de Henry, 2026-11-14): ni anillos LED ni resplandor en el
+ * suelo, y el cohete solo recibe la luz de los planetas colgantes.
  */
 function crearCoheteCentral(l: Lote): void {
   l.pieza(new THREE.CylinderGeometry(2.95, 3.0, 0.5, 32), SALA.zocalo, { p: [0, 0.25, 0] });
-  l.emisiva(new THREE.TorusGeometry(2.96, 0.025, 4, 64), SALA.led, 2.6, { p: [0, 0.49, 0], r: [Math.PI / 2, 0, 0] });
-  l.emisiva(new THREE.TorusGeometry(3.04, 0.02, 4, 64), SALA.azul, 2.4, { p: [0, 0.03, 0], r: [Math.PI / 2, 0, 0] });
   l.pieza(new THREE.CylinderGeometry(1.95, 2.05, 0.3, 24), SALA.marco, { p: [0, 0.65, 0] });
-  l.emisiva(new THREE.TorusGeometry(2.0, 0.02, 4, 48), SALA.led, 2.2, { p: [0, 0.79, 0], r: [Math.PI / 2, 0, 0] });
 
   // Barandilla de cristal con postes y pasamanos de metal.
   const rB = 2.82;
@@ -526,7 +598,6 @@ function crearCoheteCentral(l: Lote): void {
     l.pieza(cajaBiselada(0.22, 0.3, 0.22, 0.02), SALA.zocalo, { p: [Math.cos(a) * 0.62, ALTURA_MESA_COHETE + 0.1, Math.sin(a) * 0.62] });
   }
   l.en([0, ALTURA_MESA_COHETE, 0], [0, Math.PI / 4, 0], () => crearSaturnV(l), [ESCALA_COHETE, ESCALA_COHETE, ESCALA_COHETE]);
-  charco(l, 0, 0, 6.5, SALA.azul, 0.35);
 }
 
 // ---------------------------------------------------------------------------
@@ -841,7 +912,7 @@ export function crearInstalacionHolograma(
   grupo.userData.actualizar = holograma.userData.actualizar;
 
   // Luz azul sobre el holograma: tiñe el suelo y el mostrador, sin iluminar el modelo (que es luz pura).
-  const luz = new THREE.PointLight(0x62c8ff, 6, LADO_VITRINA * 2, 1.7);
+  const luz = new THREE.PointLight(0x62c8ff, INTENSIDAD_LUZ_VITRINA, LADO_VITRINA * 2.5, 1.7);
   luz.position.set(0, ALTURA_HOLOGRAMA + 0.4, 0);
   grupo.add(luz);
 
@@ -919,9 +990,8 @@ function mirandoAlCentro(l: Lote, x: number, z: number, fn: () => void): void {
 /** La sala completa con su decoración. Lo seleccionable (vitrinas de artefacto) va aparte, en sus propios nodos. */
 export function crearRotonda(): THREE.Object3D {
   const l = new Lote();
-  const rnd = azar(61);
   crearSuelo(l);
-  for (let i = 0; i < LADOS; i++) bahia(l, i, rnd);
+  crearParedes(l);
   crearTecho(l);
   crearCoheteCentral(l);
 
@@ -980,9 +1050,9 @@ export function crearRotonda(): THREE.Object3D {
     return objeto;
   });
   // Luz neutra compartida por las dos cápsulas, para que los trajes se vean blancos.
-  const luzTrajes = new THREE.PointLight(0xffffff, 12, 6, 1.7);
+  const luzTrajes = new THREE.PointLight(0xffffff, INTENSIDAD_LUZ_TRAJES, 7, 1.7);
   luzTrajes.position.set(9.7, 2.9, -1.2);
-  grupo.add(crearEstrellasMural(), crearPlanetasColgantes(), luzTrajes);
+  grupo.add(crearPlanetasColgantes(), luzTrajes);
   grupo.userData.actualizar = (t: number): void => {
     for (const h of hologramas) h.userData.actualizar(t);
   };

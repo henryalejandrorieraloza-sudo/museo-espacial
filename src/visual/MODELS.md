@@ -6,7 +6,7 @@ Convención para el modelo final: 1 unidad de Blender = 1 metro, sin escalar en 
 
 | id | Nombre del nodo | Placeholder actual | Escala esperada (modelo final) |
 | --- | --- | --- | --- |
-| `museo` | `museo` | Sala circular oscura de 32 m generada en `arquitectura.ts`: suelo con órbitas de luz, paredes de pantallas LED con carteles, falso techo y cúpula negra sin luces, planetas colgantes, Saturn V central y decoración (`props.ts`). | 1 |
+| `museo` | `museo` | Sala circular oscura de 32 m generada en `arquitectura.ts`: suelo con órbitas de luz, paredes negras y lisas, falso techo y cúpula negra sin luces, cascada de planetas luminosos colgando, Saturn V central y decoración (`props.ts`). | 1 |
 | `vitrina_lrv` | `vitrina_lrv` | Pedestal octogonal de 0.85 m con un emisor en lo alto y el LRV de exhibición como holograma azul que flota a 1.45 m, a tamaño real aproximado y girando despacio (`holograma.ts`). Sin cristal. | 1 |
 | `vitrina_perseverance` | `vitrina_perseverance` | Igual que `vitrina_lrv`, con Perseverance de exhibición (holograma a escala 0.85). A 9 m de distancia (x = +4.5 frente a x = −4.5). | 1 |
 | `vitrina_cassini` | `vitrina_cassini` | Igual que `vitrina_lrv`, con Cassini de exhibición tumbada (holograma a escala 0.45, acento magenta, paisajes de Titán en la corona). Al fondo de la sala, entre los dos cohetes (0, −10.5). Sin misión: el mentor la explica y se deselecciona sola. | 1 |
